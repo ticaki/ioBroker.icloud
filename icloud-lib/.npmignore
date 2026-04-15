@@ -1,8 +1,0 @@
-src/
-test/
-.DS_Store
-.github/
-.vscode/
-.eslintrc.js
-docs/
-docs.css

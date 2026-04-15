@@ -3,7 +3,7 @@
  */
 
 import * as utils from '@iobroker/adapter-core';
-import iCloudService, { LogLevel } from '../icloud-lib/build/index';
+import iCloudService, { LogLevel } from './lib/index';
 
 /** Haversine distance in km between two WGS84 coordinate pairs. */
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -309,24 +309,62 @@ class Icloud extends utils.Adapter {
 			const findMe = this.icloud.getService('findme') as any;
 			await findMe.refresh();
 			const devices: Map<string, any> = findMe.devices;
-			this.log.info(`FindMy: ${devices.size} device(s)`);
+
+			const buildLocStr = (d: any): { locStr: string; distStr: string } => {
+				const loc = d.location;
+				if (!loc) return { locStr: 'no location', distStr: '' };
+				const locStr = `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)} (${loc.positionType ?? '?'})`;
+				let distStr = '';
+				if (homeCoords) {
+					const km = haversineKm(homeCoords.lat, homeCoords.lon, loc.latitude, loc.longitude);
+					distStr = `, ${km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`} from home`;
+				}
+				return { locStr, distStr };
+			};
+
+			const regularDevices: any[] = [];
+			const accessories: any[] = [];
+			const familyDevices: any[] = [];
 			for (const [, dev] of devices) {
 				const d = dev.deviceInfo ?? dev;
-				const loc = d.location;
-				let locStr = 'no location';
-				let distStr = '';
-				if (loc) {
-					locStr = `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)} (${loc.positionType ?? '?'})`;
-					if (homeCoords) {
-						const km = haversineKm(homeCoords.lat, homeCoords.lon, loc.latitude, loc.longitude);
-						distStr = `, ${km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`} from home`;
-					}
-				}
+				if (d.isConsideredAccessory) accessories.push(d);
+				else if (d.fmlyShare) familyDevices.push(d);
+				else regularDevices.push(d);
+			}
+
+			this.log.info(`FindMy: ${regularDevices.length} own device(s), ${accessories.length} accessory/accessories, ${familyDevices.length} shared device(s)`);
+
+			for (const d of regularDevices) {
+				const { locStr, distStr } = buildLocStr(d);
 				const bat = d.batteryLevel != null ? `${Math.round(d.batteryLevel * 100)}% (${d.batteryStatus ?? '?'})` : '?';
 				this.log.info(
 					`  • ${d.name ?? '?'} [${d.deviceDisplayName ?? d.modelDisplayName ?? d.deviceClass ?? '?'}]` +
-					` — status: ${d.deviceStatus ?? '?'}, battery: ${bat}, location: ${locStr}${distStr}`
+					` — status: ${d.deviceStatus ?? '?'}, battery: ${bat}, withYou: ${d.deviceWithYou ?? '?'}, location: ${locStr}${distStr}`
 				);
+			}
+
+			if (accessories.length > 0) {
+				this.log.info('FindMy accessories (AirTags etc.):');
+				for (const d of accessories) {
+					const { locStr, distStr } = buildLocStr(d);
+					const bat = d.batteryLevel != null ? `${Math.round(d.batteryLevel * 100)}% (${d.batteryStatus ?? '?'})` : '?';
+					this.log.info(
+						`  • ${d.name ?? '?'} [${d.deviceDisplayName ?? d.modelDisplayName ?? d.deviceClass ?? '?'}]` +
+						` — battery: ${bat}, withYou: ${d.deviceWithYou ?? '?'}, location: ${locStr}${distStr}`
+					);
+				}
+			}
+
+			if (familyDevices.length > 0) {
+				this.log.info('FindMy shared (family/people):');
+				for (const d of familyDevices) {
+					const { locStr, distStr } = buildLocStr(d);
+					const bat = d.batteryLevel != null ? `${Math.round(d.batteryLevel * 100)}% (${d.batteryStatus ?? '?'})` : '?';
+					this.log.info(
+						`  • ${d.name ?? '?'} [${d.deviceDisplayName ?? d.modelDisplayName ?? d.deviceClass ?? '?'}]` +
+						` — battery: ${bat}, withYou: ${d.deviceWithYou ?? '?'}, location: ${locStr}${distStr}`
+					);
+				}
 			}
 		} catch (err) {
 			this.log.warn(`FindMy refresh failed: ${(err as Error)?.message ?? String(err)}`);

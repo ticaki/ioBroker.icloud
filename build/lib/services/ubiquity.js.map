@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/lib/services/ubiquity.ts"],
+  "sourcesContent": ["import iCloudService from \"..\";\n\nexport class iCloudUbiquityService {\n    service: iCloudService;\n    dsid: string;\n    serviceUri: string;\n    constructor(service: iCloudService, serviceUri: string) {\n        this.service = service;\n        this.serviceUri = serviceUri;\n        this.dsid = this.service.accountInfo!.dsInfo.dsid;\n    }\n    async getNode(nodeId = 0, type: \"item\" | \"file\" | \"parent\" = \"item\") {\n        const response = await this.service.fetch(this.serviceUri + \"/ws/\" + this.dsid + \"/\" + type + \"/\" + nodeId, { headers: this.service.authStore.getHeaders() });\n        const json = await response.text();\n        if (json == \"Account migrated\") throw new Error(\"Ubiquity not supported on this account\");\n        return JSON.parse(json);\n    }\n}"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAEO,MAAM,sBAAsB;AAAA,EAC/B;AAAA,EACA;AAAA,EACA;AAAA,EACA,YAAY,SAAwB,YAAoB;AACpD,SAAK,UAAU;AACf,SAAK,aAAa;AAClB,SAAK,OAAO,KAAK,QAAQ,YAAa,OAAO;AAAA,EACjD;AAAA,EACA,MAAM,QAAQ,SAAS,GAAG,OAAmC,QAAQ;AACjE,UAAM,WAAW,MAAM,KAAK,QAAQ,MAAM,KAAK,aAAa,SAAS,KAAK,OAAO,MAAM,OAAO,MAAM,QAAQ,EAAE,SAAS,KAAK,QAAQ,UAAU,WAAW,EAAE,CAAC;AAC5J,UAAM,OAAO,MAAM,SAAS,KAAK;AACjC,QAAI,QAAQ,mBAAoB,OAAM,IAAI,MAAM,wCAAwC;AACxF,WAAO,KAAK,MAAM,IAAI;AAAA,EAC1B;AACJ;",
+  "names": []
+}

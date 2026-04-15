@@ -3,12 +3,9 @@
 ## Project structure
 
 - `src/main.ts` — ioBroker adapter entry point (all adapter logic lives here)
-- `icloud-lib/src/` — TypeScript iCloud API library (auth, FindMy, Drive, Photos, …)
-- `icloud-lib/build/` — compiled output of the library (do not edit manually)
+- `src/lib/` — TypeScript iCloud API library (auth, FindMy, Drive, Photos, …), compiled together with the adapter
 - `admin/jsonConfig.json` — Admin UI configuration (JSON Config schema)
 - `admin/i18n/*.json` — translations for the Admin UI
-
-After editing `icloud-lib/src/`, always run `npm run build` inside `icloud-lib/` before testing.
 
 # Apple API reference
 

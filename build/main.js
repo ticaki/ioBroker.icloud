@@ -22,7 +22,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var utils = __toESM(require("@iobroker/adapter-core"));
-var import_build = __toESM(require("../icloud-lib/build/index"));
+var import_lib = __toESM(require("./lib/index"));
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -135,7 +135,7 @@ class Icloud extends utils.Adapter {
     var _a;
     const dataDirectory = utils.getAbsoluteInstanceDataDir(this);
     this.log.debug(`Using data directory: ${dataDirectory}`);
-    this.icloud = new import_build.default({
+    this.icloud = new import_lib.default({
       username: this.config.username.trim(),
       password: this.config.password,
       saveCredentials: false,
@@ -144,10 +144,10 @@ class Icloud extends utils.Adapter {
       authMethod: "srp",
       logger: (level, ...args) => {
         const msg = args.map((a) => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ");
-        if (level === import_build.LogLevel.Debug) this.log.debug(`[icloud.js] ${msg}`);
-        else if (level === import_build.LogLevel.Info) this.log.info(`[icloud.js] ${msg}`);
-        else if (level === import_build.LogLevel.Warning) this.log.warn(`[icloud.js] ${msg}`);
-        else if (level === import_build.LogLevel.Error) this.log.error(`[icloud.js] ${msg}`);
+        if (level === import_lib.LogLevel.Debug) this.log.debug(`[icloud.js] ${msg}`);
+        else if (level === import_lib.LogLevel.Info) this.log.info(`[icloud.js] ${msg}`);
+        else if (level === import_lib.LogLevel.Warning) this.log.warn(`[icloud.js] ${msg}`);
+        else if (level === import_lib.LogLevel.Error) this.log.error(`[icloud.js] ${msg}`);
       }
     });
     this.icloud.on("Started", () => {
@@ -286,32 +286,63 @@ class Icloud extends utils.Adapter {
   }
   /** Fetch FindMy devices and log them with optional distance from home. */
   async refreshFindMyDevices(homeCoords) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u;
     if (!this.icloud) return;
     try {
       const findMe = this.icloud.getService("findme");
       await findMe.refresh();
       const devices = findMe.devices;
-      this.log.info(`FindMy: ${devices.size} device(s)`);
+      const buildLocStr = (d) => {
+        var _a2;
+        const loc = d.location;
+        if (!loc) return { locStr: "no location", distStr: "" };
+        const locStr = `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)} (${(_a2 = loc.positionType) != null ? _a2 : "?"})`;
+        let distStr = "";
+        if (homeCoords) {
+          const km = haversineKm(homeCoords.lat, homeCoords.lon, loc.latitude, loc.longitude);
+          distStr = `, ${km < 1 ? `${Math.round(km * 1e3)} m` : `${km.toFixed(1)} km`} from home`;
+        }
+        return { locStr, distStr };
+      };
+      const regularDevices = [];
+      const accessories = [];
+      const familyDevices = [];
       for (const [, dev] of devices) {
         const d = (_a = dev.deviceInfo) != null ? _a : dev;
-        const loc = d.location;
-        let locStr = "no location";
-        let distStr = "";
-        if (loc) {
-          locStr = `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)} (${(_b = loc.positionType) != null ? _b : "?"})`;
-          if (homeCoords) {
-            const km = haversineKm(homeCoords.lat, homeCoords.lon, loc.latitude, loc.longitude);
-            distStr = `, ${km < 1 ? `${Math.round(km * 1e3)} m` : `${km.toFixed(1)} km`} from home`;
-          }
-        }
-        const bat = d.batteryLevel != null ? `${Math.round(d.batteryLevel * 100)}% (${(_c = d.batteryStatus) != null ? _c : "?"})` : "?";
+        if (d.isConsideredAccessory) accessories.push(d);
+        else if (d.fmlyShare) familyDevices.push(d);
+        else regularDevices.push(d);
+      }
+      this.log.info(`FindMy: ${regularDevices.length} own device(s), ${accessories.length} accessory/accessories, ${familyDevices.length} shared device(s)`);
+      for (const d of regularDevices) {
+        const { locStr, distStr } = buildLocStr(d);
+        const bat = d.batteryLevel != null ? `${Math.round(d.batteryLevel * 100)}% (${(_b = d.batteryStatus) != null ? _b : "?"})` : "?";
         this.log.info(
-          `  \u2022 ${(_d = d.name) != null ? _d : "?"} [${(_g = (_f = (_e = d.deviceDisplayName) != null ? _e : d.modelDisplayName) != null ? _f : d.deviceClass) != null ? _g : "?"}] \u2014 status: ${(_h = d.deviceStatus) != null ? _h : "?"}, battery: ${bat}, location: ${locStr}${distStr}`
+          `  \u2022 ${(_c = d.name) != null ? _c : "?"} [${(_f = (_e = (_d = d.deviceDisplayName) != null ? _d : d.modelDisplayName) != null ? _e : d.deviceClass) != null ? _f : "?"}] \u2014 status: ${(_g = d.deviceStatus) != null ? _g : "?"}, battery: ${bat}, withYou: ${(_h = d.deviceWithYou) != null ? _h : "?"}, location: ${locStr}${distStr}`
         );
       }
+      if (accessories.length > 0) {
+        this.log.info("FindMy accessories (AirTags etc.):");
+        for (const d of accessories) {
+          const { locStr, distStr } = buildLocStr(d);
+          const bat = d.batteryLevel != null ? `${Math.round(d.batteryLevel * 100)}% (${(_i = d.batteryStatus) != null ? _i : "?"})` : "?";
+          this.log.info(
+            `  \u2022 ${(_j = d.name) != null ? _j : "?"} [${(_m = (_l = (_k = d.deviceDisplayName) != null ? _k : d.modelDisplayName) != null ? _l : d.deviceClass) != null ? _m : "?"}] \u2014 battery: ${bat}, withYou: ${(_n = d.deviceWithYou) != null ? _n : "?"}, location: ${locStr}${distStr}`
+          );
+        }
+      }
+      if (familyDevices.length > 0) {
+        this.log.info("FindMy shared (family/people):");
+        for (const d of familyDevices) {
+          const { locStr, distStr } = buildLocStr(d);
+          const bat = d.batteryLevel != null ? `${Math.round(d.batteryLevel * 100)}% (${(_o = d.batteryStatus) != null ? _o : "?"})` : "?";
+          this.log.info(
+            `  \u2022 ${(_p = d.name) != null ? _p : "?"} [${(_s = (_r = (_q = d.deviceDisplayName) != null ? _q : d.modelDisplayName) != null ? _r : d.deviceClass) != null ? _s : "?"}] \u2014 battery: ${bat}, withYou: ${(_t = d.deviceWithYou) != null ? _t : "?"}, location: ${locStr}${distStr}`
+          );
+        }
+      }
     } catch (err) {
-      this.log.warn(`FindMy refresh failed: ${(_i = err == null ? void 0 : err.message) != null ? _i : String(err)}`);
+      this.log.warn(`FindMy refresh failed: ${(_u = err == null ? void 0 : err.message) != null ? _u : String(err)}`);
     }
   }
   /**
