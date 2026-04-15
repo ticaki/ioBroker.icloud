@@ -1,9 +1,11 @@
 import EventEmitter from "events";
 import fs from "fs";
-import fetch from "node-fetch";
+import fetchCookie from "fetch-cookie";
+import nodeFetch from "node-fetch";
 import os from "os";
 import path from "path";
 import crypto from "crypto";
+import { CookieJar } from "tough-cookie";
 import { iCloudAuthenticationStore } from "./auth/authStore";
 import { GSASRPAuthenticator } from "./auth/iCSRPAuthenticator.js";
 import { AUTH_ENDPOINT, AUTH_HEADERS, DEFAULT_HEADERS, SETUP_ENDPOINT } from "./consts";
@@ -161,6 +163,17 @@ export default class iCloudService extends EventEmitter {
      */
     authStore: iCloudAuthenticationStore;
     /**
+     * Shared CookieJar — mirrors pyicloud's requests.Session() cookiejar.
+     * fetch-cookie stores every Set-Cookie response header here (including from
+     * 503 / error responses) and sends matching cookies automatically.
+     */
+    cookieJar: CookieJar;
+    /**
+     * Cookie-jar-backed fetch — drop-in replacement for node-fetch that
+     * automatically handles cookies for all domains.
+     */
+    fetch: typeof nodeFetch;
+    /**
      * The options for this service instance.
      */
     options: iCloudServiceSetupOptions;
@@ -200,6 +213,8 @@ export default class iCloudService extends EventEmitter {
         super();
         this.options = options;
         if (!this.options.dataDirectory) this.options.dataDirectory = path.join(os.homedir(), ".icloud");
+        this.cookieJar = new CookieJar();
+        this.fetch = fetchCookie(nodeFetch, this.cookieJar) as unknown as typeof nodeFetch;
         this.authStore = new iCloudAuthenticationStore(this);
     }
     _log(level: number, ...args: any[]) {
@@ -268,8 +283,7 @@ export default class iCloudService extends EventEmitter {
         // can be included in the next signin request — preventing Apple from treating us as a brand
         // new client and triggering rate-limit / 503 responses.
         const sessionData = this.authStore.loadSession(this.options.username);
-        this.authStore.loadCookies(this.options.username);
-        this.authStore.loadAuthCookies(this.options.username);
+        this.authStore.loadCookieJar(this.options.username);
         // Fallback: also try legacy trust-token file for accounts that only have the old format
         if (!this.authStore.trustToken) this.authStore.loadTrustToken(this.options.username);
 
@@ -287,7 +301,7 @@ export default class iCloudService extends EventEmitter {
             if (this.authStore.sessionToken) {
                 try {
                     this._log(LogLevel.Debug, "[auth] Validating existing session token...");
-                    const validateResponse = await fetch(
+                    const validateResponse = await this.fetch(
                         "https://setup.icloud.com/setup/ws/1/validate",
                         { headers: this.authStore.getHeaders(), method: "POST", body: "null" }
                     );
@@ -307,15 +321,12 @@ export default class iCloudService extends EventEmitter {
             }
 
             // Build signin headers including persisted scnt + session_id (like pyicloud).
-            // Also include any stored auth cookies (aasp etc.) — pyicloud's requests.Session
-            // sends these automatically via its domain-matching LWPCookieJar.
-            const authCookieHeader = this.authStore.getAuthCookieHeader();
+            // Auth cookies (aasp etc.) are sent automatically by the fetch-cookie jar.
             const sessionAuthHeaders: Record<string, string> = {
                 ...AUTH_HEADERS,
                 "X-Apple-OAuth-State": clientId,
-                ...(this.authStore.scnt        ? { scnt: this.authStore.scnt } : {}),
-                ...(this.authStore.sessionId   ? { "X-Apple-ID-Session-Id": this.authStore.sessionId } : {}),
-                ...(authCookieHeader            ? { Cookie: authCookieHeader } : {}),
+                ...(this.authStore.scnt      ? { scnt: this.authStore.scnt } : {}),
+                ...(this.authStore.sessionId ? { "X-Apple-ID-Session-Id": this.authStore.sessionId } : {}),
             };
 
             let authEndpoint = "signin";
@@ -328,7 +339,7 @@ export default class iCloudService extends EventEmitter {
                 const authenticator = new GSASRPAuthenticator(username);
                 const initData = await authenticator.getInit();
                 this._log(LogLevel.Debug, "[auth] SRP init → POST", AUTH_ENDPOINT + "signin/init");
-                const initRaw = await fetch(AUTH_ENDPOINT + "signin/init", {
+                const initRaw = await this.fetch(AUTH_ENDPOINT + "signin/init", {
                     headers: sessionAuthHeaders, method: "POST", body: JSON.stringify(initData)
                 });
                 this._log(LogLevel.Debug, "[auth] SRP init response status:", initRaw.status);
@@ -348,7 +359,7 @@ export default class iCloudService extends EventEmitter {
 
             const signinUrl = AUTH_ENDPOINT + authEndpoint + "?isRememberMeEnabled=true";
             this._log(LogLevel.Debug, "[auth] signin → POST", signinUrl);
-            const authResponse = await fetch(signinUrl, { headers: sessionAuthHeaders, method: "POST", body: JSON.stringify(authData) });
+            const authResponse = await this.fetch(signinUrl, { headers: sessionAuthHeaders, method: "POST", body: JSON.stringify(authData) });
             this._log(LogLevel.Debug, "[auth] signin response status:", authResponse.status);
             this._log(LogLevel.Debug, "[auth] signin response headers:",
                 JSON.stringify(Object.fromEntries(authResponse.headers.entries())));
@@ -358,6 +369,7 @@ export default class iCloudService extends EventEmitter {
             // expects them back on the next request. Without this, every retry looks like a
             // brand-new client and the rate-limit window resets/extends.
             this.authStore.extractSessionHeaders(authResponse);
+            this.authStore.saveCookieJar(this.options.username);
             this.authStore.saveSession(this.options.username);
 
             if (authResponse.status == 200) {
@@ -371,7 +383,47 @@ export default class iCloudService extends EventEmitter {
                 if (this.authStore.processAuthSecrets(authResponse, this.options.username)) {
                     const body = await authResponse.text();
                     this._log(LogLevel.Debug, "[auth] 409 body:", body);
-                    this._setState(iCloudServiceStatus.MfaRequested);
+
+                    // pyicloud always calls accountLogin immediately after signin — even after 409.
+                    // If it returns 200, the session is already fully authenticated (no MFA needed).
+                    // If it returns non-200, we go to MfaRequested and wait for the user's code.
+                    // Either way, the POST is also what triggers Apple's push notification to trusted devices.
+                    let accountLoginOk = false;
+                    try {
+                        const setupData = {
+                            accountCountryCode: this.authStore.accountCountry,
+                            dsWebAuthToken:     this.authStore.sessionToken,
+                            extended_login:     true,
+                            trustToken:         this.authStore.trustToken ?? ""
+                        };
+                        this._log(LogLevel.Debug, "[auth] POST", SETUP_ENDPOINT, "(accountLogin after 409 — triggers MFA push and may complete auth)");
+                        const setupResp = await this.fetch(SETUP_ENDPOINT, {
+                            headers: DEFAULT_HEADERS, method: "POST",
+                            body: JSON.stringify(setupData)
+                        });
+                        this.authStore.extractSessionHeaders(setupResp);
+                        this.authStore.saveCookieJar(this.options.username);
+                        this.authStore.saveSession(this.options.username);
+                        this._log(LogLevel.Debug, "[auth] accountLogin (post-409) status:", setupResp.status);
+                        if (setupResp.status === 200) {
+                            // Session accepted without further MFA — treat as authenticated
+                            accountLoginOk = true;
+                            try { this.accountInfo = await setupResp.json(); } catch (_) { /* ignore */ }
+                        } else {
+                            await setupResp.text(); // consume body
+                        }
+                    } catch (pushTriggerErr) {
+                        this._log(LogLevel.Debug, "[auth] accountLogin (post-409) failed:", (pushTriggerErr as Error).toString());
+                    }
+
+                    if (accountLoginOk) {
+                        this._log(LogLevel.Debug, "[auth] accountLogin after 409 succeeded — skipping MFA");
+                        try { await this.checkPCS(); } catch (_) { /* ignore */ }
+                        this.authStore.saveSession(this.options.username);
+                        this._setState(iCloudServiceStatus.Ready);
+                    } else {
+                        this._setState(iCloudServiceStatus.MfaRequested);
+                    }
                 } else {
                     throw new Error("Unable to process auth response (409) — missing session headers!");
                 }
@@ -404,7 +456,7 @@ export default class iCloudService extends EventEmitter {
             throw new Error("Cannot provide MFA code without calling authenticate first!");
 
         const authData = { securityCode: { code } };
-        const authResponse = await fetch(
+        const authResponse = await this.fetch(
             AUTH_ENDPOINT + "verify/trusteddevice/securitycode",
             { headers: this.authStore.getMfaHeaders(), method: "POST", body: JSON.stringify(authData) }
         );
@@ -422,7 +474,7 @@ export default class iCloudService extends EventEmitter {
             throw new Error("Cannot get auth token without calling authenticate first!");
 
         this._log(LogLevel.Warning, "Trusting device");
-        const authResponse = await fetch(
+        const authResponse = await this.fetch(
             AUTH_ENDPOINT + "2sv/trust",
             { headers: this.authStore.getMfaHeaders() }
         );
@@ -442,7 +494,7 @@ export default class iCloudService extends EventEmitter {
                 trustToken: this.authStore.trustToken ?? ""
             };
             this._log(LogLevel.Debug, "[setup] accountLogin → POST", SETUP_ENDPOINT);
-            const response = await fetch(SETUP_ENDPOINT, { headers: DEFAULT_HEADERS, method: "POST", body: JSON.stringify(data) });
+            const response = await this.fetch(SETUP_ENDPOINT, { headers: DEFAULT_HEADERS, method: "POST", body: JSON.stringify(data) });
             this._log(LogLevel.Debug, "[setup] accountLogin response status:", response.status);
             if (response.status == 200) {
                 if (this.authStore.processCloudSetupResponse(response, this.options.username)) {
@@ -482,7 +534,7 @@ export default class iCloudService extends EventEmitter {
      * Updates the PCS state (iCloudService.pcsEnabled, iCloudService.pcsAccess, iCloudService.ICDRSDisabled).
      */
     async checkPCS() {
-        const pcsTest = await fetch("https://setup.icloud.com/setup/ws/1/requestWebAccessState", { headers: this.authStore.getHeaders(), method: "POST" });
+        const pcsTest = await this.fetch("https://setup.icloud.com/setup/ws/1/requestWebAccessState", { headers: this.authStore.getHeaders(), method: "POST" });
         if (pcsTest.status == 200) {
             const j = await pcsTest.json();
             this.pcsEnabled = typeof j.isDeviceConsentedForPCS == "boolean";
@@ -506,7 +558,7 @@ export default class iCloudService extends EventEmitter {
             return true;
         }
         if (!this.pcsAccess) {
-            const requestPcs = await fetch("https://setup.icloud.com/setup/ws/1/enableDeviceConsentForPCS", { headers: this.authStore.getHeaders(), method: "POST" });
+            const requestPcs = await this.fetch("https://setup.icloud.com/setup/ws/1/enableDeviceConsentForPCS", { headers: this.authStore.getHeaders(), method: "POST" });
             const requestPcsJson = await requestPcs.json();
             if (!requestPcsJson.isDeviceConsentNotificationSent)
                 throw new Error("Unable to request PCS access!");
@@ -515,7 +567,7 @@ export default class iCloudService extends EventEmitter {
             await sleep(5000);
             await this.checkPCS();
         }
-        let pcsRequest = await fetch("https://setup.icloud.com/setup/ws/1/requestPCS", { headers: this.authStore.getHeaders(), method: "POST", body: JSON.stringify({ appName, derivedFromUserAction: true }) });
+        let pcsRequest = await this.fetch("https://setup.icloud.com/setup/ws/1/requestPCS", { headers: this.authStore.getHeaders(), method: "POST", body: JSON.stringify({ appName, derivedFromUserAction: true }) });
         let pcsJson = await pcsRequest.json();
         while (true) {
             if (pcsJson.status == "success") {
@@ -529,11 +581,11 @@ export default class iCloudService extends EventEmitter {
                 default:
                     this._log(LogLevel.Error, "unknown PCS request state", pcsJson);
                 }
-                pcsRequest = await fetch("https://setup.icloud.com/setup/ws/1/requestPCS", { headers: this.authStore.getHeaders(), method: "POST", body: JSON.stringify({ appName, derivedFromUserAction: false }) });
+                pcsRequest = await this.fetch("https://setup.icloud.com/setup/ws/1/requestPCS", { headers: this.authStore.getHeaders(), method: "POST", body: JSON.stringify({ appName, derivedFromUserAction: false }) });
                 pcsJson = await pcsRequest.json();
             }
         }
-        this.authStore.addCookies(pcsRequest.headers.raw()["set-cookie"]);
+        // cookies from pcsRequest are stored automatically by fetch-cookie
 
         return true;
     }
@@ -600,7 +652,7 @@ export default class iCloudService extends EventEmitter {
      */
     async getStorageUsage(refresh = false): Promise<iCloudStorageUsage> {
         if (!refresh && this._storage) return this._storage;
-        const response = await fetch("https://setup.icloud.com/setup/ws/1/storageUsageInfo", { headers: this.authStore.getHeaders() });
+        const response = await this.fetch("https://setup.icloud.com/setup/ws/1/storageUsageInfo", { headers: this.authStore.getHeaders() });
         const json = await response.json();
         this._storage = json;
         return this._storage;

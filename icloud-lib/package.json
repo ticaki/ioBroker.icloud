@@ -26,6 +26,7 @@
   "dependencies": {
     "@foxt/js-srp": "^0.0.3-patch2",
     "dayjs": "^1.11.6",
+    "fetch-cookie": "^3.2.0",
     "node-fetch": "^2.6.7",
     "tough-cookie": "^4.0.0"
   },

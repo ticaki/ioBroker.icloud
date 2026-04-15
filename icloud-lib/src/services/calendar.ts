@@ -1,7 +1,6 @@
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
-import fetch from "node-fetch";
 import iCloudService from "..";
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -136,7 +135,7 @@ export class iCloudCalendarService {
         const url = new URL(`${this.calendarServiceUri}${endpointUrl}`);
         url.search = new URLSearchParams({ ...params, clientVersion: "5.1" }).toString();
 
-        const response = await fetch(url, {
+        const response = await this.service.fetch(url, {
             headers: {
                 ...this.service.authStore.getHeaders(),
                 Referer: "https://www.icloud.com/"

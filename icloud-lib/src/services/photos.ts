@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
-import fetch, { HeadersInit } from "node-fetch";
+import { HeadersInit } from "node-fetch";
 import iCloudService from "..";
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -446,7 +446,7 @@ const SMART_FOLDERS = {
 
 export class iCloudPhotosEndpointService {
     /* eslint-disable no-useless-constructor, no-empty-function */
-    constructor(private serviceUri: string, private headers: HeadersInit) {}
+    constructor(private serviceUri: string, private headers: HeadersInit, private _fetchFn: iCloudService["fetch"]) {}
     /* eslint-enable no-useless-constructor, no-empty-function */
     async fetch<T = unknown>(url: string, body?: object, headers?: HeadersInit): Promise<T> {
         const params = new URLSearchParams({
@@ -454,7 +454,7 @@ export class iCloudPhotosEndpointService {
             getCurrentSyncToken: "true"
         });
 
-        const result = await fetch(
+        const result = await this._fetchFn(
             `${this.serviceUri}/database/1/com.apple.photos.cloud/production/private${url}?${params}`,
             {
                 method: "POST",
@@ -471,6 +471,10 @@ export class iCloudPhotosEndpointService {
         if (json.error) throw new Error(json.error + ": " + json.reason);
         return json;
     }
+    /** Raw download fetch — uses the cookie-jar-backed fetch for CDN/download URLs. */
+    async download(url: string) {
+        return this._fetchFn(url);
+    }
 }
 
 
@@ -478,7 +482,7 @@ export class iCloudPhotosService {
     private endpointService: iCloudPhotosEndpointService;
     private _albums: Map<string, iCloudPhotoAlbum> = new Map();
     constructor(private service: iCloudService, private serviceUri: string) {
-        this.endpointService = new iCloudPhotosEndpointService(serviceUri, service.authStore.getHeaders());
+        this.endpointService = new iCloudPhotosEndpointService(serviceUri, service.authStore.getHeaders(), service.fetch);
     }
     async getAlbums(): Promise<Map<string, iCloudPhotoAlbum>> {
         if (this._albums.size > 0)
@@ -804,7 +808,7 @@ class iCloudPhotoAsset {
             return null;
 
 
-        const response = await fetch(this.versions[version].url);
+        const response = await this.endpointService.download(this.versions[version].url);
 
         return response.arrayBuffer();
     }

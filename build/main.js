@@ -133,7 +133,7 @@ class Icloud extends utils.Adapter {
       saveCredentials: false,
       trustDevice: true,
       dataDirectory,
-      authMethod: "legacy",
+      authMethod: "srp",
       logger: (level, ...args) => {
         const msg = args.map((a) => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ");
         if (level === import_build.LogLevel.Debug) this.log.debug(`[icloud.js] ${msg}`);
@@ -159,36 +159,12 @@ class Icloud extends utils.Adapter {
       this.log.debug("Device trusted \u2014 fetching iCloud account data");
     });
     this.icloud.on("Ready", () => {
-      var _a2, _b, _c, _d, _e, _f;
-      this.log.info("iCloud connection established successfully");
+      var _a2, _b;
       this.log.debug(`iCloud status is now: ${(_b = (_a2 = this.icloud) == null ? void 0 : _a2.status) != null ? _b : "unknown"}`);
-      this.setState("info.connection", true, true);
-      this.setState("mfa.required", false, true);
-      const info = this.icloud.accountInfo;
-      if (!info) {
-        this.log.warn("iCloud reported Ready but accountInfo is undefined");
-        return;
-      }
-      if (!info.dsInfo) {
-        this.log.warn("accountInfo.dsInfo is undefined \u2014 account data unavailable");
-        return;
-      }
-      const ds = info.dsInfo;
-      this.log.info(`Logged in as: ${(_c = ds.fullName) != null ? _c : "(no name)"} (${(_d = ds.appleId) != null ? _d : "(no appleId)"})`);
-      this.log.info(`Country: ${(_e = ds.countryCode) != null ? _e : "?"}, Locale: ${(_f = ds.locale) != null ? _f : "?"}`);
-      this.log.debug(`Full dsInfo: ${JSON.stringify(ds)}`);
-      const setChecked = (id, val) => {
-        if (val === void 0 || val === null) {
-          this.log.warn(`Skipping state "${id}" \u2014 value is ${val}`);
-          return;
-        }
-        this.setState(id, val, true);
-      };
-      setChecked("account.fullName", ds.fullName);
-      setChecked("account.firstName", ds.firstName);
-      setChecked("account.lastName", ds.lastName);
-      setChecked("account.appleId", ds.appleId);
-      setChecked("account.countryCode", ds.countryCode);
+      this.onICloudReady().catch((err) => {
+        var _a3;
+        this.log.error(`Error during post-login data fetch: ${(_a3 = err == null ? void 0 : err.message) != null ? _a3 : String(err)}`);
+      });
     });
     this.icloud.on("Error", (err) => {
       var _a2;
@@ -219,6 +195,74 @@ class Icloud extends utils.Adapter {
         this.log.debug(`authenticate() exception stack: ${err instanceof Error ? err.stack : String(err)}`);
       }
     }
+  }
+  /**
+   * Called after the iCloud session reaches Ready state.
+   * All post-login data fetching happens here — info.connection is set true only
+   * after account info, available services and FindMy devices have been collected.
+   */
+  async onICloudReady() {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q;
+    const info = this.icloud.accountInfo;
+    if (!(info == null ? void 0 : info.dsInfo)) {
+      this.log.warn("iCloud Ready but accountInfo/dsInfo is unavailable");
+      this.setState("info.connection", true, true);
+      this.setState("mfa.required", false, true);
+      return;
+    }
+    const ds = info.dsInfo;
+    this.log.info(`Logged in as: ${(_a = ds.fullName) != null ? _a : "(no name)"} (${(_b = ds.appleId) != null ? _b : "(no appleId)"})`);
+    this.log.info(`Country: ${(_c = ds.countryCode) != null ? _c : "?"}, Locale: ${(_d = ds.locale) != null ? _d : "?"}`);
+    this.log.debug(`Full dsInfo: ${JSON.stringify(ds)}`);
+    const setChecked = (id, val) => {
+      if (val == null) {
+        this.log.warn(`Skipping state "${id}" \u2014 value is ${val}`);
+        return;
+      }
+      this.setState(id, val, true);
+    };
+    setChecked("account.fullName", ds.fullName);
+    setChecked("account.firstName", ds.firstName);
+    setChecked("account.lastName", ds.lastName);
+    setChecked("account.appleId", ds.appleId);
+    setChecked("account.countryCode", ds.countryCode);
+    const webservices = info.webservices;
+    const activeServices = webservices ? Object.entries(webservices).filter(([, v]) => (v == null ? void 0 : v.status) === "active").map(([k]) => k).sort() : [];
+    if (webservices) {
+      const inactive = Object.entries(webservices).filter(([, v]) => (v == null ? void 0 : v.status) !== "active").map(([k, v]) => {
+        var _a2;
+        return `${k}(${(_a2 = v == null ? void 0 : v.status) != null ? _a2 : "?"})`;
+      }).sort();
+      this.log.info(`Available iCloud services (${activeServices.length}): ${activeServices.join(", ")}`);
+      if (inactive.length) this.log.debug(`Inactive iCloud services: ${inactive.join(", ")}`);
+    }
+    const family = (_f = (_e = info.iCloudInfo) == null ? void 0 : _e.familyMembers) != null ? _f : [];
+    if (family.length)
+      this.log.info(`Family members (${family.length}): ${family.map((m) => {
+        var _a2, _b2;
+        return (_b2 = (_a2 = m.fullName) != null ? _a2 : m.appleId) != null ? _b2 : "?";
+      }).join(", ")}`);
+    if (activeServices.includes("findme")) {
+      try {
+        const findMe = this.icloud.getService("findme");
+        await findMe.refresh();
+        const devices = findMe.devices;
+        this.log.info(`FindMy: ${devices.size} device(s) found`);
+        for (const [, dev] of devices) {
+          const d = (_g = dev.deviceInfo) != null ? _g : dev;
+          const locStr = d.location ? `${(_h = d.location.latitude) == null ? void 0 : _h.toFixed(5)}, ${(_i = d.location.longitude) == null ? void 0 : _i.toFixed(5)} (${(_j = d.location.positionType) != null ? _j : "?"})` : "no location";
+          const bat = d.batteryLevel != null ? `${Math.round(d.batteryLevel * 100)}% (${(_k = d.batteryStatus) != null ? _k : "?"})` : "?";
+          this.log.info(
+            `  \u2022 ${(_l = d.name) != null ? _l : "?"} [${(_o = (_n = (_m = d.deviceDisplayName) != null ? _m : d.modelDisplayName) != null ? _n : d.deviceClass) != null ? _o : "?"}] \u2014 status: ${(_p = d.deviceStatus) != null ? _p : "?"}, battery: ${bat}, location: ${locStr}`
+          );
+        }
+      } catch (err) {
+        this.log.warn(`FindMy fetch failed: ${(_q = err == null ? void 0 : err.message) != null ? _q : String(err)}`);
+      }
+    }
+    this.log.info("iCloud connection established successfully");
+    this.setState("info.connection", true, true);
+    this.setState("mfa.required", false, true);
   }
   /**
    * Is called when adapter shuts down - callback has to be called under any circumstances!

@@ -1,7 +1,7 @@
 import fs from "fs";
 import { Response } from "node-fetch";
 import path from "path";
-import { Cookie } from "tough-cookie";
+import { Cookie, CookieJar } from "tough-cookie";
 import type iCloudService from "..";
 import { AUTH_HEADERS, DEFAULT_HEADERS } from "../consts";
 import { LogLevel } from "../index.js";
@@ -23,31 +23,33 @@ export class iCloudAuthenticationStore {
     _log: iCloudService["_log"];
     tknFile: string;
 
+    /**
+     * Shared CookieJar — populated automatically by fetch-cookie on every response.
+     * Cookies from all domains (idmsa.apple.com, setup.icloud.com, …) are stored here
+     * and sent back automatically to matching domains, exactly like pyicloud's
+     * requests.Session() with its LWPCookieJar.
+     */
+    cookieJar: CookieJar;
+
     trustToken?: string;
     sessionId?: string;
     sessionToken?: string;
     scnt?: string;
-    aasp?: string;
     accountCountry?: string;
     /** Persisted client_id (reused across sessions, like pyicloud) */
     clientId?: string;
-    icloudCookies: Cookie[];
-    /** Cookies from idmsa.apple.com auth responses (aasp etc.) — sent back to signin like pyicloud's cookiejar */
-    authCookies: Cookie[];
 
     constructor(service: iCloudService) {
         this.options = service.options;
         this._log = service._log;
         this.tknFile = path.format({ dir: this.options.dataDirectory, base: ".trust-token" });
+        this.cookieJar = service.cookieJar;
 
-        Object.defineProperty(this, "trustToken",    { enumerable: false });
-        Object.defineProperty(this, "sessionId",     { enumerable: false });
-        Object.defineProperty(this, "sessionToken",  { enumerable: false });
-        Object.defineProperty(this, "scnt",          { enumerable: false });
-        Object.defineProperty(this, "aasp",          { enumerable: false });
-        Object.defineProperty(this, "icloudCookies", { enumerable: false });
-        Object.defineProperty(this, "authCookies",   { enumerable: false });
-        this.authCookies = [];
+        Object.defineProperty(this, "trustToken",   { enumerable: false });
+        Object.defineProperty(this, "sessionId",    { enumerable: false });
+        Object.defineProperty(this, "sessionToken", { enumerable: false });
+        Object.defineProperty(this, "scnt",         { enumerable: false });
+        Object.defineProperty(this, "cookieJar",    { enumerable: false });
     }
 
     /** Sanitise account name for use as a filename component (matches pyicloud behaviour). */
@@ -56,15 +58,11 @@ export class iCloudAuthenticationStore {
     }
 
     private _sessionPath(account: string): string {
-        return path.join(this.options.dataDirectory, this._accountFilename(account) + ".session");
+        return path.join(this.options.dataDirectory!, this._accountFilename(account) + ".session");
     }
 
-    private _cookiesPath(account: string): string {
-        return path.join(this.options.dataDirectory, this._accountFilename(account) + ".cookies");
-    }
-
-    private _authCookiesPath(account: string): string {
-        return path.join(this.options.dataDirectory, this._accountFilename(account) + ".auth-cookies");
+    private _jarPath(account: string): string {
+        return path.join(this.options.dataDirectory!, this._accountFilename(account) + ".jar.json");
     }
 
     // ── Session persistence (mirrors pyicloud's .session JSON file) ────────────
@@ -103,82 +101,71 @@ export class iCloudAuthenticationStore {
             if (this.accountCountry) data.account_country = this.accountCountry;
             if (this.trustToken)     data.trust_token     = this.trustToken;
             if (this.clientId)       data.client_id       = this.clientId;
-            if (!fs.existsSync(this.options.dataDirectory))
-                fs.mkdirSync(this.options.dataDirectory);
+            if (!fs.existsSync(this.options.dataDirectory!))
+                fs.mkdirSync(this.options.dataDirectory!);
             fs.writeFileSync(this._sessionPath(account), JSON.stringify(data, null, 2), "utf8");
             this._log(LogLevel.Debug, "[authStore] Session saved to disk");
         } catch (e) {
-            this._log(LogLevel.Warning, "[authStore] Unable to save session:", e.toString());
+            this._log(LogLevel.Warning, "[authStore] Unable to save session:", (e as Error).toString());
         }
     }
 
-    // ── Cookie persistence ─────────────────────────────────────────────────────
+    // ── CookieJar persistence ──────────────────────────────────────────────────
 
-    /** Load persisted iCloud cookies from disk. */
-    loadCookies(account: string): void {
+    /**
+     * Load the persisted CookieJar from disk.
+     * Automatically migrates legacy .cookies and .auth-cookies files on first run.
+     */
+    loadCookieJar(account: string): void {
+        const jarPath = this._jarPath(account);
         try {
-            const raw = JSON.parse(
-                fs.readFileSync(this._cookiesPath(account), "utf8")
-            ) as string[];
-            this.icloudCookies = raw.map(v => Cookie.parse(v)).filter(v => !!v);
-            this._log(LogLevel.Debug, `[authStore] Loaded ${this.icloudCookies.length} cookies from disk`);
+            const raw = JSON.parse(fs.readFileSync(jarPath, "utf8"));
+            const loaded = CookieJar.deserializeSync(raw);
+            for (const c of ((loaded.toJSON() as any).cookies ?? [])) {
+                try {
+                    this.cookieJar.setCookieSync(
+                        `${c.key}=${c.value}; Domain=${c.domain}; Path=${c.path || "/"}`,
+                        `https://${c.domain}`
+                    );
+                } catch (_) { /* skip invalid */ }
+            }
+            this._log(LogLevel.Debug, "[authStore] Cookie jar loaded from disk");
+            return;
         } catch (e) {
-            this.icloudCookies = [];
+            this._log(LogLevel.Debug, "[authStore] No jar file — trying legacy migration");
         }
+
+        // ── Migrate legacy .cookies / .auth-cookies files ─────────────────────
+        const base = path.join(this.options.dataDirectory!, this._accountFilename(account));
+        const tryMigrate = (filePath: string, domain: string) => {
+            try {
+                const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as string[];
+                for (const v of raw) {
+                    const c = Cookie.parse(v);
+                    if (!c) continue;
+                    try { this.cookieJar.setCookieSync(c.toString(), `https://${domain}`); } catch (_) { /* skip */ }
+                }
+                this._log(LogLevel.Debug, `[authStore] Migrated legacy cookies from ${filePath}`);
+            } catch (_) { /* file doesn't exist */ }
+        };
+        tryMigrate(base + ".cookies",      "setup.icloud.com");
+        tryMigrate(base + ".auth-cookies", "idmsa.apple.com");
     }
 
-    /** Persist current iCloud cookies to disk. */
-    saveCookies(account: string): void {
+    /** Persist the CookieJar to disk. */
+    saveCookieJar(account: string): void {
         try {
-            if (!fs.existsSync(this.options.dataDirectory))
-                fs.mkdirSync(this.options.dataDirectory);
+            if (!fs.existsSync(this.options.dataDirectory!))
+                fs.mkdirSync(this.options.dataDirectory!);
             fs.writeFileSync(
-                this._cookiesPath(account),
-                JSON.stringify(this.icloudCookies.map(c => c.toString())),
+                this._jarPath(account),
+                JSON.stringify(this.cookieJar.serializeSync(), null, 2),
                 "utf8"
             );
-            this._log(LogLevel.Debug, "[authStore] Cookies saved to disk");
+            this._log(LogLevel.Debug, "[authStore] Cookie jar saved to disk");
         } catch (e) {
-            this._log(LogLevel.Warning, "[authStore] Unable to save cookies:", e.toString());
+            this._log(LogLevel.Warning, "[authStore] Unable to save cookie jar:", (e as Error).toString());
         }
-    }
-
-    // ── Auth-endpoint cookie persistence (idmsa.apple.com, mirrors pyicloud cookiejar) ──
-
-    /** Load persisted idmsa.apple.com auth cookies from disk. */
-    loadAuthCookies(account: string): void {
-        try {
-            const raw = JSON.parse(
-                fs.readFileSync(this._authCookiesPath(account), "utf8")
-            ) as string[];
-            this.authCookies = raw.map(v => Cookie.parse(v)).filter(v => !!v);
-            this._log(LogLevel.Debug, `[authStore] Loaded ${this.authCookies.length} auth cookies from disk`);
-        } catch (e) {
-            this.authCookies = [];
-        }
-    }
-
-    /** Persist idmsa.apple.com auth cookies to disk. */
-    saveAuthCookies(account: string): void {
-        try {
-            if (!fs.existsSync(this.options.dataDirectory))
-                fs.mkdirSync(this.options.dataDirectory);
-            fs.writeFileSync(
-                this._authCookiesPath(account),
-                JSON.stringify(this.authCookies.map(c => c.toString())),
-                "utf8"
-            );
-            this._log(LogLevel.Debug, "[authStore] Auth cookies saved to disk");
-        } catch (e) {
-            this._log(LogLevel.Warning, "[authStore] Unable to save auth cookies:", e.toString());
-        }
-    }
-
-    /** Build Cookie header string from stored auth cookies (for idmsa signin request). */
-    getAuthCookieHeader(): string | undefined {
-        const cookies = this.authCookies.filter(c => c.value);
-        if (!cookies.length) return undefined;
-        return cookies.map(c => c.cookieString()).join("; ");
     }
 
     // ── Header extraction (mirrors pyicloud's per-request HEADER_DATA extraction) ──
@@ -215,74 +202,45 @@ export class iCloudAuthenticationStore {
 
     writeTrustToken(account: string) {
         try {
-            if (!fs.existsSync(this.options.dataDirectory)) fs.mkdirSync(this.options.dataDirectory);
+            if (!fs.existsSync(this.options.dataDirectory!)) fs.mkdirSync(this.options.dataDirectory!);
             fs.writeFileSync(
                 this.tknFile + "-" + Buffer.from(account.toLowerCase()).toString("base64"),
-                this.trustToken,
+                this.trustToken ?? "",
                 "utf8"
             );
         } catch (e) {
-            this._log(LogLevel.Warning, "[authStore] Unable to write trust token:", e.toString());
+            this._log(LogLevel.Warning, "[authStore] Unable to write trust token:", (e as Error).toString());
         }
     }
 
     // ── Response processors ────────────────────────────────────────────────────
 
     /**
-     * Process a sign-in response: extract all session headers + aasp cookie.
-     * Also saves all Set-Cookie headers as auth cookies (mirrors pyicloud cookiejar behaviour).
-     * Pass `account` to auto-persist to disk (strongly recommended).
+     * Process a sign-in response: extract session headers.
+     * Cookies are handled automatically by fetch-cookie (stored in cookieJar).
      */
     processAuthSecrets(authResponse: Response, account?: string) {
         try {
             this.extractSessionHeaders(authResponse);
-
-            const headers = Array.from(authResponse.headers.values());
-            const aaspCookie = headers.find((v) => v.includes("aasp="));
-            this.aasp = aaspCookie.split("aasp=")[1].split(";")[0];
-
-            // Save ALL Set-Cookie headers from the auth response as auth cookies.
-            // pyicloud's requests.Session does this automatically via its LWPCookieJar —
-            // these cookies are then sent back to idmsa.apple.com on subsequent signin requests.
-            const newAuthCookies = Array.from(authResponse.headers.entries())
-                .filter(([k]) => k.toLowerCase() === "set-cookie")
-                .map(([, v]) => Cookie.parse(v))
-                .filter(v => !!v);
-            if (newAuthCookies.length) {
-                // Merge: replace existing cookies with the same key, add new ones
-                for (const nc of newAuthCookies) {
-                    const idx = this.authCookies.findIndex(c => c.key === nc.key);
-                    if (idx >= 0) this.authCookies[idx] = nc;
-                    else this.authCookies.push(nc);
-                }
-                if (account) this.saveAuthCookies(account);
-            }
-
             if (account) this.saveSession(account);
             return this.validateAuthSecrets();
         } catch (e) {
-            this._log(LogLevel.Warning, "[authStore] Unable to process auth secrets:", e.toString());
+            this._log(LogLevel.Warning, "[authStore] Unable to process auth secrets:", (e as Error).toString());
             return false;
         }
     }
 
     /**
-     * Parse Set-Cookie headers from the accountLogin response.
-     * Pass `account` to auto-persist cookies to disk.
+     * Process a cloud-setup response: extract session headers.
+     * Cookies are handled automatically by fetch-cookie (stored in cookieJar).
      */
     processCloudSetupResponse(cloudSetupResponse: Response, account?: string) {
         this.extractSessionHeaders(cloudSetupResponse);
-        this.icloudCookies = Array.from(cloudSetupResponse.headers.entries())
-            .filter((v) => v[0].toLowerCase() == "set-cookie")
-            .map((v) => v[1].split(", "))
-            .reduce((a, b) => a.concat(b), [])
-            .map((v) => Cookie.parse(v))
-            .filter((v) => !!v);
-        if (account && this.icloudCookies.length) {
-            this.saveCookies(account);
+        if (account) {
+            this.saveCookieJar(account);
             this.saveSession(account);
         }
-        return !!this.icloudCookies.length;
+        return true;
     }
 
     /**
@@ -295,16 +253,14 @@ export class iCloudAuthenticationStore {
         return this.validateAccountTokens();
     }
 
-    addCookies(cookies: string[]) {
-        cookies.map((v) => Cookie.parse(v)).forEach((v) => this.icloudCookies.push(v));
-    }
-
     getMfaHeaders() {
-        return { ...AUTH_HEADERS, scnt: this.scnt, "X-Apple-ID-Session-Id": this.sessionId, Cookie: "aasp=" + this.aasp };
+        // aasp cookie is sent automatically by fetch-cookie (domain: idmsa.apple.com)
+        return { ...AUTH_HEADERS, scnt: this.scnt, "X-Apple-ID-Session-Id": this.sessionId };
     }
 
     getHeaders() {
-        return { ...DEFAULT_HEADERS, Cookie: this.icloudCookies.filter((a) => a.value).map((cookie) => cookie.cookieString()).join("; ") };
+        // iCloud session cookies are sent automatically by fetch-cookie
+        return { ...DEFAULT_HEADERS };
     }
 
     validateAccountTokens() {
@@ -312,6 +268,6 @@ export class iCloudAuthenticationStore {
     }
 
     validateAuthSecrets() {
-        return this.aasp && this.scnt && this.sessionId;
+        return this.scnt && this.sessionId;
     }
 }
