@@ -7,7 +7,8 @@ export const DEFAULT_HEADERS = {
     "User-Agent": CHROME_USER_AGENT,
     Accept: "application/json",
     "Content-Type": "application/json",
-    Origin: "https://www.icloud.com"
+    Origin: "https://www.icloud.com",
+    Referer: "https://www.icloud.com/"
 };
 
 export const AUTH_HEADERS = {

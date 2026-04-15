@@ -192,17 +192,17 @@ interface iCloudFindMyResponse {
 
 
 class iCloudFindMyDevice {
-    deviceInfo: iCloudFindMyDeviceInfo;
+    deviceInfo!: iCloudFindMyDeviceInfo;
     service: iCloudFindMyService;
-    constructor(service) {
+    constructor(service: iCloudFindMyService) {
         this.service = service;
     }
-    apply(newInfo) {
+    apply(newInfo: iCloudFindMyDeviceInfo) {
         this.deviceInfo = newInfo;
         return this;
     }
-    get(value) {
-        return this[value] || this.deviceInfo[value];
+    get(value: keyof iCloudFindMyDeviceInfo) {
+        return this.deviceInfo[value];
     }
 }
 
@@ -218,22 +218,51 @@ export class iCloudFindMyService {
     }
     devices: Map<string, iCloudFindMyDevice> = new Map();
     async refresh(selectedDevice = "all") {
-        const request = await this.service.fetch(
-            this.serviceUri + "/fmipservice/client/web/refreshClient",
-            {
-                headers: this.service.authStore.getHeaders(),
-                method: "POST",
-                body: JSON.stringify({
-                    clientContext: {
-                        fmly: this.includeFamily,
-                        shouldLocate: true,
-                        deviceListVersion: 1,
-                        selectedDevice
-                    }
-                })
+        const doRequest = async () => {
+            const request = await this.service.fetch(
+                this.serviceUri + "/fmipservice/client/web/refreshClient",
+                {
+                    headers: this.service.authStore.getHeaders(),
+                    method: "POST",
+                    body: JSON.stringify({
+                        clientContext: {
+                            fmly: this.includeFamily,
+                            shouldLocate: true,
+                            deviceListVersion: 1,
+                            selectedDevice
+                        }
+                    })
+                }
+            );
+            if (!request.ok) {
+                const body = (await request.text()).slice(0, 200);
+                throw new Error(`HTTP ${request.status}: ${body || "(empty body)"}`);
             }
-        );
-        const json = await request.json();
+            return request.json();
+        };
+
+        let json: any;
+        try {
+            json = await doRequest();
+        } catch (err: any) {
+            // 421 = wrong region, 450 = need re-auth, 500 = server error —
+            // mirrors pyicloud: refresh webservices (accountLogin) silently, then retry once.
+            if (/HTTP (421|450|500)/.test(err?.message ?? "")) {
+                this.service._log(1 /* Info */, "[findmy] session expired (", err.message, ") — refreshing webservices");
+                const refreshed = await this.service.refreshWebservices();
+                if (refreshed) {
+                    // serviceUri may have changed — pick up the new URL from accountInfo
+                    const newUri = (this.service.accountInfo as any)?.webservices?.findme?.url;
+                    if (newUri) this.serviceUri = newUri;
+                    json = await doRequest();
+                } else {
+                    throw err;
+                }
+            } else {
+                throw err;
+            }
+        }
+
         const newDevices = new Map();
         for (const device of json.content)
             newDevices.set(device.id, (this.devices.get(device.id) || new iCloudFindMyDevice(this)).apply(device));

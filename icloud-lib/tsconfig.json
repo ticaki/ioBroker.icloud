@@ -3,13 +3,13 @@
       "target": "esnext",
       "outDir": "build",
       "rootDir": "src",
-      "moduleResolution": "node",
+      "moduleResolution": "node", // "node16" causes TS1479 for ESM-typed CJS packages (@foxt/js-srp)
       "module": "commonjs",
       "declaration": true,
       "inlineSourceMap": true,
       "esModuleInterop": true /* Enables emit interoperability between CommonJS and ES Modules via creation of namespace objects for all imports. Implies 'allowSyntheticDefaultImports'. */,
       "resolveJsonModule": true /* Include modules imported with .json extension. */,
-  
+    "ignoreDeprecations": "6.0" /* Suppress no-deprecated API warnings from TypeScript 5.0 and later. */,
       // "strict": true /* Enable all strict type-checking options. */,
   
       /* Strict Type-Checking Options */

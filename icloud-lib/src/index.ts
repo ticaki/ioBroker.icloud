@@ -255,7 +255,7 @@ export default class iCloudService extends EventEmitter {
                 username = saved.account;
                 this._log(LogLevel.Debug, "Username found in keychain:", username);
             } catch (e) {
-                throw new Error("Username was not provided, and unable to use Keytar to find saved credentials" + e.toString());
+                throw new Error("Username was not provided, and unable to use Keytar to find saved credentials" + String(e));
             }
         }
         if (typeof (username as any) !== "string") throw new TypeError("authenticate(username?: string, password?: string): 'username' was " + (username || JSON.stringify(username)).toString());
@@ -264,7 +264,7 @@ export default class iCloudService extends EventEmitter {
             try {
                 password = await require("keytar").findPassword("https://idmsa.apple.com", username);
             } catch (e) {
-                throw new Error("Password was not provided, and unable to use Keytar to find saved credentials" + e.toString());
+                throw new Error("Password was not provided, and unable to use Keytar to find saved credentials" + String(e));
             }
         }
         if (typeof (password as any) !== "string") throw new TypeError("authenticate(username?: string, password?: string): 'password' was " + (password || JSON.stringify(password)).toString());
@@ -277,22 +277,22 @@ export default class iCloudService extends EventEmitter {
         if (!password) throw new Error("Password is required");
 
 
-        if (!fs.existsSync(this.options.dataDirectory)) fs.mkdirSync(this.options.dataDirectory);
+        if (!fs.existsSync(this.options.dataDirectory!)) fs.mkdirSync(this.options.dataDirectory!);
         // Load persisted session data and cookies (like pyicloud reads .session + cookiejar files).
         // This populates scnt, session_id, session_token, trust_token, client_id from disk so they
         // can be included in the next signin request — preventing Apple from treating us as a brand
         // new client and triggering rate-limit / 503 responses.
-        const sessionData = this.authStore.loadSession(this.options.username);
-        this.authStore.loadCookieJar(this.options.username);
+        const sessionData = this.authStore.loadSession(this.options.username!);
+        this.authStore.loadCookieJar(this.options.username!);
         // Fallback: also try legacy trust-token file for accounts that only have the old format
-        if (!this.authStore.trustToken) this.authStore.loadTrustToken(this.options.username);
+        if (!this.authStore.trustToken) this.authStore.loadTrustToken(this.options.username!);
 
         // Reuse persisted client_id (pyicloud pattern: generate once, reuse forever)
         const clientId = this.authStore.clientId ||
             ("auth-" + crypto.randomUUID().toLowerCase());
         if (!this.authStore.clientId) {
             this.authStore.clientId = clientId;
-            this.authStore.saveSession(this.options.username);
+            this.authStore.saveSession(this.options.username!);
         }
 
         this._setState(iCloudServiceStatus.Started);
@@ -309,14 +309,14 @@ export default class iCloudService extends EventEmitter {
                     if (validateResponse.status === 200) {
                         this._log(LogLevel.Debug, "[auth] Session token valid — skipping full signin");
                         try { this.accountInfo = await validateResponse.json(); } catch (_) { /* ignore */ }
-                        this.authStore.saveSession(this.options.username);
+                        this.authStore.saveSession(this.options.username!);
                         this._setState(iCloudServiceStatus.Trusted);
                         this._getiCloudCookies();
                         return;
                     }
                     this._log(LogLevel.Debug, "[auth] Session token invalid (HTTP " + validateResponse.status + ") — doing full signin");
                 } catch (e) {
-                    this._log(LogLevel.Debug, "[auth] Session token check failed:", e.toString());
+                    this._log(LogLevel.Debug, "[auth] Session token check failed:", String(e));
                 }
             }
 
@@ -369,18 +369,18 @@ export default class iCloudService extends EventEmitter {
             // expects them back on the next request. Without this, every retry looks like a
             // brand-new client and the rate-limit window resets/extends.
             this.authStore.extractSessionHeaders(authResponse);
-            this.authStore.saveCookieJar(this.options.username);
-            this.authStore.saveSession(this.options.username);
+            this.authStore.saveCookieJar(this.options.username!);
+            this.authStore.saveSession(this.options.username!);
 
             if (authResponse.status == 200) {
-                if (this.authStore.processAuthSecrets(authResponse, this.options.username)) {
+                if (this.authStore.processAuthSecrets(authResponse, this.options.username!)) {
                     this._setState(iCloudServiceStatus.Trusted);
                     this._getiCloudCookies();
                 } else {
                     throw new Error("Unable to process auth response!");
                 }
             } else if (authResponse.status == 409) {
-                if (this.authStore.processAuthSecrets(authResponse, this.options.username)) {
+                if (this.authStore.processAuthSecrets(authResponse, this.options.username!)) {
                     const body = await authResponse.text();
                     this._log(LogLevel.Debug, "[auth] 409 body:", body);
 
@@ -402,8 +402,8 @@ export default class iCloudService extends EventEmitter {
                             body: JSON.stringify(setupData)
                         });
                         this.authStore.extractSessionHeaders(setupResp);
-                        this.authStore.saveCookieJar(this.options.username);
-                        this.authStore.saveSession(this.options.username);
+                        this.authStore.saveCookieJar(this.options.username!);
+                        this.authStore.saveSession(this.options.username!);
                         this._log(LogLevel.Debug, "[auth] accountLogin (post-409) status:", setupResp.status);
                         if (setupResp.status === 200) {
                             // Session accepted without further MFA — treat as authenticated
@@ -419,7 +419,7 @@ export default class iCloudService extends EventEmitter {
                     if (accountLoginOk) {
                         this._log(LogLevel.Debug, "[auth] accountLogin after 409 succeeded — skipping MFA");
                         try { await this.checkPCS(); } catch (_) { /* ignore */ }
-                        this.authStore.saveSession(this.options.username);
+                        this.authStore.saveSession(this.options.username!);
                         this._setState(iCloudServiceStatus.Ready);
                     } else {
                         this._setState(iCloudServiceStatus.MfaRequested);
@@ -478,7 +478,7 @@ export default class iCloudService extends EventEmitter {
             AUTH_ENDPOINT + "2sv/trust",
             { headers: this.authStore.getMfaHeaders() }
         );
-        if (this.authStore.processAccountTokens(this.options.username, authResponse))
+        if (this.authStore.processAccountTokens(this.options.username!, authResponse))
             this._setState(iCloudServiceStatus.Trusted);
         else
             this._log(LogLevel.Error, "Unable to trust device!");
@@ -634,17 +634,51 @@ export default class iCloudService extends EventEmitter {
      */
     getService(service:string) {
         if (!this.serviceConstructors[service]) throw new TypeError(`getService(service: string): 'service' was ${service.toString()}, must be one of ${Object.keys(this.serviceConstructors).join(", ")}`);
+        const webservices = (this.accountInfo as any)?.webservices ?? {};
         if (service === "photos")
-            this._serviceCache[service] = new this.serviceConstructors[service](this, this.accountInfo.webservices.ckdatabasews.url);
+            this._serviceCache[service] = new this.serviceConstructors[service](this, webservices.ckdatabasews?.url);
 
         if (!this._serviceCache[service])
-            this._serviceCache[service] = new this.serviceConstructors[service](this, this.accountInfo.webservices[service].url);
+            this._serviceCache[service] = new this.serviceConstructors[service](this, webservices[service]?.url);
 
         return this._serviceCache[service];
     }
 
 
-    private _storage;
+    /**
+     * Re-fetch iCloud webservices (accountLogin) using the current session token.
+     * Mirrors pyicloud's _authenticate_with_credentials_service("find") pattern:
+     * called automatically when FindMy returns 421/450/500 to get fresh service URLs.
+     * Clears the service cache so getService() picks up the new URLs.
+     * @returns true on success, false if the session token is no longer valid.
+     */
+    async refreshWebservices(): Promise<boolean> {
+        if (!this.authStore.sessionToken) return false;
+        try {
+            const data = {
+                accountCountryCode: this.authStore.accountCountry,
+                dsWebAuthToken: this.authStore.sessionToken,
+                extended_login: true,
+                trustToken: this.authStore.trustToken ?? ""
+            };
+            this._log(LogLevel.Debug, "[findmy] refreshWebservices → POST", SETUP_ENDPOINT);
+            const response = await this.fetch(SETUP_ENDPOINT, {
+                headers: DEFAULT_HEADERS, method: "POST", body: JSON.stringify(data)
+            });
+            this._log(LogLevel.Debug, "[findmy] refreshWebservices response status:", response.status);
+            if (response.status === 200) {
+                this.authStore.processCloudSetupResponse(response, this.options.username);
+                try { this.accountInfo = await response.json(); } catch (_) { /* ignore */ }
+                this._serviceCache = {};
+                return true;
+            }
+            return false;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    private _storage: iCloudStorageUsage | undefined;
     /**
      * Gets the storage usage data for the account.
      * @param refresh Force a refresh of the storage usage data.
@@ -655,6 +689,6 @@ export default class iCloudService extends EventEmitter {
         const response = await this.fetch("https://setup.icloud.com/setup/ws/1/storageUsageInfo", { headers: this.authStore.getHeaders() });
         const json = await response.json();
         this._storage = json;
-        return this._storage;
+        return this._storage!;
     }
 }

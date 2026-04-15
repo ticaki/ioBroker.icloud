@@ -255,7 +255,11 @@ export class iCloudAuthenticationStore {
 
     getMfaHeaders() {
         // aasp cookie is sent automatically by fetch-cookie (domain: idmsa.apple.com)
-        return { ...AUTH_HEADERS, scnt: this.scnt, "X-Apple-ID-Session-Id": this.sessionId };
+        return {
+            ...AUTH_HEADERS,
+            ...(this.scnt      ? { scnt: this.scnt } : {}),
+            ...(this.sessionId ? { "X-Apple-ID-Session-Id": this.sessionId } : {}),
+        };
     }
 
     getHeaders() {

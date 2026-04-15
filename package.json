@@ -73,7 +73,7 @@
     "lint": "eslint -c eslint.config.mjs . --cache --cache-location .eslintcache --cache-strategy content",
     "translate": "translate-adapter",
     "release": "release-script",
-    "postinstall": "cd icloud-lib && npm i",
+    "postinstall": "cd icloud-lib && npm i --ignore-scripts",
     "npm": "npm i && cd src-admin && npm i && cd ../icloud-lib && npm i",
     "build:admin": "cd src-admin && npm run build",
     "build:all": "npm run build && npm run build:admin",
