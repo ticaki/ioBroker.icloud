@@ -324,7 +324,7 @@ class Icloud extends utils.Adapter {
       this.clearTimeout(this.findMyRefreshTimer);
       this.findMyRefreshTimer = null;
     }
-    const INTERVAL_MS = 3 * 60 * 1e3;
+    const INTERVAL_MS = 15 * 60 * 1e3;
     const schedule = () => {
       this.findMyRefreshTimer = this.setTimeout(async () => {
         this.findMyRefreshTimer = null;
