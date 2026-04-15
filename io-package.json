@@ -69,6 +69,7 @@
 		"adminUI": {
 			"config": "json"
 		},
+		"messagebox": true,
 		"dependencies": [
 			{
 				"js-controller": ">=6.0.11"
@@ -81,9 +82,15 @@
 		]
 	},
 	"native": {
-		"option1": true,
-		"option2": "42"
+		"username": "",
+		"password": ""
 	},
+	"encryptedNative": [
+		"password"
+	],
+	"protectedNative": [
+		"password"
+	],
 	"objects": [],
 	"instanceObjects": [
 		{

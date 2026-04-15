@@ -2,14 +2,12 @@
  * Created with @iobroker/create-adapter v3.1.2
  */
 
-// The adapter-core module gives you access to the core ioBroker functions
-// you need to create an adapter
 import * as utils from '@iobroker/adapter-core';
-
-// Load your modules here, e.g.:
-// import * as fs from 'fs';
+import iCloudService, { LogLevel } from '../icloud-lib/build/index';
 
 class Icloud extends utils.Adapter {
+	private icloud: iCloudService | null = null;
+
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
 		super({
 			...options,
@@ -17,73 +15,215 @@ class Icloud extends utils.Adapter {
 		});
 		this.on('ready', this.onReady.bind(this));
 		this.on('stateChange', this.onStateChange.bind(this));
-		// this.on('objectChange', this.onObjectChange.bind(this));
-		// this.on('message', this.onMessage.bind(this));
+		this.on('message', this.onMessage.bind(this));
 		this.on('unload', this.onUnload.bind(this));
+	}
+
+	private async createObjects(): Promise<void> {
+		// info channel is already created via instanceObjects in io-package.json
+
+		// account channel
+		await this.setObjectNotExistsAsync('account', {
+			type: 'channel',
+			common: { name: 'Account Information' },
+			native: {},
+		});
+		await this.setObjectNotExistsAsync('account.fullName', {
+			type: 'state',
+			common: { name: 'Full Name', type: 'string', role: 'text', read: true, write: false, def: '' },
+			native: {},
+		});
+		await this.setObjectNotExistsAsync('account.firstName', {
+			type: 'state',
+			common: { name: 'First Name', type: 'string', role: 'text', read: true, write: false, def: '' },
+			native: {},
+		});
+		await this.setObjectNotExistsAsync('account.lastName', {
+			type: 'state',
+			common: { name: 'Last Name', type: 'string', role: 'text', read: true, write: false, def: '' },
+			native: {},
+		});
+		await this.setObjectNotExistsAsync('account.appleId', {
+			type: 'state',
+			common: { name: 'Apple ID', type: 'string', role: 'text', read: true, write: false, def: '' },
+			native: {},
+		});
+		await this.setObjectNotExistsAsync('account.countryCode', {
+			type: 'state',
+			common: { name: 'Country Code', type: 'string', role: 'text', read: true, write: false, def: '' },
+			native: {},
+		});
+
+		// mfa channel
+		await this.setObjectNotExistsAsync('mfa', {
+			type: 'channel',
+			common: { name: 'Multi-Factor Authentication' },
+			native: {},
+		});
+		await this.setObjectNotExistsAsync('mfa.code', {
+			type: 'state',
+			common: {
+				name: 'MFA Code (enter 6-digit code here)',
+				type: 'string',
+				role: 'text',
+				read: true,
+				write: true,
+				def: '',
+			},
+			native: {},
+		});
+		await this.setObjectNotExistsAsync('mfa.required', {
+			type: 'state',
+			common: {
+				name: 'MFA Required',
+				type: 'boolean',
+				role: 'indicator',
+				read: true,
+				write: false,
+				def: false,
+			},
+			native: {},
+		});
 	}
 
 	/**
 	 * Is called when databases are connected and adapter received configuration.
 	 */
 	private async onReady(): Promise<void> {
-		// Initialize your adapter here
-
-		// Reset the connection indicator during startup
+		this.log.debug('onReady called');
 		this.setState('info.connection', false, true);
 
-		// The adapters config (in the instance object everything under the attribute "native") is accessible via
-		// this.config:
-		this.log.debug('config option1: ${this.config.option1}');
-		this.log.debug('config option2: ${this.config.option2}');
+		const username = this.config.username?.trim();
+		const password = this.config.password;
 
-		/*
-		For every state in the system there has to be also an object of type state
-		Here a simple template for a boolean variable named "testVariable"
-		Because every adapter instance uses its own unique namespace variable names can't collide with other adapters variables
+		if (!username) {
+			this.log.error('Configuration error: username (Apple ID) is empty');
+			return;
+		}
+		if (!password) {
+			this.log.error('Configuration error: password is empty');
+			return;
+		}
+		if (!username.includes('@')) {
+			this.log.warn(`Username "${username}" does not look like a valid Apple ID (expected an email address)`);
+		}
 
-		IMPORTANT: State roles should be chosen carefully based on the state's purpose.
-		           Please refer to the state roles documentation for guidance:
-		           https://www.iobroker.net/#en/documentation/dev/stateroles.md
-		*/
-		await this.setObjectNotExistsAsync('testVariable', {
-			type: 'state',
-			common: {
-				name: 'testVariable',
-				type: 'boolean',
-				role: 'indicator',
-				read: true,
-				write: true,
+		this.log.debug(`Config OK — username: ${username}, password: ${'*'.repeat(password.length)}`);
+
+		await this.createObjects();
+		this.log.debug('Objects created/verified');
+
+		this.subscribeStates('mfa.code');
+		this.log.debug('Subscribed to mfa.code');
+
+		await this.connectToiCloud();
+	}
+
+	private async connectToiCloud(): Promise<void> {
+		const dataDirectory = utils.getAbsoluteInstanceDataDir(this);
+		this.log.debug(`Using data directory: ${dataDirectory}`);
+
+		this.icloud = new iCloudService({
+			username: this.config.username.trim(),
+			password: this.config.password,
+			saveCredentials: false,
+			trustDevice: true,
+			dataDirectory,
+			authMethod: 'legacy',
+			logger: (level, ...args) => {
+				const msg = args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+				if (level === LogLevel.Debug) this.log.debug(`[icloud.js] ${msg}`);
+				else if (level === LogLevel.Info) this.log.info(`[icloud.js] ${msg}`);
+				else if (level === LogLevel.Warning) this.log.warn(`[icloud.js] ${msg}`);
+				else if (level === LogLevel.Error) this.log.error(`[icloud.js] ${msg}`);
 			},
-			native: {},
 		});
 
-		// In order to get state updates, you need to subscribe to them. The following line adds a subscription for our variable we have created above.
-		this.subscribeStates('testVariable');
-		// You can also add a subscription for multiple states. The following line watches all states starting with "lights."
-		// this.subscribeStates('lights.*');
-		// Or, if you really must, you can also watch all states. Don't do this if you don't need to. Otherwise this will cause a lot of unnecessary load on the system:
-		// this.subscribeStates('*');
+		this.icloud.on('Started', () => {
+			this.log.debug('iCloud auth started — credentials submitted, waiting for response');
+		});
 
-		/*
-			setState examples
-			you will notice that each setState will cause the stateChange event to fire (because of above subscribeStates cmd)
-		*/
-		// the variable testVariable is set to true as command (ack=false)
-		await this.setState('testVariable', true);
+		this.icloud.on('MfaRequested', () => {
+			this.log.info('MFA required — enter the 6-digit Apple code into state mfa.code');
+			this.log.debug(`iCloud status is now: ${this.icloud?.status ?? 'unknown'}`);
+			this.setState('mfa.required', true, true);
+			this.setState('info.connection', false, true);
+		});
 
-		// same thing, but the value is flagged "ack"
-		// ack should be always set to true if the value is received from or acknowledged from the target system
-		await this.setState('testVariable', { val: true, ack: true });
+		this.icloud.on('Authenticated', () => {
+			this.log.debug('MFA accepted — waiting for trust token and iCloud cookies');
+		});
 
-		// same thing, but the state is deleted after 30s (getState will return null afterwards)
-		await this.setState('testVariable', { val: true, ack: true, expire: 30 });
+		this.icloud.on('Trusted', () => {
+			this.log.debug('Device trusted — fetching iCloud account data');
+		});
 
-		// examples for the checkPassword/checkGroup functions
-		const pwdResult = await this.checkPasswordAsync('admin', 'iobroker');
-		this.log.info(`check user admin pw iobroker: ${JSON.stringify(pwdResult)}`);
+		this.icloud.on('Ready', () => {
+			this.log.info('iCloud connection established successfully');
+			this.log.debug(`iCloud status is now: ${this.icloud?.status ?? 'unknown'}`);
+			this.setState('info.connection', true, true);
+			this.setState('mfa.required', false, true);
 
-		const groupResult = await this.checkGroupAsync('admin', 'admin');
-		this.log.info(`check group user admin group admin: ${JSON.stringify(groupResult)}`);
+			const info = this.icloud!.accountInfo;
+			if (!info) {
+				this.log.warn('iCloud reported Ready but accountInfo is undefined');
+				return;
+			}
+			if (!info.dsInfo) {
+				this.log.warn('accountInfo.dsInfo is undefined — account data unavailable');
+				return;
+			}
+
+			const ds = info.dsInfo;
+			this.log.info(`Logged in as: ${ds.fullName ?? '(no name)'} (${ds.appleId ?? '(no appleId)'})`);
+			this.log.info(`Country: ${ds.countryCode ?? '?'}, Locale: ${ds.locale ?? '?'}`);
+			this.log.debug(`Full dsInfo: ${JSON.stringify(ds)}`);
+
+			const setChecked = (id: string, val: string | undefined): void => {
+				if (val === undefined || val === null) {
+					this.log.warn(`Skipping state "${id}" — value is ${val}`);
+					return;
+				}
+				this.setState(id, val, true);
+			};
+
+			setChecked('account.fullName', ds.fullName);
+			setChecked('account.firstName', ds.firstName);
+			setChecked('account.lastName', ds.lastName);
+			setChecked('account.appleId', ds.appleId);
+			setChecked('account.countryCode', ds.countryCode);
+		});
+
+		this.icloud.on('Error', (err: unknown) => {
+			const msg = (err as Error)?.message ?? String(err);
+			this.log.error(`iCloud authentication error: ${msg}`);
+			this.log.debug(`iCloud error details: ${err instanceof Error ? err.stack : JSON.stringify(err)}`);
+			this.setState('info.connection', false, true);
+		});
+
+		// Suppress unhandled rejection from awaitReady — errors are handled via the 'Error' event above
+		this.icloud.awaitReady.catch(() => { /* handled via Error event */ });
+
+		this.log.debug('Calling icloud.authenticate()');
+		try {
+			await this.icloud.authenticate();
+			this.log.debug(`authenticate() returned — status: ${this.icloud.status}`);
+		} catch (err) {
+			const msg = (err as Error)?.message ?? String(err);
+			if (msg.startsWith('RATE_LIMITED')) {
+                const retryMinutes = 61; // Apple seems to use a 1-hour rate limit, but we add a buffer to be safe
+				const retryTime = new Date(new Date().getTime() + retryMinutes * 60 * 1000);
+				this.log.warn(`Apple Rate-Limit erkannt — nächster Versuch in ${retryTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} `);
+				this.setTimeout(() => {
+					this.log.info('Rate-Limit Wartezeit abgelaufen — starte erneuten Login-Versuch');
+					this.connectToiCloud().catch(() => { /* Error-Event wird ausgelöst */ });
+				}, retryMinutes * 60 * 1000);
+			} else {
+				this.log.error(`Failed to start iCloud authentication: ${msg}`);
+				this.log.debug(`authenticate() exception stack: ${err instanceof Error ? err.stack : String(err)}`);
+			}
+			// Do not let the adapter crash — nodemon restarts would hammer Apple's servers
+		}
 	}
 
 	/**
@@ -93,33 +233,15 @@ class Icloud extends utils.Adapter {
 	 */
 	private onUnload(callback: () => void): void {
 		try {
-			// Here you must clear all timeouts or intervals that may still be active
-			// clearTimeout(timeout1);
-			// clearTimeout(timeout2);
-			// ...
-			// clearInterval(interval1);
-
+			if (this.icloud) {
+				this.icloud.removeAllListeners();
+				this.icloud = null;
+			}
 			callback();
-		} catch (error) {
-			this.log.error(`Error during unloading: ${(error as Error).message}`);
+		} catch {
 			callback();
 		}
 	}
-
-	// If you need to react to object changes, uncomment the following block and the corresponding line in the constructor.
-	// You also need to subscribe to the objects with `this.subscribeObjects`, similar to `this.subscribeStates`.
-	// /**
-	//  * Is called if a subscribed object changes
-	//  */
-	// private onObjectChange(id: string, obj: ioBroker.Object | null | undefined): void {
-	// 	if (obj) {
-	// 		// The object was changed
-	// 		this.log.info(`object ${id} changed: ${JSON.stringify(obj)}`);
-	// 	} else {
-	// 		// The object was deleted
-	// 		this.log.info(`object ${id} deleted`);
-	// 	}
-	// }
 
 	/**
 	 * Is called if a subscribed state changes
@@ -128,38 +250,76 @@ class Icloud extends utils.Adapter {
 	 * @param state - State object
 	 */
 	private onStateChange(id: string, state: ioBroker.State | null | undefined): void {
-		if (state) {
-			// The state was changed
-			this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+		if (!state) {
+			this.log.debug(`State deleted: ${id}`);
+			return;
+		}
+		if (state.ack) {
+			this.log.debug(`State update (ack=true, ignoring): ${id} = ${state.val}`);
+			return;
+		}
 
-			if (state.ack === false) {
-				// This is a command from the user (e.g., from the UI or other adapter)
-				// and should be processed by the adapter
-				this.log.info(`User command received for ${id}: ${state.val}`);
+		this.log.debug(`Command received: ${id} = "${state.val}"`);
 
-				// TODO: Add your control logic here
+		if (id === `${this.namespace}.mfa.code`) {
+			const raw = String(state.val ?? '').trim();
+			this.log.debug(`MFA code value received: "${raw}" (length: ${raw.length})`);
+
+			if (raw.length === 0) {
+				this.log.debug('Empty MFA code — ignoring');
+				return;
 			}
-		} else {
-			// The object was deleted or the state value has expired
-			this.log.info(`state ${id} deleted`);
+			if (!/^\d{6}$/.test(raw)) {
+				this.log.warn(`Invalid MFA code: "${raw}" — must be exactly 6 digits, got ${raw.length} characters`);
+				return;
+			}
+			if (!this.icloud) {
+				this.log.warn('MFA code received but iCloud service is not initialized');
+				return;
+			}
+			const status = this.icloud.status;
+			if (status !== 'MfaRequested') {
+				this.log.warn(`MFA code received but iCloud status is "${status}" (expected "MfaRequested") — submitting anyway`);
+			}
+			this.log.info(`Submitting MFA code (iCloud status: ${status})`);
+			this.icloud.provideMfaCode(raw).catch((err: unknown) => {
+				this.log.error(`Failed to submit MFA code: ${(err as Error)?.message ?? String(err)}`);
+			});
 		}
 	}
-	// If you need to accept messages in your adapter, uncomment the following block and the corresponding line in the constructor.
-	// /**
-	//  * Some message was sent to this instance over message box. Used by email, pushover, text2speech, ...
-	//  * Using this method requires "common.messagebox" property to be set to true in io-package.json
-	//  */
-	//
-	// private onMessage(obj: ioBroker.Message): void {
-	// 	if (typeof obj === 'object' && obj.message) {
-	// 		if (obj.command === 'send') {
-	// 			// e.g. send email or pushover or whatever
-	// 			this.log.info('send command');
-	// 			// Send response in callback if required
-	// 			if (obj.callback) this.sendTo(obj.from, obj.command, 'Message received', obj.callback);
-	// 		}
-	// 	}
-	// }
+
+	/**
+	 * Is called if a message is sent to this instance.
+	 *
+	 * @param obj - Message object
+	 */
+	private onMessage(obj: ioBroker.Message): void {
+		if (typeof obj !== 'object' || !obj.message) return;
+		this.log.debug(`Message received: command="${obj.command}", message="${JSON.stringify(obj.message)}"`);
+
+		if (obj.command === 'submitMfa') {
+			const code = String(obj.message).trim();
+			if (code.length === 6 && this.icloud) {
+				this.icloud
+					.provideMfaCode(code)
+					.then(() => {
+						if (obj.callback) this.sendTo(obj.from, obj.command, { success: true }, obj.callback);
+					})
+					.catch((err: unknown) => {
+						if (obj.callback)
+							this.sendTo(
+								obj.from,
+								obj.command,
+								{ success: false, error: (err as Error)?.message },
+								obj.callback,
+							);
+					});
+			} else {
+				if (obj.callback)
+					this.sendTo(obj.from, obj.command, { success: false, error: 'Invalid code' }, obj.callback);
+			}
+		}
+	}
 }
 if (require.main !== module) {
 	// Export the constructor in compact mode

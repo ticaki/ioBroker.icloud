@@ -2,25 +2,27 @@
 	"i18n": true,
 	"type": "panel",
 	"items": {
-		"option1": {
-			"type": "checkbox",
-			"label": "option1",
-			"newLine": true,
-			"xs": 12,
-			"sm": 12,
-			"md": 6,
-			"lg": 4,
-			"xl": 4
-		},
-		"option2": {
+		"username": {
 			"type": "text",
-			"label": "option2",
+			"label": "username",
 			"newLine": true,
 			"xs": 12,
 			"sm": 12,
 			"md": 6,
-			"lg": 4,
-			"xl": 4
+			"lg": 6,
+			"xl": 6,
+			"required": true
+		},
+		"password": {
+			"type": "password",
+			"label": "password",
+			"newLine": false,
+			"xs": 12,
+			"sm": 12,
+			"md": 6,
+			"lg": 6,
+			"xl": 6,
+			"required": true
 		}
 	}
 }
