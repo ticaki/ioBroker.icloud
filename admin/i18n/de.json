@@ -2,7 +2,14 @@
 	"icloud adapter settings": "Adaptereinstellungen für icloud",
 	"username": "Apple ID (Benutzername)",
 	"password": "Passwort",
-	"homeCoordinatesHeader": "Heimatstandort",
-	"homeCoordinates": "Koordinaten (Breite,L\u00e4nge)",
-	"homeCoordinatesHelp": "Wird zur Entfernungsberechnung der FindMy-Ger\u00e4te verwendet."
+	"locationPointsHeader": "Standorte",
+	"locationPoints": "Standortliste",
+	"locationPointsHelp": "Wird zur Entfernungsberechnung der FindMy-Geräte verwendet. Index = State-ID, Name = Bezeichnung des States.",
+	"locationPointIndex": "Index (ID)",
+	"locationPointCoordinates": "Koordinaten",
+	"locationPointName": "Name",
+	"findMyHeader": "FindMy",
+	"findMyEnabled": "FindMy aktivieren",
+	"findMyInterval": "Aktualisierungsintervall (Minuten)",
+	"findMyIntervalHelp": "Wie oft FindMy-Geräte abgefragt werden (1–120 Minuten)"
 }

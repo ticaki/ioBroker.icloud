@@ -1,49 +1,98 @@
 {
-	"i18n": true,
-	"type": "panel",
-	"items": {
-		"username": {
-			"type": "text",
-			"label": "username",
-			"newLine": true,
-			"xs": 12,
-			"sm": 12,
-			"md": 6,
-			"lg": 6,
-			"xl": 6,
-			"required": true
-		},
-		"password": {
-			"type": "password",
-			"label": "password",
-			"newLine": false,
-			"xs": 12,
-			"sm": 12,
-			"md": 6,
-			"lg": 6,
-			"xl": 6,
-			"required": true
-		},
-		"_coordHeader": {
-			"type": "header",
-			"text": "homeCoordinatesHeader",
-			"size": 5,
-			"newLine": true
-		},
-		"coordinates": {
-			"type": "coordinates",
-			"newLine": true,
-			"xs": 12,
-			"sm": 12,
-			"md": 8,
-			"lg": 6,
-			"xl": 6,
-			"label": "homeCoordinates",
-			"help": "homeCoordinatesHelp",
-			"autoInit": true,
-			"longitudeName": "longitude",
-			"latitudeName": "latitude",
-			"useSystemName": "useSystemCoordinates"
-		}
-	}
+    "i18n": true,
+    "type": "panel",
+    "items": {
+        "username": {
+            "type": "text",
+            "label": "username",
+            "newLine": true,
+            "xs": 12,
+            "sm": 12,
+            "md": 6,
+            "lg": 6,
+            "xl": 6
+        },
+        "password": {
+            "type": "password",
+            "label": "password",
+            "newLine": false,
+            "xs": 12,
+            "sm": 12,
+            "md": 6,
+            "lg": 6,
+            "xl": 6
+        },
+        "_coordHeader": {
+            "type": "header",
+            "text": "locationPointsHeader",
+            "size": 5,
+            "newLine": true
+        },
+        "locationPoints": {
+            "type": "table",
+            "label": "locationPoints",
+            "help": "locationPointsHelp",
+            "newLine": true,
+            "xs": 12,
+            "sm": 12,
+            "md": 12,
+            "lg": 12,
+            "xl": 12,
+            "items": [
+                {
+                    "type": "text",
+                    "label": "locationPointIndex",
+                    "width": "15%",
+                    "attr": "index"
+                },
+                {
+                    "type": "coordinates",
+                    "label": "locationPointCoordinates",
+                    "longitudeName": "longitude",
+                    "latitudeName": "latitude",
+                    "width": "55%",
+                    "attr": "coordinates"
+                },
+                {
+                    "type": "text",
+                    "label": "locationPointName",
+                    "width": "30%",
+                    "attr": "name"
+                }
+            ]
+        },
+        "_findMyHeader": {
+            "type": "header",
+            "text": "findMyHeader",
+            "size": 5,
+            "newLine": true
+        },
+        "findMyEnabled": {
+            "type": "checkbox",
+            "label": "findMyEnabled",
+            "newLine": true,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "default": true
+        },
+        "findMyInterval": {
+            "type": "number",
+            "label": "findMyInterval",
+            "help": "findMyIntervalHelp",
+            "newLine": false,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "min": 1,
+            "max": 120,
+            "step": 1,
+            "default": 5,
+            "disabled": "data.findMyEnabled"
+        }
+    }
 }

@@ -83,7 +83,8 @@
 	},
 	"native": {
 		"username": "",
-		"password": ""
+		"password": "",
+        "locationPoints": []
 	},
 	"encryptedNative": [
 		"password"

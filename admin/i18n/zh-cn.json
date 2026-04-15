@@ -1,9 +1,13 @@
 {
 	"icloud adapter settings": "icloud的适配器设置",
-	"option1": "选项1",
-	"option2": "选项2"
-,
-	"homeCoordinatesHeader": "Home location",
-	"homeCoordinates": "Coordinates (latitude,longitude)",
-	"homeCoordinatesHelp": "Used to calculate distance to FindMy devices."
+	"locationPointsHeader": "位置点",
+	"locationPoints": "位置列表",
+	"locationPointsHelp": "用于计算到 FindMy 设备的距离。",
+	"locationPointIndex": "索引 (ID)",
+	"locationPointCoordinates": "坐标",
+	"locationPointName": "名称",
+	"findMyHeader": "FindMy",
+	"findMyEnabled": "Enable FindMy",
+	"findMyInterval": "Refresh interval (minutes)",
+	"findMyIntervalHelp": "How often FindMy devices are polled (1–120 minutes)"
 }

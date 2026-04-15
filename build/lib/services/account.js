@@ -31,12 +31,17 @@ class iCloudAccountDetailsService {
   _devices;
   /**
    * Retrieves a list of all devices associated with the account.
+   *
    * @param refresh By default, the devices are cached forever. If you want to refresh the list, set this to true.
    * @returns A list of devices associated with the account.
    */
   async getDevices(refresh = false) {
-    if (!refresh && this._devices) return this._devices;
-    const response = await this.service.fetch(this.serviceUri + "/setup/web/device/getDevices", { headers: this.service.authStore.getHeaders() });
+    if (!refresh && this._devices) {
+      return this._devices;
+    }
+    const response = await this.service.fetch(`${this.serviceUri}/setup/web/device/getDevices`, {
+      headers: this.service.authStore.getHeaders()
+    });
     const json = await response.json();
     this._devices = json;
     return this._devices;
@@ -44,12 +49,17 @@ class iCloudAccountDetailsService {
   _family;
   /**
    * Retrieves information about the family associated with the account.
+   *
    * @param refresh  By default, the family information is cached forever. If you want to refresh the list, set this to true.
    * @returns Information about the family associated with the account.
    */
   async getFamily(refresh = false) {
-    if (!refresh && this._family) return this._family;
-    const response = await this.service.fetch(this.serviceUri + "/setup/web/family/getFamilyDetails", { headers: this.service.authStore.getHeaders() });
+    if (!refresh && this._family) {
+      return this._family;
+    }
+    const response = await this.service.fetch(`${this.serviceUri}/setup/web/family/getFamilyDetails`, {
+      headers: this.service.authStore.getHeaders()
+    });
     const json = await response.json();
     this._family = json;
     return this._family;

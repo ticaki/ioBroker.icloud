@@ -18,6 +18,7 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var findMy_exports = {};
 __export(findMy_exports, {
+  iCloudFindMyDevice: () => iCloudFindMyDevice,
   iCloudFindMyService: () => iCloudFindMyService
 });
 module.exports = __toCommonJS(findMy_exports);
@@ -42,27 +43,24 @@ class iCloudFindMyService {
   constructor(service, serviceUri) {
     this.service = service;
     this.serviceUri = serviceUri;
-    this.refresh();
+    void this.refresh();
   }
   devices = /* @__PURE__ */ new Map();
   async refresh(selectedDevice = "all") {
-    var _a, _b, _c, _d;
+    var _a;
     const doRequest = async () => {
-      const request = await this.service.fetch(
-        this.serviceUri + "/fmipservice/client/web/refreshClient",
-        {
-          headers: this.service.authStore.getHeaders(),
-          method: "POST",
-          body: JSON.stringify({
-            clientContext: {
-              fmly: this.includeFamily,
-              shouldLocate: true,
-              deviceListVersion: 1,
-              selectedDevice
-            }
-          })
-        }
-      );
+      const request = await this.service.fetch(`${this.serviceUri}/fmipservice/client/web/refreshClient`, {
+        headers: this.service.authStore.getHeaders(),
+        method: "POST",
+        body: JSON.stringify({
+          clientContext: {
+            fmly: this.includeFamily,
+            shouldLocate: true,
+            deviceListVersion: 1,
+            selectedDevice
+          }
+        })
+      });
       if (!request.ok) {
         const body = (await request.text()).slice(0, 200);
         throw new Error(`HTTP ${request.status}: ${body || "(empty body)"}`);
@@ -73,12 +71,19 @@ class iCloudFindMyService {
     try {
       json = await doRequest();
     } catch (err) {
-      if (/HTTP (421|450|500)/.test((_a = err == null ? void 0 : err.message) != null ? _a : "")) {
-        this.service._log(1, "[findmy] session expired (", err.message, ") \u2014 refreshing webservices");
+      if (err instanceof Error && /HTTP (421|450|500)/.test(err.message)) {
+        this.service._log(
+          1,
+          "[findmy] session expired (",
+          err.message,
+          ") \u2014 refreshing webservices"
+        );
         const refreshed = await this.service.refreshWebservices();
         if (refreshed) {
-          const newUri = (_d = (_c = (_b = this.service.accountInfo) == null ? void 0 : _b.webservices) == null ? void 0 : _c.findme) == null ? void 0 : _d.url;
-          if (newUri) this.serviceUri = newUri;
+          const newUri = (_a = this.service.accountInfo) == null ? void 0 : _a.webservices.findme.url;
+          if (newUri) {
+            this.serviceUri = newUri;
+          }
           json = await doRequest();
         } else {
           throw err;
@@ -88,14 +93,31 @@ class iCloudFindMyService {
       }
     }
     const newDevices = /* @__PURE__ */ new Map();
-    for (const device of json.content)
+    for (const device of json.content) {
       newDevices.set(device.id, (this.devices.get(device.id) || new iCloudFindMyDevice(this)).apply(device));
+    }
     this.devices = newDevices;
     return json;
+  }
+  async playSound(deviceId, subject = "Find My iPhone Alert") {
+    const request = await this.service.fetch(`${this.serviceUri}/fmipservice/client/web/playSound`, {
+      headers: this.service.authStore.getHeaders(),
+      method: "POST",
+      body: JSON.stringify({
+        device: deviceId,
+        subject,
+        clientContext: { fmly: true }
+      })
+    });
+    if (!request.ok) {
+      const body = (await request.text()).slice(0, 200);
+      throw new Error(`playSound HTTP ${request.status}: ${body || "(empty body)"}`);
+    }
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  iCloudFindMyDevice,
   iCloudFindMyService
 });
 //# sourceMappingURL=findMy.js.map

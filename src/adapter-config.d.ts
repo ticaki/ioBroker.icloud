@@ -3,12 +3,18 @@
 // Augment the globally declared type ioBroker.AdapterConfig
 declare global {
 	namespace ioBroker {
+		interface LocationPoint {
+			index: string;
+			latitude: number;
+			longitude: number;
+			name: string;
+		}
 		interface AdapterConfig {
 			username: string;
 			password: string;
-			latitude: number;
-			longitude: number;
-			useSystemCoordinates: boolean;
+			locationPoints: LocationPoint[];
+			findMyEnabled: boolean;
+			findMyInterval: number;
 		}
 	}
 }

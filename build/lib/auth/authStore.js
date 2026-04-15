@@ -41,7 +41,7 @@ const SESSION_HEADER_MAP = {
   "x-apple-id-session-id": "sessionId",
   "x-apple-session-token": "sessionToken",
   "x-apple-twosv-trust-token": "trustToken",
-  "scnt": "scnt"
+  scnt: "scnt"
 };
 class iCloudAuthenticationStore {
   options;
@@ -72,52 +72,85 @@ class iCloudAuthenticationStore {
     Object.defineProperty(this, "scnt", { enumerable: false });
     Object.defineProperty(this, "cookieJar", { enumerable: false });
   }
-  /** Sanitise account name for use as a filename component (matches pyicloud behaviour). */
+  /**
+   * Sanitise account name for use as a filename component (matches pyicloud behaviour).
+   *
+   * @param account
+   */
   _accountFilename(account) {
     return account.replace(/\W/g, "");
   }
   _sessionPath(account) {
-    return import_path.default.join(this.options.dataDirectory, this._accountFilename(account) + ".session");
+    return import_path.default.join(this.options.dataDirectory, `${this._accountFilename(account)}.session`);
   }
   _jarPath(account) {
-    return import_path.default.join(this.options.dataDirectory, this._accountFilename(account) + ".jar.json");
+    return import_path.default.join(this.options.dataDirectory, `${this._accountFilename(account)}.jar.json`);
   }
   // ── Session persistence (mirrors pyicloud's .session JSON file) ────────────
   /**
    * Load session data from disk.
    * Populates scnt, sessionId, sessionToken, accountCountry, trustToken, clientId.
    * Returns the raw JSON object so the caller can read client_id etc.
+   *
+   * @param account
    */
   loadSession(account) {
     try {
-      const data = JSON.parse(
-        import_fs.default.readFileSync(this._sessionPath(account), "utf8")
-      );
-      if (data.scnt) this.scnt = data.scnt;
-      if (data.session_id) this.sessionId = data.session_id;
-      if (data.session_token) this.sessionToken = data.session_token;
-      if (data.account_country) this.accountCountry = data.account_country;
-      if (data.trust_token) this.trustToken = data.trust_token;
-      if (data.client_id) this.clientId = data.client_id;
+      const data = JSON.parse(import_fs.default.readFileSync(this._sessionPath(account), "utf8"));
+      if (data.scnt) {
+        this.scnt = data.scnt;
+      }
+      if (data.session_id) {
+        this.sessionId = data.session_id;
+      }
+      if (data.session_token) {
+        this.sessionToken = data.session_token;
+      }
+      if (data.account_country) {
+        this.accountCountry = data.account_country;
+      }
+      if (data.trust_token) {
+        this.trustToken = data.trust_token;
+      }
+      if (data.client_id) {
+        this.clientId = data.client_id;
+      }
       this._log(import__.LogLevel.Debug, "[authStore] Session loaded from disk");
       return data;
-    } catch (e) {
+    } catch {
       this._log(import__.LogLevel.Info, "[authStore] No session file found, starting fresh");
       return {};
     }
   }
-  /** Persist current session data to disk. */
+  /**
+   * Persist current session data to disk.
+   *
+   * @param account
+   */
   saveSession(account) {
     try {
       const data = {};
-      if (this.scnt) data.scnt = this.scnt;
-      if (this.sessionId) data.session_id = this.sessionId;
-      if (this.sessionToken) data.session_token = this.sessionToken;
-      if (this.accountCountry) data.account_country = this.accountCountry;
-      if (this.trustToken) data.trust_token = this.trustToken;
-      if (this.clientId) data.client_id = this.clientId;
-      if (!import_fs.default.existsSync(this.options.dataDirectory))
+      if (this.scnt) {
+        data.scnt = this.scnt;
+      }
+      if (this.sessionId) {
+        data.session_id = this.sessionId;
+      }
+      if (this.sessionToken) {
+        data.session_token = this.sessionToken;
+      }
+      if (this.accountCountry) {
+        data.account_country = this.accountCountry;
+      }
+      if (this.trustToken) {
+        data.trust_token = this.trustToken;
+      }
+      if (this.clientId) {
+        data.client_id = this.clientId;
+      }
+      if (!import_fs.default.existsSync(this.options.dataDirectory)) {
         import_fs.default.mkdirSync(this.options.dataDirectory);
+      }
       import_fs.default.writeFileSync(this._sessionPath(account), JSON.stringify(data, null, 2), "utf8");
       this._log(import__.LogLevel.Debug, "[authStore] Session saved to disk");
     } catch (e) {
@@ -128,6 +161,8 @@ class iCloudAuthenticationStore {
   /**
    * Load the persisted CookieJar from disk.
    * Automatically migrates legacy .cookies and .auth-cookies files on first run.
+   *
+   * @param account
    */
   loadCookieJar(account) {
     var _a;
@@ -141,12 +176,12 @@ class iCloudAuthenticationStore {
             `${c.key}=${c.value}; Domain=${c.domain}; Path=${c.path || "/"}`,
             `https://${c.domain}`
           );
-        } catch (_) {
+        } catch {
         }
       }
       this._log(import__.LogLevel.Debug, "[authStore] Cookie jar loaded from disk");
       return;
-    } catch (e) {
+    } catch {
       this._log(import__.LogLevel.Debug, "[authStore] No jar file \u2014 trying legacy migration");
     }
     const base = import_path.default.join(this.options.dataDirectory, this._accountFilename(account));
@@ -155,29 +190,32 @@ class iCloudAuthenticationStore {
         const raw = JSON.parse(import_fs.default.readFileSync(filePath, "utf8"));
         for (const v of raw) {
           const c = import_tough_cookie.Cookie.parse(v);
-          if (!c) continue;
+          if (!c) {
+            continue;
+          }
           try {
             this.cookieJar.setCookieSync(c.toString(), `https://${domain}`);
-          } catch (_) {
+          } catch {
           }
         }
         this._log(import__.LogLevel.Debug, `[authStore] Migrated legacy cookies from ${filePath}`);
-      } catch (_) {
+      } catch {
       }
     };
-    tryMigrate(base + ".cookies", "setup.icloud.com");
-    tryMigrate(base + ".auth-cookies", "idmsa.apple.com");
+    tryMigrate(`${base}.cookies`, "setup.icloud.com");
+    tryMigrate(`${base}.auth-cookies`, "idmsa.apple.com");
   }
-  /** Persist the CookieJar to disk. */
+  /**
+   * Persist the CookieJar to disk.
+   *
+   * @param account
+   */
   saveCookieJar(account) {
     try {
-      if (!import_fs.default.existsSync(this.options.dataDirectory))
+      if (!import_fs.default.existsSync(this.options.dataDirectory)) {
         import_fs.default.mkdirSync(this.options.dataDirectory);
-      import_fs.default.writeFileSync(
-        this._jarPath(account),
-        JSON.stringify(this.cookieJar.serializeSync(), null, 2),
-        "utf8"
-      );
+      }
+      import_fs.default.writeFileSync(this._jarPath(account), JSON.stringify(this.cookieJar.serializeSync(), null, 2), "utf8");
       this._log(import__.LogLevel.Debug, "[authStore] Cookie jar saved to disk");
     } catch (e) {
       this._log(import__.LogLevel.Warning, "[authStore] Unable to save cookie jar:", e.toString());
@@ -188,34 +226,42 @@ class iCloudAuthenticationStore {
    * Extract all session-related headers from a response and update in-memory state.
    * Safe to call on ANY response, including error responses — this is the key mechanism
    * that ensures session continuity across login attempts (fixing Apple 503 / rate-limit).
+   *
+   * @param response
    */
   extractSessionHeaders(response) {
     for (const [header, prop] of Object.entries(SESSION_HEADER_MAP)) {
       const value = response.headers.get(header);
-      if (value) this[prop] = value;
+      if (value) {
+        this[prop] = value;
+      }
     }
     if (!response.headers.get("x-apple-id-session-id")) {
       const fallback = response.headers.get("x-apple-session-token");
-      if (fallback) this.sessionId = fallback;
+      if (fallback) {
+        this.sessionId = fallback;
+      }
     }
   }
   // ── Legacy trust-token helpers (kept for backward compatibility) ───────────
   loadTrustToken(account) {
     try {
       this.trustToken = import_fs.default.readFileSync(
-        this.tknFile + "-" + Buffer.from(account.toLowerCase()).toString("base64"),
+        `${this.tknFile}-${Buffer.from(account.toLowerCase()).toString("base64")}`,
         "utf8"
       );
-    } catch (e) {
+    } catch {
       this._log(import__.LogLevel.Debug, "[authStore] No legacy trust-token file found");
     }
   }
   writeTrustToken(account) {
     var _a;
     try {
-      if (!import_fs.default.existsSync(this.options.dataDirectory)) import_fs.default.mkdirSync(this.options.dataDirectory);
+      if (!import_fs.default.existsSync(this.options.dataDirectory)) {
+        import_fs.default.mkdirSync(this.options.dataDirectory);
+      }
       import_fs.default.writeFileSync(
-        this.tknFile + "-" + Buffer.from(account.toLowerCase()).toString("base64"),
+        `${this.tknFile}-${Buffer.from(account.toLowerCase()).toString("base64")}`,
         (_a = this.trustToken) != null ? _a : "",
         "utf8"
       );
@@ -227,11 +273,16 @@ class iCloudAuthenticationStore {
   /**
    * Process a sign-in response: extract session headers.
    * Cookies are handled automatically by fetch-cookie (stored in cookieJar).
+   *
+   * @param authResponse
+   * @param account
    */
   processAuthSecrets(authResponse, account) {
     try {
       this.extractSessionHeaders(authResponse);
-      if (account) this.saveSession(account);
+      if (account) {
+        this.saveSession(account);
+      }
       return this.validateAuthSecrets();
     } catch (e) {
       this._log(import__.LogLevel.Warning, "[authStore] Unable to process auth secrets:", e.toString());
@@ -241,6 +292,9 @@ class iCloudAuthenticationStore {
   /**
    * Process a cloud-setup response: extract session headers.
    * Cookies are handled automatically by fetch-cookie (stored in cookieJar).
+   *
+   * @param cloudSetupResponse
+   * @param account
    */
   processCloudSetupResponse(cloudSetupResponse, account) {
     this.extractSessionHeaders(cloudSetupResponse);
@@ -252,6 +306,9 @@ class iCloudAuthenticationStore {
   }
   /**
    * Process a 2sv/trust response: extract session headers, persist trust token.
+   *
+   * @param account
+   * @param trustResponse
    */
   processAccountTokens(account, trustResponse) {
     this.extractSessionHeaders(trustResponse);
@@ -270,10 +327,10 @@ class iCloudAuthenticationStore {
     return { ...import_consts.DEFAULT_HEADERS };
   }
   validateAccountTokens() {
-    return this.sessionToken && this.trustToken;
+    return !!(this.sessionToken && this.trustToken);
   }
   validateAuthSecrets() {
-    return this.scnt && this.sessionId;
+    return !!(this.scnt && this.sessionId);
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

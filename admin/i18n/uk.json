@@ -1,9 +1,13 @@
 {
 	"icloud adapter settings": "Налаштування адаптера для icloud",
-	"option1": "варіант1",
-	"option2": "варіант2"
-,
-	"homeCoordinatesHeader": "Home location",
-	"homeCoordinates": "Coordinates (latitude,longitude)",
-	"homeCoordinatesHelp": "Used to calculate distance to FindMy devices."
+	"locationPointsHeader": "Точки місцезнаходження",
+	"locationPoints": "Список місць",
+	"locationPointsHelp": "Використовується для розрахунку відстаней до пристроїв FindMy.",
+	"locationPointIndex": "Індекс (ID)",
+	"locationPointCoordinates": "Координати",
+	"locationPointName": "Назва",
+	"findMyHeader": "FindMy",
+	"findMyEnabled": "Enable FindMy",
+	"findMyInterval": "Refresh interval (minutes)",
+	"findMyIntervalHelp": "How often FindMy devices are polled (1–120 minutes)"
 }

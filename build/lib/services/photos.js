@@ -170,20 +170,18 @@ const SMART_FOLDERS = {
   }
 };
 class iCloudPhotosEndpointService {
-  /* eslint-disable no-useless-constructor, no-empty-function */
   constructor(serviceUri, headers, _fetchFn) {
     this.serviceUri = serviceUri;
     this.headers = headers;
     this._fetchFn = _fetchFn;
   }
-  /* eslint-enable no-useless-constructor, no-empty-function */
   async fetch(url, body, headers) {
     const params = new URLSearchParams({
       remapEnums: "true",
       getCurrentSyncToken: "true"
     });
     const result = await this._fetchFn(
-      `${this.serviceUri}/database/1/com.apple.photos.cloud/production/private${url}?${params}`,
+      `${this.serviceUri}/database/1/com.apple.photos.cloud/production/private${url}?${params.toString()}`,
       {
         method: "POST",
         headers: {
@@ -195,10 +193,16 @@ class iCloudPhotosEndpointService {
       }
     );
     const json = await result.json();
-    if (json.error) throw new Error(json.error + ": " + json.reason);
+    if (json.error) {
+      throw new Error(`${json.error}: ${json.reason}`);
+    }
     return json;
   }
-  /** Raw download fetch — uses the cookie-jar-backed fetch for CDN/download URLs. */
+  /**
+   * Raw download fetch — uses the cookie-jar-backed fetch for CDN/download URLs.
+   *
+   * @param url
+   */
   async download(url) {
     return this._fetchFn(url);
   }
@@ -207,13 +211,18 @@ class iCloudPhotosService {
   constructor(service, serviceUri) {
     this.service = service;
     this.serviceUri = serviceUri;
-    this.endpointService = new iCloudPhotosEndpointService(serviceUri, service.authStore.getHeaders(), service.fetch);
+    this.endpointService = new iCloudPhotosEndpointService(
+      serviceUri,
+      service.authStore.getHeaders(),
+      service.fetch
+    );
   }
   endpointService;
   _albums = /* @__PURE__ */ new Map();
   async getAlbums() {
-    if (this._albums.size > 0)
+    if (this._albums.size > 0) {
       return this._albums;
+    }
     const folders = (await this.endpointService.fetch("/records/query", {
       query: { recordType: "CPLAlbumByPositionLive" },
       zoneID: { zoneName: "PrimarySync", zoneType: "REGULAR_CUSTOM_ZONE" }
@@ -223,22 +232,27 @@ class iCloudPhotosService {
     });
     folders.map((folder) => {
       var _a;
-      if (!("albumNameEnc" in folder.fields)) return;
-      if (folder.recordName === "----Root-Folder----" || ((_a = folder.fields.isDeleted) == null ? void 0 : _a.value)) return;
+      if (!("albumNameEnc" in folder.fields)) {
+        return;
+      }
+      if (folder.recordName === "----Root-Folder----" || ((_a = folder.fields.isDeleted) == null ? void 0 : _a.value)) {
+        return;
+      }
       const folderName = Buffer.from(folder.fields.albumNameEnc.value, "base64").toString("utf-8");
-      this._albums.set(folderName, new iCloudPhotoAlbum(
-        this.endpointService,
+      this._albums.set(
         folderName,
-        {
+        new iCloudPhotoAlbum(this.endpointService, folderName, {
           type: "CPLContainerRelationLiveByAssetDate",
           direction: "ASCENDING",
-          query_filter: [{
-            fieldName: "parentId",
-            comparator: "EQUALS",
-            fieldValue: { type: "STRING", value: folder.recordName }
-          }]
-        }
-      ));
+          query_filter: [
+            {
+              fieldName: "parentId",
+              comparator: "EQUALS",
+              fieldValue: { type: "STRING", value: folder.recordName }
+            }
+          ]
+        })
+      );
     });
     return this._albums;
   }
@@ -247,7 +261,6 @@ class iCloudPhotosService {
   }
 }
 class iCloudPhotoAlbum {
-  /* eslint-disable no-useless-constructor, no-empty-function */
   constructor(endpointService, name, album, pageSize = 100) {
     this.endpointService = endpointService;
     this.name = name;
@@ -256,7 +269,6 @@ class iCloudPhotoAlbum {
   }
   _length;
   _photos = [];
-  /* eslint-enable no-useless-constructor, no-empty-function */
   get title() {
     return this.name;
   }
@@ -411,8 +423,9 @@ class iCloudPhotoAlbum {
     };
   }
   async getPhotos() {
-    if (this._photos.length)
+    if (this._photos.length) {
       return this._photos;
+    }
     const isDescending = this.album.direction === "DESCENDING";
     const total = await this.getLength();
     let offset = isDescending ? total - 1 : 0;
@@ -436,16 +449,16 @@ class iCloudPhotoAlbum {
       masterRecords.map((record) => {
         this._photos.push(new iCloudPhotoAsset(this.endpointService, record, assetRecords[record.recordName]));
       });
-      if (masterRecords.length > 0)
+      if (masterRecords.length > 0) {
         offset += isDescending ? -masterRecords.length : masterRecords.length;
-      else
+      } else {
         break;
+      }
     }
     return this._photos;
   }
 }
 class iCloudPhotoAsset {
-  /* eslint-disable no-useless-constructor, no-empty-function */
   constructor(endpointService, masterRecord, assetRecord) {
     this.endpointService = endpointService;
     this.masterRecord = masterRecord;
@@ -462,7 +475,6 @@ class iCloudPhotoAsset {
     thumb: "resVidSmall"
   };
   _versions = {};
-  /* eslint-enable no-useless-constructor, no-empty-function */
   get id() {
     return this.masterRecord.recordName;
   }
@@ -485,10 +497,7 @@ class iCloudPhotoAsset {
    * @returns array [width, height] in pixels
    */
   get dimension() {
-    return [
-      this.masterRecord.fields.resOriginalWidth.value,
-      this.masterRecord.fields.resOriginalHeight.value
-    ];
+    return [this.masterRecord.fields.resOriginalWidth.value, this.masterRecord.fields.resOriginalHeight.value];
   }
   get versions() {
     if (Object.keys(this._versions).length <= 0) {
@@ -511,19 +520,20 @@ class iCloudPhotoAsset {
     return this._versions;
   }
   async download(version = "original") {
-    if (Object.keys(this._versions).length <= 0)
+    if (Object.keys(this._versions).length <= 0) {
       this.versions;
-    if (!(version in this._versions))
+    }
+    if (!(version in this._versions)) {
       return null;
+    }
     const response = await this.endpointService.download(this._versions[version].url);
     return response.arrayBuffer();
   }
   async delete() {
     try {
-      await this.endpointService.fetch(
-        "/records/modify",
-        {
-          operations: [{
+      await this.endpointService.fetch("/records/modify", {
+        operations: [
+          {
             operationType: "update",
             record: {
               recordName: this.assetRecord.recordName,
@@ -531,13 +541,13 @@ class iCloudPhotoAsset {
               recordChangeTag: this.masterRecord.recordChangeTag,
               fields: { isDeleted: { value: 1 } }
             }
-          }],
-          zoneID: { zoneName: "PrimarySync" },
-          atomic: true
-        }
-      );
+          }
+        ],
+        zoneID: { zoneName: "PrimarySync" },
+        atomic: true
+      });
       return true;
-    } catch (err) {
+    } catch {
       return false;
     }
   }

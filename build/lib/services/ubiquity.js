@@ -31,9 +31,13 @@ class iCloudUbiquityService {
     this.dsid = this.service.accountInfo.dsInfo.dsid;
   }
   async getNode(nodeId = 0, type = "item") {
-    const response = await this.service.fetch(this.serviceUri + "/ws/" + this.dsid + "/" + type + "/" + nodeId, { headers: this.service.authStore.getHeaders() });
+    const response = await this.service.fetch(`${this.serviceUri}/ws/${this.dsid}/${type}/${nodeId}`, {
+      headers: this.service.authStore.getHeaders()
+    });
     const json = await response.text();
-    if (json == "Account migrated") throw new Error("Ubiquity not supported on this account");
+    if (json == "Account migrated") {
+      throw new Error("Ubiquity not supported on this account");
+    }
     return JSON.parse(json);
   }
 }

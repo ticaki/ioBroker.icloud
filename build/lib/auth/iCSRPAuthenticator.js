@@ -40,27 +40,36 @@ const SRP_G = 2n;
 const SRP_N_BYTES = 256;
 function srpBytesFromBigint(n) {
   let hex = n.toString(16);
-  if (hex.length % 2) hex = "0" + hex;
+  if (hex.length % 2) {
+    hex = `0${hex}`;
+  }
   const result = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < result.length; i++)
+  for (let i = 0; i < result.length; i++) {
     result[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
   return result;
 }
 function srpBigintFromBytes(bytes) {
   let n = 0n;
-  for (const b of bytes) n = (n << 8n) + BigInt(b);
+  for (const b of bytes) {
+    n = (n << 8n) + BigInt(b);
+  }
   return n;
 }
 function srpPadToLen(value, targetLen) {
   const raw = srpBytesFromBigint(value);
-  if (raw.length >= targetLen) return raw;
+  if (raw.length >= targetLen) {
+    return raw;
+  }
   const padded = new Uint8Array(targetLen);
   padded.set(raw, targetLen - raw.length);
   return padded;
 }
 function srpConcat(...arrays) {
   let total = 0;
-  for (const a of arrays) total += a.length;
+  for (const a of arrays) {
+    total += a.length;
+  }
   const result = new Uint8Array(total);
   let offset = 0;
   for (const a of arrays) {
@@ -71,7 +80,9 @@ function srpConcat(...arrays) {
 }
 function srpXor(a, b) {
   const result = new Uint8Array(a.length);
-  for (let i = 0; i < a.length; i++) result[i] = a[i] ^ b[i];
+  for (let i = 0; i < a.length; i++) {
+    result[i] = a[i] ^ b[i];
+  }
   return result;
 }
 function srpToHex(bytes) {
@@ -85,11 +96,15 @@ async function srpSha256BigInt(data) {
   return srpBigintFromBytes(await srpSha256(data));
 }
 function srpModPow(base, exp, mod) {
-  if (mod === 1n) return 0n;
+  if (mod === 1n) {
+    return 0n;
+  }
   base = (base % mod + mod) % mod;
   let result = 1n;
   for (; exp > 0n; exp >>= 1n) {
-    if (exp & 1n) result = result * base % mod;
+    if (exp & 1n) {
+      result = result * base % mod;
+    }
     base = base * base % mod;
   }
   return result;
@@ -104,8 +119,9 @@ class GSASRPAuthenticator {
   clientA;
   async derivePassword(protocol, password, salt, iterations) {
     let passHash = await srpSha256(stringToU8Array(password));
-    if (protocol === "s2k_fo")
+    if (protocol === "s2k_fo") {
       passHash = stringToU8Array(srpToHex(passHash));
+    }
     const imported = await globalThis.crypto.subtle.importKey(
       "raw",
       Buffer.from(passHash),
@@ -121,44 +137,41 @@ class GSASRPAuthenticator {
     return new Uint8Array(derived);
   }
   async getInit() {
-    if (this.clientA !== void 0) throw new Error("Already initialized");
+    if (this.clientA !== void 0) {
+      throw new Error("Already initialized");
+    }
     this.clienta = srpBigintFromBytes(import_crypto.default.randomBytes(SRP_N_BYTES));
     this.clientA = srpModPow(SRP_G, this.clienta, SRP_N);
     const a = Buffer.from(srpBytesFromBigint(this.clientA)).toString("base64");
     return { a, protocols: ["s2k", "s2k_fo"], accountName: this.username };
   }
   async getComplete(password, serverData) {
-    if (this.clientA === void 0 || this.clienta === void 0)
+    if (this.clientA === void 0 || this.clienta === void 0) {
       throw new Error("Not initialized");
-    if (serverData.protocol !== "s2k" && serverData.protocol !== "s2k_fo")
-      throw new Error("Unsupported protocol " + serverData.protocol);
+    }
+    if (serverData.protocol !== "s2k" && serverData.protocol !== "s2k_fo") {
+      throw new Error(`Unsupported protocol ${serverData.protocol}`);
+    }
     const salt = base64ToU8Array(serverData.salt);
     const serverPubBytes = base64ToU8Array(serverData.b);
     const B = srpBigintFromBytes(serverPubBytes);
-    const k = await srpSha256BigInt(
-      srpConcat(srpBytesFromBigint(SRP_N), srpPadToLen(SRP_G, SRP_N_BYTES))
-    );
-    const u = await srpSha256BigInt(
-      srpConcat(srpPadToLen(this.clientA, SRP_N_BYTES), srpPadToLen(B, SRP_N_BYTES))
-    );
+    const k = await srpSha256BigInt(srpConcat(srpBytesFromBigint(SRP_N), srpPadToLen(SRP_G, SRP_N_BYTES)));
+    const u = await srpSha256BigInt(srpConcat(srpPadToLen(this.clientA, SRP_N_BYTES), srpPadToLen(B, SRP_N_BYTES)));
     const p = await this.derivePassword(serverData.protocol, password, salt, serverData.iteration);
-    const x = await srpSha256BigInt(
-      srpConcat(salt, await srpSha256(srpConcat(new Uint8Array([58]), p)))
-    );
+    const x = await srpSha256BigInt(srpConcat(salt, await srpSha256(srpConcat(new Uint8Array([58]), p))));
     const base = B - srpModPow(SRP_G, x, SRP_N) * k;
     const S = srpModPow(base, this.clienta + u * x, SRP_N);
     const K = await srpSha256(srpBytesFromBigint(S));
-    const M1 = await srpSha256(srpConcat(
-      srpXor(
-        await srpSha256(srpBytesFromBigint(SRP_N)),
-        await srpSha256(srpPadToLen(SRP_G, SRP_N_BYTES))
-      ),
-      await srpSha256(stringToU8Array(this.username)),
-      salt,
-      srpBytesFromBigint(this.clientA),
-      srpBytesFromBigint(B),
-      K
-    ));
+    const M1 = await srpSha256(
+      srpConcat(
+        srpXor(await srpSha256(srpBytesFromBigint(SRP_N)), await srpSha256(srpPadToLen(SRP_G, SRP_N_BYTES))),
+        await srpSha256(stringToU8Array(this.username)),
+        salt,
+        srpBytesFromBigint(this.clientA),
+        srpBytesFromBigint(B),
+        K
+      )
+    );
     const M2 = await srpSha256(srpConcat(srpBytesFromBigint(this.clientA), M1, K));
     return {
       accountName: this.username,

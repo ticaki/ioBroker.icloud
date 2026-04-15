@@ -1,4 +1,4 @@
-import iCloudService from "..";
+import type iCloudService from '..';
 
 export class iCloudUbiquityService {
     service: iCloudService;
@@ -9,10 +9,14 @@ export class iCloudUbiquityService {
         this.serviceUri = serviceUri;
         this.dsid = this.service.accountInfo!.dsInfo.dsid;
     }
-    async getNode(nodeId = 0, type: "item" | "file" | "parent" = "item") {
-        const response = await this.service.fetch(this.serviceUri + "/ws/" + this.dsid + "/" + type + "/" + nodeId, { headers: this.service.authStore.getHeaders() });
+    async getNode(nodeId = 0, type: 'item' | 'file' | 'parent' = 'item'): Promise<string> {
+        const response = await this.service.fetch(`${this.serviceUri}/ws/${this.dsid}/${type}/${nodeId}`, {
+            headers: this.service.authStore.getHeaders(),
+        });
         const json = await response.text();
-        if (json == "Account migrated") throw new Error("Ubiquity not supported on this account");
+        if (json == 'Account migrated') {
+            throw new Error('Ubiquity not supported on this account');
+        }
         return JSON.parse(json);
     }
 }

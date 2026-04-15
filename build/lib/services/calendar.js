@@ -61,11 +61,14 @@ class iCloudCalendarService {
     return await response.json();
   }
   async eventDetails(calendarGuid, eventGuid) {
-    const response = await this.fetchEndpoint(`/eventdetail/${calendarGuid}/${eventGuid}`, {
-      lang: "en-us",
-      usertz: this.tz,
-      dsid: this.dsid
-    });
+    const response = await this.fetchEndpoint(
+      `/eventdetail/${calendarGuid}/${eventGuid}`,
+      {
+        lang: "en-us",
+        usertz: this.tz,
+        dsid: this.dsid
+      }
+    );
     return response.Event[0];
   }
   async events(from, to) {

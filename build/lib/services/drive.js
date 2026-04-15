@@ -65,17 +65,23 @@ class iCloudDriveNode {
     this.nodeId = nodeId;
   }
   async refresh() {
-    const response = await this.service.service.fetch(this.serviceUri + "/retrieveItemDetailsInFolders", {
+    const response = await this.service.service.fetch(`${this.serviceUri}/retrieveItemDetailsInFolders`, {
       headers: this.service.service.authStore.getHeaders(),
       method: "POST",
-      body: JSON.stringify([{
-        drivewsid: this.nodeId,
-        partialData: false
-      }])
+      body: JSON.stringify([
+        {
+          drivewsid: this.nodeId,
+          partialData: false
+        }
+      ])
     });
     let json = await response.json();
-    if (json.errorCode) throw new Error(json.errorReason);
-    if (Array.isArray(json)) json = json[0];
+    if (json.errorCode) {
+      throw new Error(json.errorReason);
+    }
+    if (Array.isArray(json)) {
+      json = json[0];
+    }
     const rawNode = json;
     this.hasData = true;
     this.lastUpdated = Date.now();
@@ -103,10 +109,7 @@ class iCloudDriveService {
     this.docsServiceUri = service.accountInfo.webservices.docws.url;
   }
   async getNode(nodeId = "FOLDER::com.apple.CloudDocs::root") {
-    return new iCloudDriveNode(
-      this,
-      typeof nodeId === "string" ? nodeId : nodeId.drivewsid
-    ).refresh();
+    return new iCloudDriveNode(this, typeof nodeId === "string" ? nodeId : nodeId.drivewsid).refresh();
   }
   async downloadFile(item) {
     if (item.size === 0) {
@@ -116,24 +119,31 @@ class iCloudDriveService {
         }
       });
     }
-    const response = await this.service.fetch(this.docsServiceUri + `/ws/${item.zone || "com.apple.CloudDocs"}/download/by_id?document_id=` + encodeURIComponent(item.docwsid), { headers: this.service.authStore.getHeaders() });
+    const response = await this.service.fetch(
+      `${this.docsServiceUri}/ws/${item.zone || "com.apple.CloudDocs"}/download/by_id?document_id=${encodeURIComponent(item.docwsid)}`,
+      { headers: this.service.authStore.getHeaders() }
+    );
     const json = await response.json();
-    if (json.error_code) throw new Error(json.reason);
+    if (json.error_code) {
+      throw new Error(json.reason);
+    }
     const url = json.data_token ? json.data_token.url : json.package_token.url;
     const fileResponse = await this.service.fetch(url, { headers: this.service.authStore.getHeaders() });
     return fileResponse.body;
   }
   async mkdir(parent, name) {
     const parentId = typeof parent === "string" ? parent : parent.drivewsid;
-    const response = await this.service.fetch(this.serviceUri + "/createFolders", {
+    const response = await this.service.fetch(`${this.serviceUri}/createFolders`, {
       headers: this.service.authStore.getHeaders(),
       method: "POST",
       body: JSON.stringify({
         destinationDrivewsId: parentId,
-        folders: [{
-          name,
-          clientId: "auth-ab95dcd4-65db-11ed-a792-244bfee1e3c1"
-        }]
+        folders: [
+          {
+            name,
+            clientId: "auth-ab95dcd4-65db-11ed-a792-244bfee1e3c1"
+          }
+        ]
       })
     });
     return response.json();
@@ -141,7 +151,7 @@ class iCloudDriveService {
   async del(item, etag) {
     const drivewsid = typeof item === "string" ? item : item.drivewsid;
     const itemEtag = typeof item === "string" ? etag : item.etag;
-    const response = await this.service.fetch(this.serviceUri + "/moveItemsToTrash", {
+    const response = await this.service.fetch(`${this.serviceUri}/moveItemsToTrash`, {
       headers: this.service.authStore.getHeaders(),
       method: "POST",
       body: JSON.stringify({
