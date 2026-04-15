@@ -10,6 +10,14 @@
 
 After editing `icloud-lib/src/`, always run `npm run build` inside `icloud-lib/` before testing.
 
+# Apple API reference
+
+Alle Implementierungen, die mit der Apple-Server-Kommunikation zu tun haben (Auth, FindMy, Drive, Photos, etc.), **müssen mit pyiCloud abgeglichen werden**.
+pyiCloud ist die Referenzimplementierung: https://github.com/picklepete/pyicloud
+
+- Endpunkte, Request-Parameter, Header und Antwortstrukturen aus pyiCloud übernehmen
+- Bei Abweichungen oder Unklarheiten gilt pyiCloud als autoritäre Quelle
+
 ## Key references
 
 - **ioBroker JSON Config schema & field types**:
