@@ -23,8 +23,16 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var utils = __toESM(require("@iobroker/adapter-core"));
 var import_build = __toESM(require("../icloud-lib/build/index"));
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 class Icloud extends utils.Adapter {
   icloud = null;
+  findMyRefreshTimer = null;
   constructor(options = {}) {
     super({
       ...options,
@@ -36,42 +44,42 @@ class Icloud extends utils.Adapter {
     this.on("unload", this.onUnload.bind(this));
   }
   async createObjects() {
-    await this.setObjectNotExistsAsync("account", {
+    await this.extendObject("account", {
       type: "channel",
       common: { name: "Account Information" },
       native: {}
     });
-    await this.setObjectNotExistsAsync("account.fullName", {
+    await this.extendObject("account.fullName", {
       type: "state",
       common: { name: "Full Name", type: "string", role: "text", read: true, write: false, def: "" },
       native: {}
     });
-    await this.setObjectNotExistsAsync("account.firstName", {
+    await this.extendObject("account.firstName", {
       type: "state",
       common: { name: "First Name", type: "string", role: "text", read: true, write: false, def: "" },
       native: {}
     });
-    await this.setObjectNotExistsAsync("account.lastName", {
+    await this.extendObject("account.lastName", {
       type: "state",
       common: { name: "Last Name", type: "string", role: "text", read: true, write: false, def: "" },
       native: {}
     });
-    await this.setObjectNotExistsAsync("account.appleId", {
+    await this.extendObject("account.appleId", {
       type: "state",
       common: { name: "Apple ID", type: "string", role: "text", read: true, write: false, def: "" },
       native: {}
     });
-    await this.setObjectNotExistsAsync("account.countryCode", {
+    await this.extendObject("account.countryCode", {
       type: "state",
       common: { name: "Country Code", type: "string", role: "text", read: true, write: false, def: "" },
       native: {}
     });
-    await this.setObjectNotExistsAsync("mfa", {
+    await this.extendObject("mfa", {
       type: "channel",
       common: { name: "Multi-Factor Authentication" },
       native: {}
     });
-    await this.setObjectNotExistsAsync("mfa.code", {
+    await this.extendObject("mfa.code", {
       type: "state",
       common: {
         name: "MFA Code (enter 6-digit code here)",
@@ -83,7 +91,7 @@ class Icloud extends utils.Adapter {
       },
       native: {}
     });
-    await this.setObjectNotExistsAsync("mfa.required", {
+    await this.extendObject("mfa.required", {
       type: "state",
       common: {
         name: "MFA Required",
@@ -202,7 +210,7 @@ class Icloud extends utils.Adapter {
    * after account info, available services and FindMy devices have been collected.
    */
   async onICloudReady() {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q;
+    var _a, _b, _c, _d, _e, _f;
     const info = this.icloud.accountInfo;
     if (!(info == null ? void 0 : info.dsInfo)) {
       this.log.warn("iCloud Ready but accountInfo/dsInfo is unavailable");
@@ -242,27 +250,92 @@ class Icloud extends utils.Adapter {
         var _a2, _b2;
         return (_b2 = (_a2 = m.fullName) != null ? _a2 : m.appleId) != null ? _b2 : "?";
       }).join(", ")}`);
+    const homeLat = this.config.useSystemCoordinates ? void 0 : Number(this.config.latitude) || void 0;
+    const homeLon = this.config.useSystemCoordinates ? void 0 : Number(this.config.longitude) || void 0;
+    const homeCoords = await this.resolveHomeCoords(homeLat, homeLon);
     if (activeServices.includes("findme")) {
-      try {
-        const findMe = this.icloud.getService("findme");
-        await findMe.refresh();
-        const devices = findMe.devices;
-        this.log.info(`FindMy: ${devices.size} device(s) found`);
-        for (const [, dev] of devices) {
-          const d = (_g = dev.deviceInfo) != null ? _g : dev;
-          const locStr = d.location ? `${(_h = d.location.latitude) == null ? void 0 : _h.toFixed(5)}, ${(_i = d.location.longitude) == null ? void 0 : _i.toFixed(5)} (${(_j = d.location.positionType) != null ? _j : "?"})` : "no location";
-          const bat = d.batteryLevel != null ? `${Math.round(d.batteryLevel * 100)}% (${(_k = d.batteryStatus) != null ? _k : "?"})` : "?";
-          this.log.info(
-            `  \u2022 ${(_l = d.name) != null ? _l : "?"} [${(_o = (_n = (_m = d.deviceDisplayName) != null ? _m : d.modelDisplayName) != null ? _n : d.deviceClass) != null ? _o : "?"}] \u2014 status: ${(_p = d.deviceStatus) != null ? _p : "?"}, battery: ${bat}, location: ${locStr}`
-          );
-        }
-      } catch (err) {
-        this.log.warn(`FindMy fetch failed: ${(_q = err == null ? void 0 : err.message) != null ? _q : String(err)}`);
-      }
+      await this.refreshFindMyDevices(homeCoords);
+      this.scheduleFindMyRefresh(homeCoords);
     }
     this.log.info("iCloud connection established successfully");
     this.setState("info.connection", true, true);
     this.setState("mfa.required", false, true);
+  }
+  /**
+   * Resolve effective home coordinates: use explicitly configured values,
+   * fall back to system.config latitude/longitude, or return undefined.
+   */
+  async resolveHomeCoords(cfgLat, cfgLon) {
+    var _a, _b;
+    if (cfgLat !== void 0 && cfgLon !== void 0 && !isNaN(cfgLat) && !isNaN(cfgLon)) {
+      this.log.debug(`Home coordinates from config: ${cfgLat}, ${cfgLon}`);
+      return { lat: cfgLat, lon: cfgLon };
+    }
+    try {
+      const sysCfg = await this.getForeignObjectAsync("system.config");
+      const lat = Number((_a = sysCfg == null ? void 0 : sysCfg.common) == null ? void 0 : _a.latitude);
+      const lon = Number((_b = sysCfg == null ? void 0 : sysCfg.common) == null ? void 0 : _b.longitude);
+      if (!isNaN(lat) && !isNaN(lon) && (lat !== 0 || lon !== 0)) {
+        this.log.debug(`Home coordinates from system.config: ${lat}, ${lon}`);
+        return { lat, lon };
+      }
+    } catch (_) {
+    }
+    this.log.debug("No home coordinates configured \u2014 distance will not be shown");
+    return void 0;
+  }
+  /** Fetch FindMy devices and log them with optional distance from home. */
+  async refreshFindMyDevices(homeCoords) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+    if (!this.icloud) return;
+    try {
+      const findMe = this.icloud.getService("findme");
+      await findMe.refresh();
+      const devices = findMe.devices;
+      this.log.info(`FindMy: ${devices.size} device(s)`);
+      for (const [, dev] of devices) {
+        const d = (_a = dev.deviceInfo) != null ? _a : dev;
+        const loc = d.location;
+        let locStr = "no location";
+        let distStr = "";
+        if (loc) {
+          locStr = `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)} (${(_b = loc.positionType) != null ? _b : "?"})`;
+          if (homeCoords) {
+            const km = haversineKm(homeCoords.lat, homeCoords.lon, loc.latitude, loc.longitude);
+            distStr = `, ${km < 1 ? `${Math.round(km * 1e3)} m` : `${km.toFixed(1)} km`} from home`;
+          }
+        }
+        const bat = d.batteryLevel != null ? `${Math.round(d.batteryLevel * 100)}% (${(_c = d.batteryStatus) != null ? _c : "?"})` : "?";
+        this.log.info(
+          `  \u2022 ${(_d = d.name) != null ? _d : "?"} [${(_g = (_f = (_e = d.deviceDisplayName) != null ? _e : d.modelDisplayName) != null ? _f : d.deviceClass) != null ? _g : "?"}] \u2014 status: ${(_h = d.deviceStatus) != null ? _h : "?"}, battery: ${bat}, location: ${locStr}${distStr}`
+        );
+      }
+    } catch (err) {
+      this.log.warn(`FindMy refresh failed: ${(_i = err == null ? void 0 : err.message) != null ? _i : String(err)}`);
+    }
+  }
+  /**
+   * Schedule a self-rescheduling FindMy refresh every 15 minutes.
+   * Uses setTimeout (not setInterval) so the next run only starts after the
+   * current one completes — no overlapping requests.
+   */
+  scheduleFindMyRefresh(homeCoords) {
+    if (this.findMyRefreshTimer) {
+      this.clearTimeout(this.findMyRefreshTimer);
+      this.findMyRefreshTimer = null;
+    }
+    const INTERVAL_MS = 15 * 60 * 1e3;
+    const schedule = () => {
+      this.findMyRefreshTimer = this.setTimeout(async () => {
+        this.findMyRefreshTimer = null;
+        if (!this.icloud) return;
+        this.log.debug("FindMy scheduled refresh starting...");
+        await this.refreshFindMyDevices(homeCoords);
+        schedule();
+      }, INTERVAL_MS);
+    };
+    schedule();
+    this.log.debug("FindMy refresh scheduled every 15 min");
   }
   /**
    * Is called when adapter shuts down - callback has to be called under any circumstances!
@@ -271,6 +344,10 @@ class Icloud extends utils.Adapter {
    */
   onUnload(callback) {
     try {
+      if (this.findMyRefreshTimer) {
+        this.clearTimeout(this.findMyRefreshTimer);
+        this.findMyRefreshTimer = null;
+      }
       if (this.icloud) {
         this.icloud.removeAllListeners();
         this.icloud = null;

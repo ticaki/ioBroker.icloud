@@ -2,4 +2,8 @@
 	"icloud adapter settings": "Ajustes del adaptador para icloud",
 	"option1": "opción1",
 	"option2": "opción2"
+,
+	"homeCoordinatesHeader": "Home location",
+	"homeCoordinates": "Coordinates (latitude,longitude)",
+	"homeCoordinatesHelp": "Used to calculate distance to FindMy devices."
 }

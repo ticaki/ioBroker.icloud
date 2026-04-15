@@ -23,6 +23,27 @@
 			"lg": 6,
 			"xl": 6,
 			"required": true
+		},
+		"_coordHeader": {
+			"type": "header",
+			"text": "homeCoordinatesHeader",
+			"size": 5,
+			"newLine": true
+		},
+		"coordinates": {
+			"type": "coordinates",
+			"newLine": true,
+			"xs": 12,
+			"sm": 12,
+			"md": 8,
+			"lg": 6,
+			"xl": 6,
+			"label": "homeCoordinates",
+			"help": "homeCoordinatesHelp",
+			"autoInit": true,
+			"longitudeName": "longitude",
+			"latitudeName": "latitude",
+			"useSystemName": "useSystemCoordinates"
 		}
 	}
 }

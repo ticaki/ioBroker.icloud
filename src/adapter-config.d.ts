@@ -6,6 +6,9 @@ declare global {
 		interface AdapterConfig {
 			username: string;
 			password: string;
+			latitude: number;
+			longitude: number;
+			useSystemCoordinates: boolean;
 		}
 	}
 }

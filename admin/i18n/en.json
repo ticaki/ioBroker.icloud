@@ -1,5 +1,8 @@
 {
 	"icloud adapter settings": "Adapter settings for icloud",
 	"username": "Apple ID (username)",
-	"password": "Password"
+	"password": "Password",
+	"homeCoordinatesHeader": "Home location",
+	"homeCoordinates": "Coordinates (latitude,longitude)",
+	"homeCoordinatesHelp": "Used to calculate distance to FindMy devices. Leave empty to use system coordinates."
 }
