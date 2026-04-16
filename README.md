@@ -42,8 +42,7 @@ This adapter connects ioBroker to your Apple iCloud account. It reads the locati
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 0.1.0-alpha.0 (2026-04-16)
 * (ticaki) initial release
 
 ## License
