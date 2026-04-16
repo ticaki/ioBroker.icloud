@@ -1,22 +1,23 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: "/"
+    directories:
+      - "**/*"
     schedule:
       interval: monthly
-      day: 5
       time: "00:05"
       timezone: Europe/Berlin
     open-pull-requests-limit: 5
     assignees:
       - ticaki
     versioning-strategy: increase
+    cooldown:
+      default: 7
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
-      day: 5
       time: "00:05"
       timezone: Europe/Berlin
     open-pull-requests-limit: 5
