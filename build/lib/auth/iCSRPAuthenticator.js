@@ -31,8 +31,8 @@ __export(iCSRPAuthenticator_exports, {
   GSASRPAuthenticator: () => GSASRPAuthenticator
 });
 module.exports = __toCommonJS(iCSRPAuthenticator_exports);
-var import_crypto = __toESM(require("crypto"));
-var import_util = require("util");
+var import_node_crypto = __toESM(require("node:crypto"));
+var import_node_util = require("node:util");
 const SRP_N = BigInt(
   "0xac6bdb41324a9a9bf166de5e1389582faf72b6651987ee07fc3192943db56050a37329cbb4a099ed8193e0757767a13dd52312ab4b03310dcd7f48a9da04fd50e8083969edb767b0cf6095179a163ab3661a05fbd5faaae82918a9962f0b93b855f97993ec975eeaa80d740adbf4ff747359d041d5c33ea71d281e446b14773bca97b43a23fb801676bd207a436c6481f1d2b9078717461a5b9d32e688f87748544523b524b0d57d5ea77a2775d2ecfa032cfbdbf52fb3786160279004e57ae6af874e7303ce53299ccc041c7bc308d82a5698f3a8d0c38271ae35f8e9dbfbb694b5c803d89f7ae435de236d525f54759b65e372fcd68ef20fa7111f9e4aff73"
 );
@@ -109,7 +109,7 @@ function srpModPow(base, exp, mod) {
   }
   return result;
 }
-const stringToU8Array = (str) => new import_util.TextEncoder().encode(str);
+const stringToU8Array = (str) => new import_node_util.TextEncoder().encode(str);
 const base64ToU8Array = (str) => Uint8Array.from(Buffer.from(str, "base64"));
 class GSASRPAuthenticator {
   constructor(username) {
@@ -140,7 +140,7 @@ class GSASRPAuthenticator {
     if (this.clientA !== void 0) {
       throw new Error("Already initialized");
     }
-    this.clienta = srpBigintFromBytes(import_crypto.default.randomBytes(SRP_N_BYTES));
+    this.clienta = srpBigintFromBytes(import_node_crypto.default.randomBytes(SRP_N_BYTES));
     this.clientA = srpModPow(SRP_G, this.clienta, SRP_N);
     const a = Buffer.from(srpBytesFromBigint(this.clientA)).toString("base64");
     return { a, protocols: ["s2k", "s2k_fo"], accountName: this.username };

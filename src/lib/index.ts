@@ -1,9 +1,9 @@
-import EventEmitter from 'events';
-import fs from 'fs';
+import EventEmitter from 'node:events';
+import fs from 'node:fs';
 import fetchCookie from 'fetch-cookie';
-import os from 'os';
-import path from 'path';
-import crypto from 'crypto';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import { CookieJar } from 'tough-cookie';
 import { iCloudAuthenticationStore } from './auth/authStore';
 import { GSASRPAuthenticator } from './auth/iCSRPAuthenticator.js';

@@ -33,12 +33,12 @@ __export(lib_exports, {
   iCloudServiceStatus: () => iCloudServiceStatus
 });
 module.exports = __toCommonJS(lib_exports);
-var import_events = __toESM(require("events"));
-var import_fs = __toESM(require("fs"));
+var import_node_events = __toESM(require("node:events"));
+var import_node_fs = __toESM(require("node:fs"));
 var import_fetch_cookie = __toESM(require("fetch-cookie"));
-var import_os = __toESM(require("os"));
-var import_path = __toESM(require("path"));
-var import_crypto = __toESM(require("crypto"));
+var import_node_os = __toESM(require("node:os"));
+var import_node_path = __toESM(require("node:path"));
+var import_node_crypto = __toESM(require("node:crypto"));
 var import_tough_cookie = require("tough-cookie");
 var import_authStore = require("./auth/authStore");
 var import_iCSRPAuthenticator = require("./auth/iCSRPAuthenticator.js");
@@ -69,7 +69,7 @@ var iCloudServiceStatus = /* @__PURE__ */ ((iCloudServiceStatus2) => {
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-class iCloudService extends import_events.default {
+class iCloudService extends import_node_events.default {
   /**
    * The authentication store for this service instance.
    * Manages cookies & trust tokens.
@@ -129,7 +129,7 @@ class iCloudService extends import_events.default {
     super();
     this.options = options;
     if (!this.options.dataDirectory) {
-      this.options.dataDirectory = import_path.default.join(import_os.default.homedir(), ".icloud");
+      this.options.dataDirectory = import_node_path.default.join(import_node_os.default.homedir(), ".icloud");
     }
     this.cookieJar = new import_tough_cookie.CookieJar();
     this.fetch = (0, import_fetch_cookie.default)(globalThis.fetch, this.cookieJar);
@@ -221,15 +221,15 @@ class iCloudService extends import_events.default {
     if (!password) {
       throw new Error("Password is required");
     }
-    if (!import_fs.default.existsSync(this.options.dataDirectory)) {
-      import_fs.default.mkdirSync(this.options.dataDirectory);
+    if (!import_node_fs.default.existsSync(this.options.dataDirectory)) {
+      import_node_fs.default.mkdirSync(this.options.dataDirectory);
     }
     this.authStore.loadSession(this.options.username);
     this.authStore.loadCookieJar(this.options.username);
     if (!this.authStore.trustToken) {
       this.authStore.loadTrustToken(this.options.username);
     }
-    const clientId = this.authStore.clientId || `auth-${import_crypto.default.randomUUID().toLowerCase()}`;
+    const clientId = this.authStore.clientId || `auth-${import_node_crypto.default.randomUUID().toLowerCase()}`;
     if (!this.authStore.clientId) {
       this.authStore.clientId = clientId;
       this.authStore.saveSession(this.options.username);

@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Cookie, CookieJar } from 'tough-cookie';
 import type iCloudService from '..';
 import { AUTH_HEADERS, DEFAULT_HEADERS } from '../consts';

@@ -1,5 +1,5 @@
-import crypto from 'crypto';
-import { TextEncoder } from 'util';
+import crypto from 'node:crypto';
+import { TextEncoder } from 'node:util';
 
 // ── Inline SRP implementation (Apple GSA mode, SHA-256, 2048-bit) ─────────────
 // Previously provided by @foxt/js-srp (pure ESM). Inlined to remove the ESM

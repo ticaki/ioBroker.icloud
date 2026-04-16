@@ -31,8 +31,8 @@ __export(authStore_exports, {
   iCloudAuthenticationStore: () => iCloudAuthenticationStore
 });
 module.exports = __toCommonJS(authStore_exports);
-var import_fs = __toESM(require("fs"));
-var import_path = __toESM(require("path"));
+var import_node_fs = __toESM(require("node:fs"));
+var import_node_path = __toESM(require("node:path"));
 var import_tough_cookie = require("tough-cookie");
 var import_consts = require("../consts");
 var import__ = require("../index");
@@ -64,7 +64,7 @@ class iCloudAuthenticationStore {
   constructor(service) {
     this.options = service.options;
     this._log = service._log;
-    this.tknFile = import_path.default.format({ dir: this.options.dataDirectory, base: ".trust-token" });
+    this.tknFile = import_node_path.default.format({ dir: this.options.dataDirectory, base: ".trust-token" });
     this.cookieJar = service.cookieJar;
     Object.defineProperty(this, "trustToken", { enumerable: false });
     Object.defineProperty(this, "sessionId", { enumerable: false });
@@ -81,10 +81,10 @@ class iCloudAuthenticationStore {
     return account.replace(/\W/g, "");
   }
   _sessionPath(account) {
-    return import_path.default.join(this.options.dataDirectory, `${this._accountFilename(account)}.session`);
+    return import_node_path.default.join(this.options.dataDirectory, `${this._accountFilename(account)}.session`);
   }
   _jarPath(account) {
-    return import_path.default.join(this.options.dataDirectory, `${this._accountFilename(account)}.jar.json`);
+    return import_node_path.default.join(this.options.dataDirectory, `${this._accountFilename(account)}.jar.json`);
   }
   // ── Session persistence (mirrors pyicloud's .session JSON file) ────────────
   /**
@@ -96,7 +96,7 @@ class iCloudAuthenticationStore {
    */
   loadSession(account) {
     try {
-      const data = JSON.parse(import_fs.default.readFileSync(this._sessionPath(account), "utf8"));
+      const data = JSON.parse(import_node_fs.default.readFileSync(this._sessionPath(account), "utf8"));
       if (data.scnt) {
         this.scnt = data.scnt;
       }
@@ -148,10 +148,10 @@ class iCloudAuthenticationStore {
       if (this.clientId) {
         data.client_id = this.clientId;
       }
-      if (!import_fs.default.existsSync(this.options.dataDirectory)) {
-        import_fs.default.mkdirSync(this.options.dataDirectory);
+      if (!import_node_fs.default.existsSync(this.options.dataDirectory)) {
+        import_node_fs.default.mkdirSync(this.options.dataDirectory);
       }
-      import_fs.default.writeFileSync(this._sessionPath(account), JSON.stringify(data, null, 2), "utf8");
+      import_node_fs.default.writeFileSync(this._sessionPath(account), JSON.stringify(data, null, 2), "utf8");
       this._log(import__.LogLevel.Debug, "[authStore] Session saved to disk");
     } catch (e) {
       this._log(import__.LogLevel.Warning, "[authStore] Unable to save session:", e.toString());
@@ -168,7 +168,7 @@ class iCloudAuthenticationStore {
     var _a;
     const jarPath = this._jarPath(account);
     try {
-      const raw = JSON.parse(import_fs.default.readFileSync(jarPath, "utf8"));
+      const raw = JSON.parse(import_node_fs.default.readFileSync(jarPath, "utf8"));
       const loaded = import_tough_cookie.CookieJar.deserializeSync(raw);
       for (const c of (_a = loaded.toJSON().cookies) != null ? _a : []) {
         try {
@@ -184,10 +184,10 @@ class iCloudAuthenticationStore {
     } catch {
       this._log(import__.LogLevel.Debug, "[authStore] No jar file \u2014 trying legacy migration");
     }
-    const base = import_path.default.join(this.options.dataDirectory, this._accountFilename(account));
+    const base = import_node_path.default.join(this.options.dataDirectory, this._accountFilename(account));
     const tryMigrate = (filePath, domain) => {
       try {
-        const raw = JSON.parse(import_fs.default.readFileSync(filePath, "utf8"));
+        const raw = JSON.parse(import_node_fs.default.readFileSync(filePath, "utf8"));
         for (const v of raw) {
           const c = import_tough_cookie.Cookie.parse(v);
           if (!c) {
@@ -212,10 +212,10 @@ class iCloudAuthenticationStore {
    */
   saveCookieJar(account) {
     try {
-      if (!import_fs.default.existsSync(this.options.dataDirectory)) {
-        import_fs.default.mkdirSync(this.options.dataDirectory);
+      if (!import_node_fs.default.existsSync(this.options.dataDirectory)) {
+        import_node_fs.default.mkdirSync(this.options.dataDirectory);
       }
-      import_fs.default.writeFileSync(this._jarPath(account), JSON.stringify(this.cookieJar.serializeSync(), null, 2), "utf8");
+      import_node_fs.default.writeFileSync(this._jarPath(account), JSON.stringify(this.cookieJar.serializeSync(), null, 2), "utf8");
       this._log(import__.LogLevel.Debug, "[authStore] Cookie jar saved to disk");
     } catch (e) {
       this._log(import__.LogLevel.Warning, "[authStore] Unable to save cookie jar:", e.toString());
@@ -246,7 +246,7 @@ class iCloudAuthenticationStore {
   // ── Legacy trust-token helpers (kept for backward compatibility) ───────────
   loadTrustToken(account) {
     try {
-      this.trustToken = import_fs.default.readFileSync(
+      this.trustToken = import_node_fs.default.readFileSync(
         `${this.tknFile}-${Buffer.from(account.toLowerCase()).toString("base64")}`,
         "utf8"
       );
@@ -257,10 +257,10 @@ class iCloudAuthenticationStore {
   writeTrustToken(account) {
     var _a;
     try {
-      if (!import_fs.default.existsSync(this.options.dataDirectory)) {
-        import_fs.default.mkdirSync(this.options.dataDirectory);
+      if (!import_node_fs.default.existsSync(this.options.dataDirectory)) {
+        import_node_fs.default.mkdirSync(this.options.dataDirectory);
       }
-      import_fs.default.writeFileSync(
+      import_node_fs.default.writeFileSync(
         `${this.tknFile}-${Buffer.from(account.toLowerCase()).toString("base64")}`,
         (_a = this.trustToken) != null ? _a : "",
         "utf8"
@@ -283,11 +283,11 @@ class iCloudAuthenticationStore {
     this.sessionId = void 0;
     this.accountCountry = void 0;
     try {
-      import_fs.default.unlinkSync(this._sessionPath(account));
+      import_node_fs.default.unlinkSync(this._sessionPath(account));
     } catch {
     }
     try {
-      import_fs.default.unlinkSync(this._jarPath(account));
+      import_node_fs.default.unlinkSync(this._jarPath(account));
     } catch {
     }
     this._log(import__.LogLevel.Debug, "[authStore] Persisted session + cookies cleared");
