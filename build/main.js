@@ -87,6 +87,58 @@ const FINDMY_DEVICE_STATES = [
   { id: "isInaccurate", name: "Location is Inaccurate", type: "boolean", role: "indicator" },
   { id: "distanceKm", name: "Distance from Home", type: "number", role: "value.distance" }
 ];
+const CALENDAR_EVENT_STATES = [
+  { id: "title", name: "Title", type: "string", role: "text" },
+  { id: "guid", name: "GUID", type: "string", role: "text" },
+  { id: "etag", name: "ETag", type: "string", role: "text" },
+  { id: "pGuid", name: "Calendar GUID", type: "string", role: "text" },
+  { id: "startDate", name: "Start Date", type: "number", role: "value.time" },
+  { id: "endDate", name: "End Date", type: "number", role: "value.time" },
+  { id: "masterStartDate", name: "Master Start Date", type: "number", role: "value.time" },
+  { id: "masterEndDate", name: "Master End Date", type: "number", role: "value.time" },
+  { id: "createdDate", name: "Created Date", type: "number", role: "value.time" },
+  { id: "lastModifiedDate", name: "Last Modified Date", type: "number", role: "value.time" },
+  { id: "allDay", name: "All Day", type: "boolean", role: "indicator" },
+  { id: "duration", name: "Duration", type: "number", role: "value.interval", unit: "min" },
+  { id: "url", name: "URL", type: "string", role: "url" },
+  { id: "tz", name: "Timezone", type: "string", role: "text" },
+  { id: "tzname", name: "Timezone Name", type: "string", role: "text" },
+  { id: "startDateTZOffset", name: "TZ Offset", type: "string", role: "text" },
+  { id: "icon", name: "Icon", type: "number", role: "value" },
+  { id: "readOnly", name: "Read Only", type: "boolean", role: "indicator" },
+  { id: "transparent", name: "Transparent", type: "boolean", role: "indicator" },
+  { id: "hasAttachments", name: "Has Attachments", type: "boolean", role: "indicator" },
+  { id: "recurrenceException", name: "Recurrence Exception", type: "boolean", role: "indicator" },
+  { id: "recurrenceMaster", name: "Recurrence Master", type: "boolean", role: "indicator" },
+  { id: "birthdayIsYearlessBday", name: "Birthday (Yearless)", type: "boolean", role: "indicator" },
+  { id: "birthdayShowAsCompany", name: "Birthday Show As Company", type: "boolean", role: "indicator" },
+  { id: "extendedDetailsAreIncluded", name: "Extended Details Included", type: "boolean", role: "indicator" },
+  { id: "shouldShowJunkUIWhenAppropriate", name: "Junk UI Flag", type: "boolean", role: "indicator" },
+  { id: "alarms", name: "Alarms (JSON)", type: "string", role: "json" }
+];
+const CALENDAR_COLLECTION_STATES = [
+  { id: "guid", name: "GUID", type: "string", role: "text" },
+  { id: "ctag", name: "CTag", type: "string", role: "text" },
+  { id: "etag", name: "ETag", type: "string", role: "text" },
+  { id: "color", name: "Color", type: "string", role: "text" },
+  { id: "symbolicColor", name: "Symbolic Color", type: "string", role: "text" },
+  { id: "order", name: "Order", type: "number", role: "value" },
+  { id: "enabled", name: "Enabled", type: "boolean", role: "indicator" },
+  { id: "visible", name: "Visible", type: "boolean", role: "indicator" },
+  { id: "readOnly", name: "Read Only", type: "boolean", role: "indicator" },
+  { id: "isDefault", name: "Default Calendar", type: "boolean", role: "indicator" },
+  { id: "isFamily", name: "Family Calendar", type: "boolean", role: "indicator" },
+  { id: "isPublished", name: "Published", type: "boolean", role: "indicator" },
+  { id: "isPrivatelyShared", name: "Privately Shared", type: "boolean", role: "indicator" },
+  { id: "extendedDetailsAreIncluded", name: "Extended Details Included", type: "boolean", role: "indicator" },
+  { id: "shouldShowJunkUIWhenAppropriate", name: "Junk UI Flag", type: "boolean", role: "indicator" },
+  { id: "shareTitle", name: "Share Title", type: "string", role: "text" },
+  { id: "prePublishedUrl", name: "Pre-Published URL", type: "string", role: "url" },
+  { id: "supportedType", name: "Supported Type", type: "string", role: "text" },
+  { id: "objectType", name: "Object Type", type: "string", role: "text" },
+  { id: "createdDate", name: "Created Date", type: "number", role: "value.time" },
+  { id: "lastModifiedDate", name: "Last Modified Date", type: "number", role: "value.time" }
+];
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -100,6 +152,7 @@ class Icloud extends utils.Adapter {
   findMyCleanupDone = false;
   /** Maps Apple device API id → 6-digit zero-padded folder id (e.g. '000001') */
   findMyIdMap = /* @__PURE__ */ new Map();
+  calendarRefreshTimer = null;
   constructor(options = {}) {
     super({
       ...options,
@@ -170,6 +223,18 @@ class Icloud extends utils.Adapter {
       },
       native: {}
     });
+    await this.extendObject("mfa.requestSmsCode", {
+      type: "state",
+      common: {
+        name: "Request MFA code via SMS (set to true)",
+        type: "boolean",
+        role: "button",
+        read: true,
+        write: true,
+        def: false
+      },
+      native: {}
+    });
   }
   /**
    * Is called when databases are connected and adapter received configuration.
@@ -195,6 +260,7 @@ class Icloud extends utils.Adapter {
     await this.createObjects();
     this.log.debug("Objects created/verified");
     this.subscribeStates("mfa.code");
+    this.subscribeStates("mfa.requestSmsCode");
     this.subscribeStates("findme.*.ping");
     this.log.debug("Subscribed to mfa.code");
     await this.connectToiCloud();
@@ -339,6 +405,10 @@ class Icloud extends utils.Adapter {
       await this.refreshFindMyDevices(locationPoints);
       this.scheduleFindMyRefresh(locationPoints);
     }
+    if (activeServices.includes("calendar") && this.config.calendarEnabled) {
+      await this.refreshCalendarEvents();
+      this.scheduleCalendarRefresh();
+    }
     this.log.info("iCloud connection established successfully");
     await this.setState("info.connection", true, true);
     await this.setState("mfa.required", false, true);
@@ -401,7 +471,6 @@ class Icloud extends utils.Adapter {
       const familyDevices = [];
       for (const [, dev] of devices) {
         const d = dev.deviceInfo;
-        this.log.debug(JSON.stringify(d));
         if (d.isConsideredAccessory) {
           accessories.push(d);
         } else if (d.fmlyShare) {
@@ -638,6 +707,278 @@ class Icloud extends utils.Adapter {
     schedule();
     this.log.debug("FindMy refresh scheduled every 15 min");
   }
+  // ── Calendar helpers ──────────────────────────────────────────────────────
+  sanitizeCalendarId(name) {
+    return (name || "unknown").replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
+  }
+  localDateArrayToTimestamp(arr) {
+    var _a, _b;
+    if (!arr || arr.length < 4) {
+      return null;
+    }
+    return new Date(arr[1], arr[2] - 1, arr[3], (_a = arr[4]) != null ? _a : 0, (_b = arr[5]) != null ? _b : 0, 0).getTime();
+  }
+  async refreshCalendarEvents() {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$;
+    if (!this.icloud) {
+      return;
+    }
+    try {
+      const calService = this.icloud.getService("calendar");
+      const now = /* @__PURE__ */ new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const startupResp = await calService.startup(monthStart, monthEnd);
+      const collections = (_a = startupResp.Collection) != null ? _a : [];
+      const events = (_b = startupResp.Event) != null ? _b : [];
+      const maxCount = Math.max(1, Math.floor((_c = this.config.calendarEventCount) != null ? _c : 10));
+      if (collections.length > 0) {
+        this.log.debug(`[Calendar] first collection: ${JSON.stringify(collections[0])}`);
+      }
+      if (events.length > 0) {
+        this.log.debug(`[Calendar] first event: ${JSON.stringify(events[0])}`);
+      }
+      const eventsByCalendar = /* @__PURE__ */ new Map();
+      for (const ev of events) {
+        if (!ev.pGuid) {
+          continue;
+        }
+        const startTs = this.localDateArrayToTimestamp(ev.localStartDate);
+        if (startTs !== null && startTs < todayStart) {
+          continue;
+        }
+        if (!eventsByCalendar.has(ev.pGuid)) {
+          eventsByCalendar.set(ev.pGuid, []);
+        }
+        eventsByCalendar.get(ev.pGuid).push(ev);
+      }
+      for (const evList of eventsByCalendar.values()) {
+        evList.sort((a, b) => {
+          var _a2, _b2;
+          const ta = (_a2 = this.localDateArrayToTimestamp(a.localStartDate)) != null ? _a2 : 0;
+          const tb = (_b2 = this.localDateArrayToTimestamp(b.localStartDate)) != null ? _b2 : 0;
+          return ta - tb;
+        });
+      }
+      await this.extendObject("calendar", {
+        type: "folder",
+        common: { name: "Calendar" },
+        native: {}
+      });
+      const activeCalendarIds = /* @__PURE__ */ new Set();
+      for (const col of collections) {
+        const calId = this.sanitizeCalendarId(col.title);
+        activeCalendarIds.add(calId);
+        await this.extendObject(`calendar.${calId}`, {
+          type: "folder",
+          common: { name: col.title },
+          native: {}
+        });
+        for (const s of CALENDAR_COLLECTION_STATES) {
+          await this.extendObject(`calendar.${calId}.${s.id}`, {
+            type: "state",
+            common: { name: s.name, type: s.type, role: s.role, read: true, write: false },
+            native: {}
+          });
+        }
+        await this.setState(`calendar.${calId}.guid`, (_d = col.guid) != null ? _d : "", true);
+        await this.setState(`calendar.${calId}.ctag`, (_e = col.ctag) != null ? _e : "", true);
+        await this.setState(`calendar.${calId}.etag`, (_f = col.etag) != null ? _f : "", true);
+        await this.setState(`calendar.${calId}.color`, (_g = col.color) != null ? _g : "", true);
+        await this.setState(`calendar.${calId}.symbolicColor`, (_h = col.symbolicColor) != null ? _h : "", true);
+        await this.setState(`calendar.${calId}.order`, (_i = col.order) != null ? _i : 0, true);
+        await this.setState(`calendar.${calId}.enabled`, (_j = col.enabled) != null ? _j : false, true);
+        await this.setState(`calendar.${calId}.visible`, (_k = col.visible) != null ? _k : false, true);
+        await this.setState(`calendar.${calId}.readOnly`, (_l = col.readOnly) != null ? _l : false, true);
+        await this.setState(`calendar.${calId}.isDefault`, (_m = col.isDefault) != null ? _m : false, true);
+        await this.setState(`calendar.${calId}.isFamily`, (_n = col.isFamily) != null ? _n : false, true);
+        await this.setState(`calendar.${calId}.isPublished`, (_o = col.isPublished) != null ? _o : false, true);
+        await this.setState(`calendar.${calId}.isPrivatelyShared`, (_p = col.isPrivatelyShared) != null ? _p : false, true);
+        await this.setState(
+          `calendar.${calId}.extendedDetailsAreIncluded`,
+          (_q = col.extendedDetailsAreIncluded) != null ? _q : false,
+          true
+        );
+        await this.setState(
+          `calendar.${calId}.shouldShowJunkUIWhenAppropriate`,
+          (_r = col.shouldShowJunkUIWhenAppropriate) != null ? _r : false,
+          true
+        );
+        await this.setState(`calendar.${calId}.shareTitle`, (_s = col.shareTitle) != null ? _s : "", true);
+        await this.setState(`calendar.${calId}.prePublishedUrl`, (_t = col.prePublishedUrl) != null ? _t : "", true);
+        await this.setState(`calendar.${calId}.supportedType`, (_u = col.supportedType) != null ? _u : "", true);
+        await this.setState(`calendar.${calId}.objectType`, (_v = col.objectType) != null ? _v : "", true);
+        await this.setState(
+          `calendar.${calId}.createdDate`,
+          (_w = this.localDateArrayToTimestamp(col.createdDate)) != null ? _w : null,
+          true
+        );
+        await this.setState(
+          `calendar.${calId}.lastModifiedDate`,
+          (_x = this.localDateArrayToTimestamp(col.lastModifiedDate)) != null ? _x : null,
+          true
+        );
+        const calEvents = (_y = eventsByCalendar.get(col.guid)) != null ? _y : [];
+        for (let i = 1; i <= maxCount; i++) {
+          const slotId = String(i).padStart(6, "0");
+          const basePath = `calendar.${calId}.${slotId}`;
+          const ev = calEvents[i - 1];
+          await this.extendObject(basePath, {
+            type: "folder",
+            common: { name: (_z = ev == null ? void 0 : ev.title) != null ? _z : `Event ${slotId}` },
+            native: {}
+          });
+          for (const s of CALENDAR_EVENT_STATES) {
+            await this.extendObject(`${basePath}.${s.id}`, {
+              type: "state",
+              common: {
+                name: s.name,
+                type: s.type,
+                role: s.role,
+                read: true,
+                write: false,
+                ...s.unit ? { unit: s.unit } : {}
+              },
+              native: {}
+            });
+          }
+          if (ev) {
+            await this.setState(`${basePath}.title`, (_A = ev.title) != null ? _A : "", true);
+            await this.setState(`${basePath}.guid`, (_B = ev.guid) != null ? _B : "", true);
+            await this.setState(`${basePath}.etag`, (_C = ev.etag) != null ? _C : "", true);
+            await this.setState(`${basePath}.pGuid`, (_D = ev.pGuid) != null ? _D : "", true);
+            await this.setState(
+              `${basePath}.startDate`,
+              (_E = this.localDateArrayToTimestamp(ev.localStartDate)) != null ? _E : null,
+              true
+            );
+            await this.setState(
+              `${basePath}.endDate`,
+              (_F = this.localDateArrayToTimestamp(ev.localEndDate)) != null ? _F : null,
+              true
+            );
+            await this.setState(
+              `${basePath}.masterStartDate`,
+              (_G = this.localDateArrayToTimestamp(ev.masterStartDate)) != null ? _G : null,
+              true
+            );
+            await this.setState(
+              `${basePath}.masterEndDate`,
+              (_H = this.localDateArrayToTimestamp(ev.masterEndDate)) != null ? _H : null,
+              true
+            );
+            await this.setState(
+              `${basePath}.createdDate`,
+              (_I = this.localDateArrayToTimestamp(ev.createdDate)) != null ? _I : null,
+              true
+            );
+            await this.setState(
+              `${basePath}.lastModifiedDate`,
+              (_J = this.localDateArrayToTimestamp(ev.lastModifiedDate)) != null ? _J : null,
+              true
+            );
+            await this.setState(`${basePath}.allDay`, (_K = ev.allDay) != null ? _K : false, true);
+            await this.setState(`${basePath}.duration`, (_L = ev.duration) != null ? _L : null, true);
+            await this.setState(`${basePath}.url`, (_M = ev.url) != null ? _M : "", true);
+            await this.setState(`${basePath}.tz`, (_N = ev.tz) != null ? _N : "", true);
+            await this.setState(`${basePath}.tzname`, (_O = ev.tzname) != null ? _O : "", true);
+            await this.setState(`${basePath}.startDateTZOffset`, (_P = ev.startDateTZOffset) != null ? _P : "", true);
+            await this.setState(`${basePath}.icon`, (_Q = ev.icon) != null ? _Q : 0, true);
+            await this.setState(`${basePath}.readOnly`, (_R = ev.readOnly) != null ? _R : false, true);
+            await this.setState(`${basePath}.transparent`, (_S = ev.transparent) != null ? _S : false, true);
+            await this.setState(`${basePath}.hasAttachments`, (_T = ev.hasAttachments) != null ? _T : false, true);
+            await this.setState(`${basePath}.recurrenceException`, (_U = ev.recurrenceException) != null ? _U : false, true);
+            await this.setState(`${basePath}.recurrenceMaster`, (_V = ev.recurrenceMaster) != null ? _V : false, true);
+            await this.setState(
+              `${basePath}.birthdayIsYearlessBday`,
+              (_W = ev.birthdayIsYearlessBday) != null ? _W : false,
+              true
+            );
+            await this.setState(
+              `${basePath}.birthdayShowAsCompany`,
+              (_X = ev.birthdayShowAsCompany) != null ? _X : false,
+              true
+            );
+            await this.setState(
+              `${basePath}.extendedDetailsAreIncluded`,
+              (_Y = ev.extendedDetailsAreIncluded) != null ? _Y : false,
+              true
+            );
+            await this.setState(
+              `${basePath}.shouldShowJunkUIWhenAppropriate`,
+              (_Z = ev.shouldShowJunkUIWhenAppropriate) != null ? _Z : false,
+              true
+            );
+            await this.setState(`${basePath}.alarms`, JSON.stringify((__ = ev.alarms) != null ? __ : []), true);
+          } else {
+            for (const s of CALENDAR_EVENT_STATES) {
+              await this.setState(`${basePath}.${s.id}`, null, true);
+            }
+          }
+        }
+      }
+      await this.cleanupCalendarObjects(activeCalendarIds, maxCount);
+      this.log.debug(`Calendar refresh done \u2014 ${collections.length} calendar(s), ${events.length} event(s)`);
+    } catch (err) {
+      const msg = (_$ = err == null ? void 0 : err.message) != null ? _$ : String(err);
+      this.log.warn(`Calendar refresh failed: ${msg}`);
+    }
+  }
+  async cleanupCalendarObjects(activeCalendarIds, maxCount) {
+    const prefix = `${this.namespace}.calendar.`;
+    const existing = await this.getObjectViewAsync("system", "folder", {
+      startkey: prefix,
+      endkey: `${prefix}\u9999`
+    });
+    for (const row of existing.rows) {
+      const suffix = row.id.slice(prefix.length);
+      const parts = suffix.split(".");
+      if (parts.length === 1) {
+        if (!activeCalendarIds.has(parts[0])) {
+          this.log.info(`Calendar cleanup: removing deleted calendar "${parts[0]}"`);
+          await this.delObjectAsync(row.id, { recursive: true });
+        }
+      } else if (parts.length === 2) {
+        const slotNum = parseInt(parts[1], 10);
+        if (activeCalendarIds.has(parts[0]) && !isNaN(slotNum) && slotNum > maxCount) {
+          this.log.info(`Calendar cleanup: removing excess slot ${parts[1]} in calendar "${parts[0]}"`);
+          await this.delObjectAsync(row.id, { recursive: true });
+        }
+      }
+    }
+  }
+  scheduleCalendarRefresh() {
+    var _a;
+    if (this.calendarRefreshTimer) {
+      this.clearTimeout(this.calendarRefreshTimer);
+      this.calendarRefreshTimer = null;
+    }
+    let intervalMin = Math.floor((_a = this.config.calendarInterval) != null ? _a : 60);
+    if (!Number.isFinite(intervalMin) || intervalMin < 5) {
+      this.log.warn(
+        `Calendar interval is ${this.config.calendarInterval} \u2014 value below 5 minutes, falling back to 60 minutes`
+      );
+      intervalMin = 60;
+    } else if (intervalMin > 1440) {
+      this.log.warn(`Calendar interval is ${intervalMin} minutes \u2014 clamping to 1440 minutes`);
+      intervalMin = 1440;
+    }
+    const INTERVAL_MS = intervalMin * 60 * 1e3;
+    const schedule = () => {
+      this.calendarRefreshTimer = this.setTimeout(async () => {
+        this.calendarRefreshTimer = null;
+        if (!this.icloud) {
+          return;
+        }
+        this.log.debug("Calendar scheduled refresh starting...");
+        await this.refreshCalendarEvents();
+        schedule();
+      }, INTERVAL_MS);
+    };
+    schedule();
+    this.log.debug(`Calendar refresh scheduled every ${intervalMin} min`);
+  }
   /**
    * Is called when adapter shuts down - callback has to be called under any circumstances!
    *
@@ -648,6 +989,10 @@ class Icloud extends utils.Adapter {
       if (this.findMyRefreshTimer) {
         this.clearTimeout(this.findMyRefreshTimer);
         this.findMyRefreshTimer = null;
+      }
+      if (this.calendarRefreshTimer) {
+        this.clearTimeout(this.calendarRefreshTimer);
+        this.calendarRefreshTimer = null;
       }
       if (this.icloud) {
         this.icloud.removeAllListeners();
@@ -701,6 +1046,25 @@ class Icloud extends utils.Adapter {
         var _a2;
         this.log.error(`Failed to submit MFA code: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
       });
+      return;
+    }
+    if (id === `${this.namespace}.mfa.requestSmsCode` && state.val === true) {
+      if (!this.icloud) {
+        this.log.warn("SMS request received but iCloud service is not initialized");
+        return;
+      }
+      if (this.icloud.status !== "MfaRequested") {
+        this.log.warn(`SMS request received but iCloud status is "${this.icloud.status}" \u2014 not in MFA state`);
+        return;
+      }
+      this.log.info("Requesting MFA code via SMS...");
+      this.icloud.requestSmsMfaCode().then(() => {
+        this.log.info("SMS code requested \u2014 check your phone and enter the code into mfa.code");
+      }).catch((err) => {
+        var _a2;
+        this.log.error(`Failed to request SMS code: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
+      });
+      void this.setState("mfa.requestSmsCode", false, true);
       return;
     }
     const pingMatch = id.match(/^[^.]+\.[^.]+\.findme\.(\d{6})\.ping$/);

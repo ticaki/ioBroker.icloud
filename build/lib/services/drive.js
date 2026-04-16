@@ -41,6 +41,10 @@ class iCloudDriveRawNode {
   numberOfItems;
   status;
   parentId;
+  dateModified;
+  dateChanged;
+  lastOpenTime;
+  extension;
 }
 class iCloudDriveNode {
   service;
@@ -58,7 +62,13 @@ class iCloudDriveNode {
   shareCount;
   directChildrenCount;
   parentId;
+  docwsid;
   items;
+  extension;
+  dateModified;
+  dateChanged;
+  dateLastOpen;
+  _children = null;
   constructor(service, nodeId = "root") {
     this.service = service;
     this.serviceUri = service.serviceUri;
@@ -96,7 +106,77 @@ class iCloudDriveNode {
     this.directChildrenCount = rawNode.directChildrenCount;
     this.items = rawNode.items;
     this.parentId = rawNode.parentId;
+    this.docwsid = rawNode.docwsid;
+    this.extension = rawNode.extension;
+    this.dateModified = rawNode.dateModified ? new Date(rawNode.dateModified) : void 0;
+    this.dateChanged = rawNode.dateChanged ? new Date(rawNode.dateChanged) : void 0;
+    this.dateLastOpen = rawNode.lastOpenTime ? new Date(rawNode.lastOpenTime) : void 0;
+    this._children = null;
     return this;
+  }
+  get fullName() {
+    return this.extension ? `${this.name}.${this.extension}` : this.name;
+  }
+  async getChildren() {
+    var _a;
+    if (this._children) {
+      return this._children;
+    }
+    if (!this.hasData) {
+      await this.refresh();
+    }
+    this._children = ((_a = this.items) != null ? _a : []).map((item) => {
+      var _a2;
+      const child = new iCloudDriveNode(this.service, item.drivewsid);
+      child.name = item.name;
+      child.etag = item.etag;
+      child.type = item.type;
+      child.size = (_a2 = item.size) != null ? _a2 : 0;
+      child.parentId = item.parentId;
+      child.docwsid = item.docwsid;
+      child.dateCreated = new Date(item.dateCreated);
+      child.extension = item.extension;
+      child.dateModified = item.dateModified ? new Date(item.dateModified) : void 0;
+      child.dateChanged = item.dateChanged ? new Date(item.dateChanged) : void 0;
+      child.dateLastOpen = item.lastOpenTime ? new Date(item.lastOpenTime) : void 0;
+      child.items = [];
+      return child;
+    });
+    return this._children;
+  }
+  dir() {
+    var _a;
+    if (this.type === "FILE") {
+      return null;
+    }
+    return ((_a = this.items) != null ? _a : []).map((item) => item.extension ? `${item.name}.${item.extension}` : item.name);
+  }
+  async get(name) {
+    if (this.type === "FILE") {
+      return void 0;
+    }
+    const children = await this.getChildren();
+    return children.find((c) => c.fullName === name || c.name === name);
+  }
+  async mkdir(name) {
+    return this.service.mkdir(this.nodeId, name);
+  }
+  async rename(name) {
+    return this.service.renameItem(this.nodeId, this.etag, name);
+  }
+  async delete() {
+    return this.service.del(this.nodeId, this.etag);
+  }
+  async open() {
+    var _a, _b;
+    const docwsid = (_b = this.docwsid) != null ? _b : (_a = this.rawData) == null ? void 0 : _a.docwsid;
+    if (!docwsid) {
+      throw new Error("Node has no docwsid, call refresh() first");
+    }
+    return this.service.downloadFile({ docwsid, size: this.size });
+  }
+  async upload(file) {
+    return this.service.sendFile(this.nodeId, file);
   }
 }
 class iCloudDriveService {
@@ -163,6 +243,79 @@ class iCloudDriveService {
           }
         ]
       })
+    });
+    return response.json();
+  }
+  async renameItem(nodeId, etag, name) {
+    const response = await this.service.fetch(`${this.serviceUri}/renameItems`, {
+      headers: this.service.authStore.getHeaders(),
+      method: "POST",
+      body: JSON.stringify({
+        items: [{ drivewsid: nodeId, etag, name }]
+      })
+    });
+    return response.json();
+  }
+  async getAppData() {
+    const response = await this.service.fetch(`${this.serviceUri}/retrieveAppLibraries`, {
+      headers: this.service.authStore.getHeaders()
+    });
+    const json = await response.json();
+    return json.items;
+  }
+  async sendFile(folderId, file) {
+    var _a;
+    const contentType = (_a = file.contentType) != null ? _a : "application/octet-stream";
+    const uploadResponse = await this.service.fetch(`${this.docsServiceUri}/ws/com.apple.CloudDocs/upload/web`, {
+      headers: {
+        ...this.service.authStore.getHeaders(),
+        "Content-Type": "text/plain"
+      },
+      method: "POST",
+      body: JSON.stringify({
+        filename: file.name,
+        type: "FILE",
+        content_type: contentType,
+        size: file.content.byteLength
+      })
+    });
+    const uploadJson = await uploadResponse.json();
+    const { document_id, url } = uploadJson[0];
+    const formData = new FormData();
+    formData.append(
+      file.name,
+      new Blob([file.content], { type: contentType }),
+      file.name
+    );
+    const contentResponse = await this.service.fetch(url, { method: "POST", body: formData });
+    const contentJson = await contentResponse.json();
+    await this._updateContentws(folderId, contentJson.singleFile, document_id, file.name);
+  }
+  async _updateContentws(folderId, sfInfo, documentId, fileName) {
+    const data = {
+      data: {
+        signature: sfInfo.fileChecksum,
+        wrapping_key: sfInfo.wrappingKey,
+        reference_signature: sfInfo.referenceChecksum,
+        size: sfInfo.size,
+        ...sfInfo.receipt ? { receipt: sfInfo.receipt } : {}
+      },
+      command: "add_file",
+      create_short_guid: true,
+      document_id: documentId,
+      path: { starting_document_id: folderId, path: fileName },
+      allow_conflict: true,
+      file_flags: { is_writable: true, is_executable: false, is_hidden: false },
+      mtime: Date.now(),
+      btime: Date.now()
+    };
+    const response = await this.service.fetch(`${this.docsServiceUri}/ws/com.apple.CloudDocs/update/documents`, {
+      headers: {
+        ...this.service.authStore.getHeaders(),
+        "Content-Type": "text/plain"
+      },
+      method: "POST",
+      body: JSON.stringify(data)
     });
     return response.json();
   }

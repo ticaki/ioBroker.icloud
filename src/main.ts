@@ -79,13 +79,80 @@ const FINDMY_DEVICE_STATES: Array<{
     { id: 'distanceKm', name: 'Distance from Home', type: 'number', role: 'value.distance' },
 ];
 
+/** State definitions for a Calendar event slot. */
+const CALENDAR_EVENT_STATES: Array<{
+    id: string;
+    name: string;
+    type: ioBroker.CommonType;
+    role: string;
+    unit?: string;
+}> = [
+    { id: 'title', name: 'Title', type: 'string', role: 'text' },
+    { id: 'guid', name: 'GUID', type: 'string', role: 'text' },
+    { id: 'etag', name: 'ETag', type: 'string', role: 'text' },
+    { id: 'pGuid', name: 'Calendar GUID', type: 'string', role: 'text' },
+    { id: 'startDate', name: 'Start Date', type: 'number', role: 'value.time' },
+    { id: 'endDate', name: 'End Date', type: 'number', role: 'value.time' },
+    { id: 'masterStartDate', name: 'Master Start Date', type: 'number', role: 'value.time' },
+    { id: 'masterEndDate', name: 'Master End Date', type: 'number', role: 'value.time' },
+    { id: 'createdDate', name: 'Created Date', type: 'number', role: 'value.time' },
+    { id: 'lastModifiedDate', name: 'Last Modified Date', type: 'number', role: 'value.time' },
+    { id: 'allDay', name: 'All Day', type: 'boolean', role: 'indicator' },
+    { id: 'duration', name: 'Duration', type: 'number', role: 'value.interval', unit: 'min' },
+    { id: 'url', name: 'URL', type: 'string', role: 'url' },
+    { id: 'tz', name: 'Timezone', type: 'string', role: 'text' },
+    { id: 'tzname', name: 'Timezone Name', type: 'string', role: 'text' },
+    { id: 'startDateTZOffset', name: 'TZ Offset', type: 'string', role: 'text' },
+    { id: 'icon', name: 'Icon', type: 'number', role: 'value' },
+    { id: 'readOnly', name: 'Read Only', type: 'boolean', role: 'indicator' },
+    { id: 'transparent', name: 'Transparent', type: 'boolean', role: 'indicator' },
+    { id: 'hasAttachments', name: 'Has Attachments', type: 'boolean', role: 'indicator' },
+    { id: 'recurrenceException', name: 'Recurrence Exception', type: 'boolean', role: 'indicator' },
+    { id: 'recurrenceMaster', name: 'Recurrence Master', type: 'boolean', role: 'indicator' },
+    { id: 'birthdayIsYearlessBday', name: 'Birthday (Yearless)', type: 'boolean', role: 'indicator' },
+    { id: 'birthdayShowAsCompany', name: 'Birthday Show As Company', type: 'boolean', role: 'indicator' },
+    { id: 'extendedDetailsAreIncluded', name: 'Extended Details Included', type: 'boolean', role: 'indicator' },
+    { id: 'shouldShowJunkUIWhenAppropriate', name: 'Junk UI Flag', type: 'boolean', role: 'indicator' },
+    { id: 'alarms', name: 'Alarms (JSON)', type: 'string', role: 'json' },
+];
+
+/** State definitions for a Calendar collection (calendar folder). */
+const CALENDAR_COLLECTION_STATES: Array<{
+    id: string;
+    name: string;
+    type: ioBroker.CommonType;
+    role: string;
+}> = [
+    { id: 'guid', name: 'GUID', type: 'string', role: 'text' },
+    { id: 'ctag', name: 'CTag', type: 'string', role: 'text' },
+    { id: 'etag', name: 'ETag', type: 'string', role: 'text' },
+    { id: 'color', name: 'Color', type: 'string', role: 'text' },
+    { id: 'symbolicColor', name: 'Symbolic Color', type: 'string', role: 'text' },
+    { id: 'order', name: 'Order', type: 'number', role: 'value' },
+    { id: 'enabled', name: 'Enabled', type: 'boolean', role: 'indicator' },
+    { id: 'visible', name: 'Visible', type: 'boolean', role: 'indicator' },
+    { id: 'readOnly', name: 'Read Only', type: 'boolean', role: 'indicator' },
+    { id: 'isDefault', name: 'Default Calendar', type: 'boolean', role: 'indicator' },
+    { id: 'isFamily', name: 'Family Calendar', type: 'boolean', role: 'indicator' },
+    { id: 'isPublished', name: 'Published', type: 'boolean', role: 'indicator' },
+    { id: 'isPrivatelyShared', name: 'Privately Shared', type: 'boolean', role: 'indicator' },
+    { id: 'extendedDetailsAreIncluded', name: 'Extended Details Included', type: 'boolean', role: 'indicator' },
+    { id: 'shouldShowJunkUIWhenAppropriate', name: 'Junk UI Flag', type: 'boolean', role: 'indicator' },
+    { id: 'shareTitle', name: 'Share Title', type: 'string', role: 'text' },
+    { id: 'prePublishedUrl', name: 'Pre-Published URL', type: 'string', role: 'url' },
+    { id: 'supportedType', name: 'Supported Type', type: 'string', role: 'text' },
+    { id: 'objectType', name: 'Object Type', type: 'string', role: 'text' },
+    { id: 'createdDate', name: 'Created Date', type: 'number', role: 'value.time' },
+    { id: 'lastModifiedDate', name: 'Last Modified Date', type: 'number', role: 'value.time' },
+];
+
 /**
  * Haversine distance in km between two WGS84 coordinate pairs.
  *
- * @param lat1
- * @param lon1
- * @param lat2
- * @param lon2
+ * @param lat1 - Latitude of point 1 in degrees
+ * @param lon1 - Longitude of point 1 in degrees
+ * @param lat2 - Latitude of point 2 in degrees
+ * @param lon2 - Longitude of point 2 in degrees
  */
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371;
@@ -103,6 +170,7 @@ class Icloud extends utils.Adapter {
     private findMyCleanupDone = false;
     /** Maps Apple device API id → 6-digit zero-padded folder id (e.g. '000001') */
     private findMyIdMap: Map<string, string> = new Map();
+    private calendarRefreshTimer: ioBroker.Timeout | null | undefined = null;
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({
@@ -180,6 +248,18 @@ class Icloud extends utils.Adapter {
             },
             native: {},
         });
+        await this.extendObject('mfa.requestSmsCode', {
+            type: 'state',
+            common: {
+                name: 'Request MFA code via SMS (set to true)',
+                type: 'boolean',
+                role: 'button',
+                read: true,
+                write: true,
+                def: false,
+            },
+            native: {},
+        });
     }
 
     /**
@@ -210,6 +290,7 @@ class Icloud extends utils.Adapter {
         this.log.debug('Objects created/verified');
 
         this.subscribeStates('mfa.code');
+        this.subscribeStates('mfa.requestSmsCode');
         this.subscribeStates('findme.*.ping');
         this.log.debug('Subscribed to mfa.code');
 
@@ -378,6 +459,12 @@ class Icloud extends utils.Adapter {
             this.scheduleFindMyRefresh(locationPoints);
         }
 
+        // ── Calendar ──────────────────────────────────────────────────────────
+        if (activeServices.includes('calendar') && this.config.calendarEnabled) {
+            await this.refreshCalendarEvents();
+            this.scheduleCalendarRefresh();
+        }
+
         // ── Done: mark connection as established ──────────────────────────────
         this.log.info('iCloud connection established successfully');
         await this.setState('info.connection', true, true);
@@ -440,7 +527,7 @@ class Icloud extends utils.Adapter {
             const familyDevices: iCloudFindMyDeviceInfo[] = [];
             for (const [, dev] of devices) {
                 const d = dev.deviceInfo;
-                this.log.debug(JSON.stringify(d));
+                //this.log.debug(JSON.stringify(d));
                 if (d.isConsideredAccessory) {
                     accessories.push(d);
                 } else if (d.fmlyShare) {
@@ -692,6 +779,309 @@ class Icloud extends utils.Adapter {
         this.log.debug('FindMy refresh scheduled every 15 min');
     }
 
+    // ── Calendar helpers ──────────────────────────────────────────────────────
+
+    private sanitizeCalendarId(name: string): string {
+        return (
+            (name || 'unknown')
+                .replace(/[^a-zA-Z0-9_-]/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_+|_+$/g, '') || 'unknown'
+        );
+    }
+
+    private localDateArrayToTimestamp(arr: number[]): number | null {
+        // Array format: [YYYYMMDD, YYYY, MM, DD, HH, mm, sss]
+        // arr[0] is the compact YYYYMMDD integer — skip it; use positional fields.
+        if (!arr || arr.length < 4) {
+            return null;
+        }
+        return new Date(arr[1], arr[2] - 1, arr[3], arr[4] ?? 0, arr[5] ?? 0, 0).getTime();
+    }
+
+    private async refreshCalendarEvents(): Promise<void> {
+        if (!this.icloud) {
+            return;
+        }
+        try {
+            const calService = this.icloud.getService('calendar');
+            const now = new Date();
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+            // pyicloud uses first..last day of current month for /startup
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+            const startupResp = await calService.startup(monthStart, monthEnd);
+            const collections = startupResp.Collection ?? [];
+            const events = startupResp.Event ?? [];
+            const maxCount = Math.max(1, Math.floor(this.config.calendarEventCount ?? 10));
+
+            // Log first collection + first event for type inspection
+            if (collections.length > 0) {
+                this.log.debug(`[Calendar] first collection: ${JSON.stringify(collections[0])}`);
+            }
+            if (events.length > 0) {
+                this.log.debug(`[Calendar] first event: ${JSON.stringify(events[0])}`);
+            }
+
+            // Group events by pGuid (calendar guid), skip already-ended events
+            const eventsByCalendar = new Map<string, typeof events>();
+            for (const ev of events) {
+                if (!ev.pGuid) {
+                    continue;
+                }
+                const startTs = this.localDateArrayToTimestamp(ev.localStartDate);
+                if (startTs !== null && startTs < todayStart) {
+                    continue;
+                }
+                if (!eventsByCalendar.has(ev.pGuid)) {
+                    eventsByCalendar.set(ev.pGuid, []);
+                }
+                eventsByCalendar.get(ev.pGuid)!.push(ev);
+            }
+
+            // Sort each calendar's events ascending by start date
+            for (const evList of eventsByCalendar.values()) {
+                evList.sort((a, b) => {
+                    const ta = this.localDateArrayToTimestamp(a.localStartDate) ?? 0;
+                    const tb = this.localDateArrayToTimestamp(b.localStartDate) ?? 0;
+                    return ta - tb;
+                });
+            }
+
+            await this.extendObject('calendar', {
+                type: 'folder',
+                common: { name: 'Calendar' },
+                native: {},
+            });
+
+            const activeCalendarIds = new Set<string>();
+            for (const col of collections) {
+                const calId = this.sanitizeCalendarId(col.title);
+                activeCalendarIds.add(calId);
+
+                await this.extendObject(`calendar.${calId}`, {
+                    type: 'folder',
+                    common: { name: col.title },
+                    native: {},
+                });
+
+                // Collection-level states (color, enabled, visible, …)
+                for (const s of CALENDAR_COLLECTION_STATES) {
+                    await this.extendObject(`calendar.${calId}.${s.id}`, {
+                        type: 'state',
+                        common: { name: s.name, type: s.type, role: s.role, read: true, write: false },
+                        native: {},
+                    });
+                }
+                await this.setState(`calendar.${calId}.guid`, col.guid ?? '', true);
+                await this.setState(`calendar.${calId}.ctag`, col.ctag ?? '', true);
+                await this.setState(`calendar.${calId}.etag`, col.etag ?? '', true);
+                await this.setState(`calendar.${calId}.color`, col.color ?? '', true);
+                await this.setState(`calendar.${calId}.symbolicColor`, col.symbolicColor ?? '', true);
+                await this.setState(`calendar.${calId}.order`, col.order ?? 0, true);
+                await this.setState(`calendar.${calId}.enabled`, col.enabled ?? false, true);
+                await this.setState(`calendar.${calId}.visible`, col.visible ?? false, true);
+                await this.setState(`calendar.${calId}.readOnly`, col.readOnly ?? false, true);
+                await this.setState(`calendar.${calId}.isDefault`, col.isDefault ?? false, true);
+                await this.setState(`calendar.${calId}.isFamily`, col.isFamily ?? false, true);
+                await this.setState(`calendar.${calId}.isPublished`, col.isPublished ?? false, true);
+                await this.setState(`calendar.${calId}.isPrivatelyShared`, col.isPrivatelyShared ?? false, true);
+                await this.setState(
+                    `calendar.${calId}.extendedDetailsAreIncluded`,
+                    col.extendedDetailsAreIncluded ?? false,
+                    true,
+                );
+                await this.setState(
+                    `calendar.${calId}.shouldShowJunkUIWhenAppropriate`,
+                    col.shouldShowJunkUIWhenAppropriate ?? false,
+                    true,
+                );
+                await this.setState(`calendar.${calId}.shareTitle`, col.shareTitle ?? '', true);
+                await this.setState(`calendar.${calId}.prePublishedUrl`, col.prePublishedUrl ?? '', true);
+                await this.setState(`calendar.${calId}.supportedType`, col.supportedType ?? '', true);
+                await this.setState(`calendar.${calId}.objectType`, col.objectType ?? '', true);
+                await this.setState(
+                    `calendar.${calId}.createdDate`,
+                    this.localDateArrayToTimestamp(col.createdDate) ?? null,
+                    true,
+                );
+                await this.setState(
+                    `calendar.${calId}.lastModifiedDate`,
+                    this.localDateArrayToTimestamp(col.lastModifiedDate) ?? null,
+                    true,
+                );
+
+                const calEvents = eventsByCalendar.get(col.guid) ?? [];
+
+                for (let i = 1; i <= maxCount; i++) {
+                    const slotId = String(i).padStart(6, '0');
+                    const basePath = `calendar.${calId}.${slotId}`;
+                    const ev = calEvents[i - 1];
+
+                    await this.extendObject(basePath, {
+                        type: 'folder',
+                        common: { name: ev?.title ?? `Event ${slotId}` },
+                        native: {},
+                    });
+
+                    for (const s of CALENDAR_EVENT_STATES) {
+                        await this.extendObject(`${basePath}.${s.id}`, {
+                            type: 'state',
+                            common: {
+                                name: s.name,
+                                type: s.type,
+                                role: s.role,
+                                read: true,
+                                write: false,
+                                ...(s.unit ? { unit: s.unit } : {}),
+                            },
+                            native: {},
+                        });
+                    }
+
+                    if (ev) {
+                        await this.setState(`${basePath}.title`, ev.title ?? '', true);
+                        await this.setState(`${basePath}.guid`, ev.guid ?? '', true);
+                        await this.setState(`${basePath}.etag`, ev.etag ?? '', true);
+                        await this.setState(`${basePath}.pGuid`, ev.pGuid ?? '', true);
+                        await this.setState(
+                            `${basePath}.startDate`,
+                            this.localDateArrayToTimestamp(ev.localStartDate) ?? null,
+                            true,
+                        );
+                        await this.setState(
+                            `${basePath}.endDate`,
+                            this.localDateArrayToTimestamp(ev.localEndDate) ?? null,
+                            true,
+                        );
+                        await this.setState(
+                            `${basePath}.masterStartDate`,
+                            this.localDateArrayToTimestamp(ev.masterStartDate) ?? null,
+                            true,
+                        );
+                        await this.setState(
+                            `${basePath}.masterEndDate`,
+                            this.localDateArrayToTimestamp(ev.masterEndDate) ?? null,
+                            true,
+                        );
+                        await this.setState(
+                            `${basePath}.createdDate`,
+                            this.localDateArrayToTimestamp(ev.createdDate) ?? null,
+                            true,
+                        );
+                        await this.setState(
+                            `${basePath}.lastModifiedDate`,
+                            this.localDateArrayToTimestamp(ev.lastModifiedDate) ?? null,
+                            true,
+                        );
+                        await this.setState(`${basePath}.allDay`, ev.allDay ?? false, true);
+                        await this.setState(`${basePath}.duration`, ev.duration ?? null, true);
+                        await this.setState(`${basePath}.url`, ev.url ?? '', true);
+                        await this.setState(`${basePath}.tz`, ev.tz ?? '', true);
+                        await this.setState(`${basePath}.tzname`, ev.tzname ?? '', true);
+                        await this.setState(`${basePath}.startDateTZOffset`, ev.startDateTZOffset ?? '', true);
+                        await this.setState(`${basePath}.icon`, ev.icon ?? 0, true);
+                        await this.setState(`${basePath}.readOnly`, ev.readOnly ?? false, true);
+                        await this.setState(`${basePath}.transparent`, ev.transparent ?? false, true);
+                        await this.setState(`${basePath}.hasAttachments`, ev.hasAttachments ?? false, true);
+                        await this.setState(`${basePath}.recurrenceException`, ev.recurrenceException ?? false, true);
+                        await this.setState(`${basePath}.recurrenceMaster`, ev.recurrenceMaster ?? false, true);
+                        await this.setState(
+                            `${basePath}.birthdayIsYearlessBday`,
+                            ev.birthdayIsYearlessBday ?? false,
+                            true,
+                        );
+                        await this.setState(
+                            `${basePath}.birthdayShowAsCompany`,
+                            ev.birthdayShowAsCompany ?? false,
+                            true,
+                        );
+                        await this.setState(
+                            `${basePath}.extendedDetailsAreIncluded`,
+                            ev.extendedDetailsAreIncluded ?? false,
+                            true,
+                        );
+                        await this.setState(
+                            `${basePath}.shouldShowJunkUIWhenAppropriate`,
+                            ev.shouldShowJunkUIWhenAppropriate ?? false,
+                            true,
+                        );
+                        await this.setState(`${basePath}.alarms`, JSON.stringify(ev.alarms ?? []), true);
+                    } else {
+                        for (const s of CALENDAR_EVENT_STATES) {
+                            await this.setState(`${basePath}.${s.id}`, null, true);
+                        }
+                    }
+                }
+            }
+
+            await this.cleanupCalendarObjects(activeCalendarIds, maxCount);
+            this.log.debug(`Calendar refresh done — ${collections.length} calendar(s), ${events.length} event(s)`);
+        } catch (err) {
+            const msg = (err as Error)?.message ?? String(err);
+            this.log.warn(`Calendar refresh failed: ${msg}`);
+        }
+    }
+
+    private async cleanupCalendarObjects(activeCalendarIds: Set<string>, maxCount: number): Promise<void> {
+        const prefix = `${this.namespace}.calendar.`;
+        const existing = await this.getObjectViewAsync('system', 'folder', {
+            startkey: prefix,
+            endkey: `${prefix}\u9999`,
+        });
+        for (const row of existing.rows) {
+            const suffix = row.id.slice(prefix.length);
+            const parts = suffix.split('.');
+            if (parts.length === 1) {
+                // Calendar-level folder — delete if no longer in Apple
+                if (!activeCalendarIds.has(parts[0])) {
+                    this.log.info(`Calendar cleanup: removing deleted calendar "${parts[0]}"`);
+                    await this.delObjectAsync(row.id, { recursive: true });
+                }
+            } else if (parts.length === 2) {
+                // Slot-level folder — delete if slot number exceeds current maxCount
+                const slotNum = parseInt(parts[1], 10);
+                if (activeCalendarIds.has(parts[0]) && !isNaN(slotNum) && slotNum > maxCount) {
+                    this.log.info(`Calendar cleanup: removing excess slot ${parts[1]} in calendar "${parts[0]}"`);
+                    await this.delObjectAsync(row.id, { recursive: true });
+                }
+            }
+        }
+    }
+
+    private scheduleCalendarRefresh(): void {
+        if (this.calendarRefreshTimer) {
+            this.clearTimeout(this.calendarRefreshTimer);
+            this.calendarRefreshTimer = null;
+        }
+        let intervalMin = Math.floor(this.config.calendarInterval ?? 60);
+        if (!Number.isFinite(intervalMin) || intervalMin < 5) {
+            this.log.warn(
+                `Calendar interval is ${this.config.calendarInterval} — value below 5 minutes, falling back to 60 minutes`,
+            );
+            intervalMin = 60;
+        } else if (intervalMin > 1440) {
+            this.log.warn(`Calendar interval is ${intervalMin} minutes — clamping to 1440 minutes`);
+            intervalMin = 1440;
+        }
+        const INTERVAL_MS = intervalMin * 60 * 1000;
+        const schedule = (): void => {
+            this.calendarRefreshTimer = this.setTimeout(async () => {
+                this.calendarRefreshTimer = null;
+                if (!this.icloud) {
+                    return;
+                }
+                this.log.debug('Calendar scheduled refresh starting...');
+                await this.refreshCalendarEvents();
+                schedule();
+            }, INTERVAL_MS);
+        };
+        schedule();
+        this.log.debug(`Calendar refresh scheduled every ${intervalMin} min`);
+    }
+
     /**
      * Is called when adapter shuts down - callback has to be called under any circumstances!
      *
@@ -702,6 +1092,10 @@ class Icloud extends utils.Adapter {
             if (this.findMyRefreshTimer) {
                 this.clearTimeout(this.findMyRefreshTimer);
                 this.findMyRefreshTimer = null;
+            }
+            if (this.calendarRefreshTimer) {
+                this.clearTimeout(this.calendarRefreshTimer);
+                this.calendarRefreshTimer = null;
             }
             if (this.icloud) {
                 this.icloud.removeAllListeners();
@@ -757,6 +1151,28 @@ class Icloud extends utils.Adapter {
             this.icloud.provideMfaCode(raw).catch((err: unknown) => {
                 this.log.error(`Failed to submit MFA code: ${(err as Error)?.message ?? String(err)}`);
             });
+            return;
+        }
+
+        if (id === `${this.namespace}.mfa.requestSmsCode` && state.val === true) {
+            if (!this.icloud) {
+                this.log.warn('SMS request received but iCloud service is not initialized');
+                return;
+            }
+            if (this.icloud.status !== 'MfaRequested') {
+                this.log.warn(`SMS request received but iCloud status is "${this.icloud.status}" — not in MFA state`);
+                return;
+            }
+            this.log.info('Requesting MFA code via SMS...');
+            this.icloud
+                .requestSmsMfaCode()
+                .then(() => {
+                    this.log.info('SMS code requested — check your phone and enter the code into mfa.code');
+                })
+                .catch((err: unknown) => {
+                    this.log.error(`Failed to request SMS code: ${(err as Error)?.message ?? String(err)}`);
+                });
+            void this.setState('mfa.requestSmsCode', false, true);
             return;
         }
 

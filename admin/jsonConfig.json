@@ -28,39 +28,6 @@
             "size": 5,
             "newLine": true
         },
-        "locationPoints": {
-            "type": "table",
-            "label": "locationPoints",
-            "help": "locationPointsHelp",
-            "newLine": true,
-            "xs": 12,
-            "sm": 12,
-            "md": 12,
-            "lg": 12,
-            "xl": 12,
-            "items": [
-                {
-                    "type": "text",
-                    "label": "locationPointIndex",
-                    "width": "15%",
-                    "attr": "index"
-                },
-                {
-                    "type": "coordinates",
-                    "label": "locationPointCoordinates",
-                    "longitudeName": "longitude",
-                    "latitudeName": "latitude",
-                    "width": "55%",
-                    "attr": "coordinates"
-                },
-                {
-                    "type": "text",
-                    "label": "locationPointName",
-                    "width": "30%",
-                    "attr": "name"
-                }
-            ]
-        },
         "_findMyHeader": {
             "type": "header",
             "text": "findMyHeader",
@@ -92,7 +59,91 @@
             "max": 120,
             "step": 1,
             "default": 5,
-            "disabled": "data.findMyEnabled"
+            "disabled": "!data.findMyEnabled"
+        },
+        "locationPoints": {
+            "type": "table",
+            "label": "locationPoints",
+            "help": "locationPointsHelp",
+            "newLine": true,
+            "xs": 12,
+            "sm": 12,
+            "md": 12,
+            "lg": 12,
+            "xl": 12,
+            "items": [
+                {
+                    "type": "text",
+                    "label": "locationPointIndex",
+                    "width": "15%",
+                    "attr": "index"
+                },
+                {
+                    "type": "coordinates",
+                    "label": "locationPointCoordinates",
+                    "longitudeName": "longitude",
+                    "latitudeName": "latitude",
+                    "width": "55%",
+                    "attr": "coordinates"
+                },
+                {
+                    "type": "text",
+                    "label": "locationPointName",
+                    "width": "30%",
+                    "attr": "name"
+                }
+            ],
+            "disabled": "!data.findMyEnabled"
+
+        },
+        "_calendarHeader": {
+            "type": "header",
+            "text": "calendarHeader",
+            "size": 5,
+            "newLine": true
+        },
+        "calendarEnabled": {
+            "type": "checkbox",
+            "label": "calendarEnabled",
+            "newLine": true,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "default": false
+        },
+        "calendarEventCount": {
+            "type": "number",
+            "label": "calendarEventCount",
+            "help": "calendarEventCountHelp",
+            "newLine": false,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "min": 1,
+            "max": 50,
+            "step": 1,
+            "default": 10,
+            "disabled": "!data.calendarEnabled"
+        },
+        "calendarInterval": {
+            "type": "number",
+            "label": "calendarInterval",
+            "help": "calendarIntervalHelp",
+            "newLine": false,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "min": 5,
+            "max": 1440,
+            "step": 1,
+            "default": 60,
+            "disabled": "!data.calendarEnabled"
         }
     }
 }

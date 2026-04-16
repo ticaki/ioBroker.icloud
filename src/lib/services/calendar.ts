@@ -36,7 +36,7 @@ interface iCloudCalendarEvent {
     lastModifiedDate: number[];
     readOnly: boolean;
     localEndDate: number[];
-    recurrence: string;
+    recurrence?: string;
     localStartDate: number[];
     createdDate: number[];
     extendedDetailsAreIncluded: boolean;
@@ -44,11 +44,15 @@ interface iCloudCalendarEvent {
     etag: string;
     startDate: number[];
     endDate: number[];
+    masterStartDate: number[];
+    masterEndDate: number[];
     birthdayShowAsCompany: boolean;
     recurrenceMaster: boolean;
+    transparent: boolean;
     attachments: any[];
+    privateComments: any[];
     shouldShowJunkUIWhenAppropriate: boolean;
-    url: string;
+    url?: string;
 }
 
 interface iCloudCalendarRecurrence {
@@ -96,7 +100,8 @@ interface iCloudCalendarCollection {
     isPrivatelyShared: boolean;
     extendedDetailsAreIncluded: boolean;
     shouldShowJunkUIWhenAppropriate: boolean;
-    publishedUrl: string;
+    publishedUrl?: string;
+    visible: boolean;
 }
 
 interface iCloudCalendarEventDetailResponse {
@@ -131,52 +136,93 @@ export class iCloudCalendarService {
         this.dsid = this.service.accountInfo!.dsInfo.dsid;
         this.calendarServiceUri = `${service.accountInfo!.webservices.calendar.url}/ca`;
     }
-    private async fetchEndpoint<T = any>(endpointUrl: string, params: Record<string, string>): Promise<T> {
+    private async fetchEndpoint<T = any>(
+        endpointUrl: string,
+        params: Record<string, string>,
+        retry = true,
+    ): Promise<T> {
         const url = new URL(`${this.calendarServiceUri}${endpointUrl}`);
-        url.search = new URLSearchParams({ ...params, clientVersion: '5.1' }).toString();
+        url.search = new URLSearchParams(params).toString();
+        this.service._log(0 /* LogLevel.Debug */, `[calendar] GET ${url.toString()}`);
 
+        // pyicloud sends no Content-Type on GET requests — Apple returns 400 if it is present.
+        const { 'Content-Type': _ct, ...getHeaders } = this.service.authStore.getHeaders();
         const response = await this.service.fetch(url, {
             headers: {
-                ...this.service.authStore.getHeaders(),
+                ...getHeaders,
                 Referer: 'https://www.icloud.com/',
             },
         });
 
-        return (await response.json()) as T;
-    }
-    async eventDetails(calendarGuid: string, eventGuid: string): Promise<iCloudCalendarEvent> {
-        const response = await this.fetchEndpoint<iCloudCalendarEventDetailResponse>(
-            `/eventdetail/${calendarGuid}/${eventGuid}`,
-            {
-                lang: 'en-us',
-                usertz: this.tz,
-                dsid: this.dsid,
-            },
-        );
+        const text = await response.text();
 
-        return response.Event[0];
+        if (!text || !text.trim()) {
+            this.service._log(
+                0 /* LogLevel.Debug */,
+                `[calendar] Empty response from ${endpointUrl} (HTTP ${response.status}) — skipping`,
+            );
+            // 4xx = server rejected the request (bad params or session expired w/o body).
+            // Only retry with re-auth on 401; 400 means bad request (nothing auth can fix).
+            if (response.status === 401 && retry) {
+                await this.service.authenticateWebService('calendar');
+                return this.fetchEndpoint<T>(endpointUrl, params, false);
+            }
+            return {} as T;
+        }
+
+        const json = JSON.parse(text);
+
+        if (json?.error === 1 && typeof json?.reason === 'string' && json.reason.includes('X-APPLE-WEBAUTH-TOKEN')) {
+            if (retry) {
+                this.service._log(
+                    0 /* LogLevel.Debug */,
+                    '[calendar] Missing X-APPLE-WEBAUTH-TOKEN — re-authenticating for calendar service',
+                );
+                await this.service.authenticateWebService('calendar');
+                return this.fetchEndpoint<T>(endpointUrl, params, false);
+            }
+            throw new Error(`Calendar authentication failed: ${json.reason}`);
+        }
+
+        return json as T;
     }
-    async events(from?: Date, to?: Date): Promise<iCloudCalendarEvent[]> {
-        const response = await this.fetchEndpoint<iCloudCalendarEventsResponse>('/events', {
+    async eventDetails(calendarGuid: string, eventGuid: string): Promise<iCloudCalendarEventDetailResponse> {
+        return this.fetchEndpoint<iCloudCalendarEventDetailResponse>(`/eventdetail/${calendarGuid}/${eventGuid}`, {
+            lang: 'en-us',
+            usertz: this.tz,
+            dsid: this.dsid,
+        });
+    }
+
+    async events(from?: Date, to?: Date): Promise<iCloudCalendarEventsResponse> {
+        return this.fetchEndpoint<iCloudCalendarEventsResponse>('/events', {
             startDate: dayjs(from ?? dayjs().startOf('month')).format(this.dateFormat),
             endDate: dayjs(to ?? dayjs().endOf('month')).format(this.dateFormat),
             dsid: this.dsid,
             lang: 'en-us',
             usertz: this.tz,
         });
-
-        return response.Event || [];
     }
-    async calendars(): Promise<iCloudCalendarCollection[]> {
+
+    async calendars(from?: Date, to?: Date): Promise<iCloudCalendarCollection[]> {
         const response = await this.fetchEndpoint<iCloudCalendarStartupResponse>('/startup', {
-            startDate: dayjs(dayjs().startOf('month')).format(this.dateFormat),
-            endDate: dayjs(dayjs().endOf('month')).format(this.dateFormat),
+            startDate: dayjs(from ?? dayjs().startOf('month')).format(this.dateFormat),
+            endDate: dayjs(to ?? dayjs().endOf('month')).format(this.dateFormat),
             dsid: this.dsid,
             lang: 'en-us',
             usertz: this.tz,
         });
-
         return response.Collection || [];
+    }
+
+    async startup(from?: Date, to?: Date): Promise<iCloudCalendarStartupResponse> {
+        return this.fetchEndpoint<iCloudCalendarStartupResponse>('/startup', {
+            startDate: dayjs(from ?? dayjs().startOf('month')).format(this.dateFormat),
+            endDate: dayjs(to ?? dayjs().endOf('month')).format(this.dateFormat),
+            dsid: this.dsid,
+            lang: 'en-us',
+            usertz: this.tz,
+        });
     }
 }
 export type {

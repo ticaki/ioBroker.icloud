@@ -49,47 +49,77 @@ class iCloudCalendarService {
     this.dsid = this.service.accountInfo.dsInfo.dsid;
     this.calendarServiceUri = `${service.accountInfo.webservices.calendar.url}/ca`;
   }
-  async fetchEndpoint(endpointUrl, params) {
+  async fetchEndpoint(endpointUrl, params, retry = true) {
     const url = new URL(`${this.calendarServiceUri}${endpointUrl}`);
-    url.search = new URLSearchParams({ ...params, clientVersion: "5.1" }).toString();
+    url.search = new URLSearchParams(params).toString();
+    this.service._log(0, `[calendar] GET ${url.toString()}`);
+    const { "Content-Type": _ct, ...getHeaders } = this.service.authStore.getHeaders();
     const response = await this.service.fetch(url, {
       headers: {
-        ...this.service.authStore.getHeaders(),
+        ...getHeaders,
         Referer: "https://www.icloud.com/"
       }
     });
-    return await response.json();
+    const text = await response.text();
+    if (!text || !text.trim()) {
+      this.service._log(
+        0,
+        `[calendar] Empty response from ${endpointUrl} (HTTP ${response.status}) \u2014 skipping`
+      );
+      if (response.status === 401 && retry) {
+        await this.service.authenticateWebService("calendar");
+        return this.fetchEndpoint(endpointUrl, params, false);
+      }
+      return {};
+    }
+    const json = JSON.parse(text);
+    if ((json == null ? void 0 : json.error) === 1 && typeof (json == null ? void 0 : json.reason) === "string" && json.reason.includes("X-APPLE-WEBAUTH-TOKEN")) {
+      if (retry) {
+        this.service._log(
+          0,
+          "[calendar] Missing X-APPLE-WEBAUTH-TOKEN \u2014 re-authenticating for calendar service"
+        );
+        await this.service.authenticateWebService("calendar");
+        return this.fetchEndpoint(endpointUrl, params, false);
+      }
+      throw new Error(`Calendar authentication failed: ${json.reason}`);
+    }
+    return json;
   }
   async eventDetails(calendarGuid, eventGuid) {
-    const response = await this.fetchEndpoint(
-      `/eventdetail/${calendarGuid}/${eventGuid}`,
-      {
-        lang: "en-us",
-        usertz: this.tz,
-        dsid: this.dsid
-      }
-    );
-    return response.Event[0];
+    return this.fetchEndpoint(`/eventdetail/${calendarGuid}/${eventGuid}`, {
+      lang: "en-us",
+      usertz: this.tz,
+      dsid: this.dsid
+    });
   }
   async events(from, to) {
-    const response = await this.fetchEndpoint("/events", {
+    return this.fetchEndpoint("/events", {
       startDate: (0, import_dayjs.default)(from != null ? from : (0, import_dayjs.default)().startOf("month")).format(this.dateFormat),
       endDate: (0, import_dayjs.default)(to != null ? to : (0, import_dayjs.default)().endOf("month")).format(this.dateFormat),
       dsid: this.dsid,
       lang: "en-us",
       usertz: this.tz
     });
-    return response.Event || [];
   }
-  async calendars() {
+  async calendars(from, to) {
     const response = await this.fetchEndpoint("/startup", {
-      startDate: (0, import_dayjs.default)((0, import_dayjs.default)().startOf("month")).format(this.dateFormat),
-      endDate: (0, import_dayjs.default)((0, import_dayjs.default)().endOf("month")).format(this.dateFormat),
+      startDate: (0, import_dayjs.default)(from != null ? from : (0, import_dayjs.default)().startOf("month")).format(this.dateFormat),
+      endDate: (0, import_dayjs.default)(to != null ? to : (0, import_dayjs.default)().endOf("month")).format(this.dateFormat),
       dsid: this.dsid,
       lang: "en-us",
       usertz: this.tz
     });
     return response.Collection || [];
+  }
+  async startup(from, to) {
+    return this.fetchEndpoint("/startup", {
+      startDate: (0, import_dayjs.default)(from != null ? from : (0, import_dayjs.default)().startOf("month")).format(this.dateFormat),
+      endDate: (0, import_dayjs.default)(to != null ? to : (0, import_dayjs.default)().endOf("month")).format(this.dateFormat),
+      dsid: this.dsid,
+      lang: "en-us",
+      usertz: this.tz
+    });
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

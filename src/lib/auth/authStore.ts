@@ -269,6 +269,31 @@ export class iCloudAuthenticationStore {
     // ── Response processors ────────────────────────────────────────────────────
 
     /**
+     * Delete persisted session + cookie files and clear all in-memory tokens.
+     * Call this to force a full re-authentication on the next authenticate() call.
+     *
+     * @param account
+     */
+    clearPersistedSession(account: string): void {
+        this.sessionToken = undefined;
+        this.trustToken = undefined;
+        this.scnt = undefined;
+        this.sessionId = undefined;
+        this.accountCountry = undefined;
+        try {
+            fs.unlinkSync(this._sessionPath(account));
+        } catch {
+            /* file may not exist */
+        }
+        try {
+            fs.unlinkSync(this._jarPath(account));
+        } catch {
+            /* file may not exist */
+        }
+        this._log(LogLevel.Debug, '[authStore] Persisted session + cookies cleared');
+    }
+
+    /**
      * Process a sign-in response: extract session headers.
      * Cookies are handled automatically by fetch-cookie (stored in cookieJar).
      *

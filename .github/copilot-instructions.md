@@ -1,5 +1,17 @@
 # Copilot Instructions — ioBroker.icloud
 
+## Code quality — mandatory after every change
+
+After **every** code change, run both checks and fix all reported errors before finishing:
+
+```bash
+npm run build
+npm run lint
+```
+
+- `npm run build` — TypeScript compilation; no output errors allowed
+- `npm run lint` — ESLint + Prettier; no errors allowed (warnings are acceptable)
+
 ## Project structure
 
 - `src/main.ts` — ioBroker adapter entry point (all adapter logic lives here)

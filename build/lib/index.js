@@ -110,6 +110,14 @@ class iCloudService extends import_events.default {
   ICDRSDisabled;
   accountInfo;
   /**
+   * Parsed trusted phone number from GET /appleauth/auth.
+   * Populated during the MFA challenge phase and used by requestSmsMfaCode / provideMfaCode.
+   * Mirrors pyiCloud's TrustedPhoneNumber dataclass.
+   */
+  _trustedPhone;
+  /** Set after requestSmsMfaCode() — routes provideMfaCode to /verify/phone/securitycode */
+  _smsPhoneNumberId;
+  /**
    * A promise that can be awaited that resolves when the iCloudService is ready.
    * Will reject if an error occurs during authentication.
    */
@@ -160,7 +168,7 @@ class iCloudService extends import_events.default {
    * @param password The password to use instead of the one provided in this iCloudService's options
    */
   async authenticate(username, password) {
-    var _a;
+    var _a, _b, _c, _d, _e;
     username = username || this.options.username;
     password = password || this.options.password;
     if (!username) {
@@ -329,10 +337,15 @@ class iCloudService extends import_events.default {
             };
             this._log(
               LogLevel.Debug,
-              "[auth] POST",
-              import_consts.SETUP_ENDPOINT,
-              "(accountLogin after 409 \u2014 triggers MFA push and may complete auth)"
+              "[auth] accountLogin body:",
+              JSON.stringify({
+                accountCountryCode: setupData.accountCountryCode,
+                dsWebAuthToken: setupData.dsWebAuthToken ? "(set)" : "(missing!)",
+                extended_login: setupData.extended_login,
+                trustToken: setupData.trustToken ? "(set)" : "(empty)"
+              })
             );
+            this._log(LogLevel.Debug, "[auth] POST", import_consts.SETUP_ENDPOINT, "(accountLogin)");
             const setupResp = await this.fetch(import_consts.SETUP_ENDPOINT, {
               headers: import_consts.DEFAULT_HEADERS,
               method: "POST",
@@ -343,9 +356,17 @@ class iCloudService extends import_events.default {
             this.authStore.saveSession(this.options.username);
             this._log(LogLevel.Debug, "[auth] accountLogin (post-409) status:", setupResp.status);
             if (setupResp.status === 200) {
-              accountLoginOk = true;
               try {
-                this.accountInfo = await setupResp.json();
+                const data = await setupResp.json();
+                this.accountInfo = data;
+                const requiresMfa = ((_c = (_b = data == null ? void 0 : data.dsInfo) == null ? void 0 : _b.hsaVersion) != null ? _c : 0) >= 2 && ((data == null ? void 0 : data.hsaChallengeRequired) === true || (data == null ? void 0 : data.hsaTrustedBrowser) === false);
+                this._log(
+                  LogLevel.Debug,
+                  `[auth] accountLogin 200 \u2014 hsaTrustedBrowser=${data == null ? void 0 : data.hsaTrustedBrowser}, hsaChallengeRequired=${data == null ? void 0 : data.hsaChallengeRequired}, requiresMfa=${requiresMfa}`
+                );
+                if (!requiresMfa) {
+                  accountLoginOk = true;
+                }
               } catch {
               }
             } else {
@@ -367,6 +388,48 @@ class iCloudService extends import_events.default {
             this.authStore.saveSession(this.options.username);
             this._setState("Ready" /* Ready */);
           } else {
+            try {
+              this._log(LogLevel.Debug, "[auth] GET /appleauth/auth \u2014 fetching auth options");
+              const authResp = await this.fetch(import_consts.AUTH_ENDPOINT.replace(/\/$/, ""), {
+                headers: this.authStore.getMfaHeaders()
+              });
+              const authRespText = await authResp.text();
+              this._log(
+                LogLevel.Debug,
+                `[auth] GET /appleauth/auth \u2192 ${authResp.status}: ${authRespText}`
+              );
+              try {
+                const authOptions = JSON.parse(authRespText);
+                const phoneData = (_e = authOptions == null ? void 0 : authOptions.trustedPhoneNumber) != null ? _e : (_d = authOptions == null ? void 0 : authOptions.trustedPhoneNumbers) == null ? void 0 : _d[0];
+                if ((phoneData == null ? void 0 : phoneData.id) !== void 0) {
+                  this._trustedPhone = {
+                    id: phoneData.id,
+                    nonFTEU: typeof phoneData.nonFTEU === "boolean" ? phoneData.nonFTEU : void 0,
+                    pushMode: typeof phoneData.pushMode === "string" ? phoneData.pushMode : void 0
+                  };
+                  this._log(
+                    LogLevel.Debug,
+                    `[auth] Trusted phone: id=${this._trustedPhone.id}, nonFTEU=${this._trustedPhone.nonFTEU}, pushMode=${this._trustedPhone.pushMode}`
+                  );
+                }
+              } catch {
+              }
+              this._log(
+                LogLevel.Debug,
+                "[auth] PUT /appleauth/auth/verify/trusteddevice \u2014 requesting device push"
+              );
+              const pushResp = await this.fetch(`${import_consts.AUTH_ENDPOINT}verify/trusteddevice`, {
+                headers: this.authStore.getMfaHeaders(),
+                method: "PUT"
+              });
+              const pushRespText = await pushResp.text();
+              this._log(
+                LogLevel.Debug,
+                `[auth] PUT verify/trusteddevice \u2192 ${pushResp.status}: ${pushRespText.slice(0, 300)}`
+              );
+            } catch (e) {
+              this._log(LogLevel.Debug, "[auth] auth challenge request failed (non-fatal):", String(e));
+            }
             this._setState("MfaRequested" /* MfaRequested */);
           }
         } else {
@@ -391,11 +454,39 @@ class iCloudService extends import_events.default {
     }
   }
   /**
+   * Request Apple to send a 2FA code via SMS to the trusted phone number.
+   * Use this when no push notification arrives on trusted devices.
+   * phoneNumberId defaults to 1 (the first trusted phone number).
+   *
+   * @param phoneNumberId
+   */
+  async requestSmsMfaCode(phoneNumberId) {
+    var _a, _b, _c;
+    const id = (_b = phoneNumberId != null ? phoneNumberId : (_a = this._trustedPhone) == null ? void 0 : _a.id) != null ? _b : 1;
+    const phonePayload = { id };
+    if (((_c = this._trustedPhone) == null ? void 0 : _c.nonFTEU) !== void 0) {
+      phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
+    }
+    this._log(LogLevel.Debug, `[auth] PUT /appleauth/auth/verify/phone \u2014 requesting SMS code to phone id ${id}`);
+    const resp = await this.fetch(`${import_consts.AUTH_ENDPOINT}verify/phone`, {
+      headers: this.authStore.getMfaHeaders(),
+      method: "PUT",
+      body: JSON.stringify({ phoneNumber: phonePayload, mode: "sms" })
+    });
+    const text = await resp.text();
+    this._log(LogLevel.Debug, `[auth] SMS request \u2192 ${resp.status}: ${text.slice(0, 200)}`);
+    if (!resp.ok) {
+      throw new Error(`SMS request failed (${resp.status}): ${text.slice(0, 200)}`);
+    }
+    this._smsPhoneNumberId = id;
+  }
+  /**
    * Call this to provide the MFA code that was sent to the user's devices.
    *
    * @param code The six digit MFA code.
    */
   async provideMfaCode(code) {
+    var _a, _b, _c;
     if (typeof code !== "string") {
       throw new TypeError(`provideMfaCode(code: string): 'code' was ${code.toString()}`);
     }
@@ -406,13 +497,33 @@ class iCloudService extends import_events.default {
     if (!this.authStore.validateAuthSecrets()) {
       throw new Error("Cannot provide MFA code without calling authenticate first!");
     }
-    const authData = { securityCode: { code } };
-    const authResponse = await this.fetch(`${import_consts.AUTH_ENDPOINT}verify/trusteddevice/securitycode`, {
-      headers: this.authStore.getMfaHeaders(),
-      method: "POST",
-      body: JSON.stringify(authData)
-    });
-    if (authResponse.status == 204) {
+    let authResponse;
+    if (this._smsPhoneNumberId !== void 0) {
+      const phoneId = this._smsPhoneNumberId;
+      const mode = (_b = (_a = this._trustedPhone) == null ? void 0 : _a.pushMode) != null ? _b : "sms";
+      const phonePayload = { id: phoneId };
+      if (((_c = this._trustedPhone) == null ? void 0 : _c.nonFTEU) !== void 0) {
+        phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
+      }
+      this._log(
+        LogLevel.Debug,
+        `[auth] POST /verify/phone/securitycode (SMS, phone id ${phoneId}, mode ${mode})`
+      );
+      authResponse = await this.fetch(`${import_consts.AUTH_ENDPOINT}verify/phone/securitycode`, {
+        headers: this.authStore.getMfaHeaders(),
+        method: "POST",
+        body: JSON.stringify({ phoneNumber: phonePayload, securityCode: { code }, mode })
+      });
+    } else {
+      this._log(LogLevel.Debug, "[auth] POST /verify/trusteddevice/securitycode (device push)");
+      authResponse = await this.fetch(`${import_consts.AUTH_ENDPOINT}verify/trusteddevice/securitycode`, {
+        headers: this.authStore.getMfaHeaders(),
+        method: "POST",
+        body: JSON.stringify({ securityCode: { code } })
+      });
+    }
+    this._smsPhoneNumberId = void 0;
+    if (authResponse.status === 204 || authResponse.status === 200) {
       this._setState("Authenticated" /* Authenticated */);
       if (this.options.trustDevice) {
         void this._getTrustToken().then(this._getiCloudCookies.bind(this));
@@ -640,6 +751,50 @@ class iCloudService extends import_events.default {
       return false;
     } catch {
       return false;
+    }
+  }
+  /**
+   * Authenticate for a specific web service by calling accountLogin with appName + credentials.
+   * Mirrors pyicloud's _authenticate_with_credentials_service(service).
+   * Sets the service-specific X-APPLE-WEBAUTH-* cookie (e.g. X-APPLE-WEBAUTH-TOKEN for calendar).
+   *
+   * @param appName - Apple webservice app name (e.g. 'calendar', 'contacts', 'reminders')
+   */
+  async authenticateWebService(appName) {
+    const data = {
+      appName,
+      apple_id: this.options.username,
+      password: this.options.password
+    };
+    this._log(LogLevel.Debug, `[auth] authenticateWebService "${appName}" \u2192 POST`, import_consts.SETUP_ENDPOINT);
+    const response = await this.fetch(import_consts.SETUP_ENDPOINT, {
+      headers: import_consts.DEFAULT_HEADERS,
+      method: "POST",
+      body: JSON.stringify(data)
+    });
+    this._log(LogLevel.Debug, `[auth] authenticateWebService "${appName}" response status:`, response.status);
+    if (response.status === 421 || response.status === 450) {
+      try {
+        await response.text();
+      } catch {
+      }
+      throw new Error(`WEBSERVICE_REAUTH_REQUIRED:${appName}`);
+    }
+    if (response.ok) {
+      this.authStore.processCloudSetupResponse(response, this.options.username);
+    }
+    try {
+      await response.text();
+    } catch {
+    }
+  }
+  /**
+   * Clear all persisted session + cookie files and in-memory tokens.
+   * Forces a full re-authentication (including 2FA) on the next authenticate() call.
+   */
+  invalidatePersistedAuth() {
+    if (this.options.username) {
+      this.authStore.clearPersistedSession(this.options.username);
     }
   }
   _storage;

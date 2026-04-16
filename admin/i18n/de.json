@@ -11,5 +11,11 @@
 	"findMyHeader": "FindMy",
 	"findMyEnabled": "FindMy aktivieren",
 	"findMyInterval": "Aktualisierungsintervall (Minuten)",
-	"findMyIntervalHelp": "Wie oft FindMy-Geräte abgefragt werden (1–120 Minuten)"
+	"findMyIntervalHelp": "Wie oft FindMy-Geräte abgefragt werden (1–120 Minuten)",
+	"calendarHeader": "Kalender",
+	"calendarEnabled": "Kalender aktivieren",
+	"calendarEventCount": "Anzahl zukünftiger Ereignisse",
+	"calendarEventCountHelp": "Anzahl der zukünftigen Termine, die pro Kalender abgerufen werden (1–50)",
+	"calendarInterval": "Aktualisierungsintervall (Minuten)",
+	"calendarIntervalHelp": "Wie oft Kalenderereignisse abgefragt werden (5–1440 Minuten)"
 }
