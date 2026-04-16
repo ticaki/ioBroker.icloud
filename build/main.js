@@ -333,7 +333,7 @@ class Icloud extends utils.Adapter {
     });
     this.icloud.on("MfaRequested", () => {
       var _a2, _b;
-      this.log.info("MFA required \u2014 enter the 6-digit Apple code into state mfa.code");
+      this.log.warn("MFA required \u2014 enter the 6-digit Apple code into state mfa.code");
       this.log.debug(`iCloud status is now: ${(_b = (_a2 = this.icloud) == null ? void 0 : _a2.status) != null ? _b : "unknown"}`);
       void this.setState("mfa.required", true, true);
       void this.setState("info.connection", false, true);

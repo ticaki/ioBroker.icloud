@@ -15,46 +15,33 @@
         "pl": "początkowe zwolnienie",
         "uk": "початковий реліз",
         "zh-cn": "初步释放"
-      },
-      "0.0.1": {
-        "en": "initial release",
-        "de": "Erstveröffentlichung",
-        "ru": "Начальная версия",
-        "pt": "lançamento inicial",
-        "nl": "Eerste uitgave",
-        "fr": "Première version",
-        "it": "Versione iniziale",
-        "es": "Versión inicial",
-        "pl": "Pierwsze wydanie",
-        "uk": "Початкова версія",
-        "zh-cn": "首次出版"
       }
     },
     "titleLang": {
-      "en": "icloud",
-      "de": "icloud",
-      "ru": "айклауд",
+      "en": "iCloud",
+      "de": "iCloud",
+      "ru": "iCloud",
       "pt": "iCloud",
-      "nl": "icloud",
+      "nl": "iCloud",
       "fr": "iCloud",
-      "it": "icloud",
-      "es": "nube",
-      "pl": "icloud",
-      "uk": "icloud",
-      "zh-cn": "云"
+      "it": "iCloud",
+      "es": "iCloud",
+      "pl": "iCloud",
+      "uk": "iCloud",
+      "zh-cn": "iCloud"
     },
     "desc": {
-      "en": "Access to icloud",
+      "en": "Access to iCloud",
       "de": "Zugriff auf iCloud",
-      "ru": "Доступ к Айклауду",
+      "ru": "Доступ к iCloud",
       "pt": "Acesso ao iCloud",
-      "nl": "Toegang tot icloud",
+      "nl": "Toegang tot iCloud",
       "fr": "Accès à iCloud",
-      "it": "Accesso a icloud",
-      "es": "acceso a icloud",
-      "pl": "Dostęp do iclouda",
-      "uk": "Доступ до icloud",
-      "zh-cn": "访问 icloud"
+      "it": "Accesso a iCloud",
+      "es": "Acceso a iCloud",
+      "pl": "Dostęp do iCloud",
+      "uk": "Доступ до iCloud",
+      "zh-cn": "访问 iCloud"
     },
     "authors": [
       "ticaki <github@renopoint.de>"
