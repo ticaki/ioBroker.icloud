@@ -171,6 +171,7 @@ class Icloud extends utils.Adapter {
     /** Maps Apple device API id → 6-digit zero-padded folder id (e.g. '000001') */
     private findMyIdMap: Map<string, string> = new Map();
     private calendarRefreshTimer: ioBroker.Timeout | null | undefined = null;
+    private accountStorageRefreshTimer: ioBroker.Timeout | null | undefined = null;
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({
@@ -258,6 +259,52 @@ class Icloud extends utils.Adapter {
                 write: true,
                 def: false,
             },
+            native: {},
+        });
+
+        // account.storage channel + states
+        await this.extendObject('account.storage', {
+            type: 'channel',
+            common: { name: 'Storage' },
+            native: {},
+        });
+        const STORAGE_STATES: Array<{
+            id: string;
+            name: string;
+            type: ioBroker.CommonType;
+            role: string;
+            unit?: string;
+        }> = [
+            { id: 'usedMB', name: 'Used Storage', type: 'number', role: 'value', unit: 'MB' },
+            { id: 'totalMB', name: 'Total Storage', type: 'number', role: 'value', unit: 'MB' },
+            { id: 'availableMB', name: 'Available Storage', type: 'number', role: 'value', unit: 'MB' },
+            { id: 'usedPercent', name: 'Used Percent', type: 'number', role: 'value', unit: '%' },
+            { id: 'overQuota', name: 'Over Quota', type: 'boolean', role: 'indicator.alarm' },
+            { id: 'almostFull', name: 'Almost Full', type: 'boolean', role: 'indicator.alarm' },
+            { id: 'paidQuota', name: 'Paid Quota', type: 'boolean', role: 'indicator' },
+        ];
+        for (const s of STORAGE_STATES) {
+            await this.extendObject(`account.storage.${s.id}`, {
+                type: 'state',
+                common: {
+                    name: s.name,
+                    type: s.type,
+                    role: s.role,
+                    read: true,
+                    write: false,
+                    ...(s.unit ? { unit: s.unit } : {}),
+                },
+                native: {},
+            });
+        }
+        await this.extendObject('account.storage.byMedia', {
+            type: 'channel',
+            common: { name: 'Storage by Media Type' },
+            native: {},
+        });
+        await this.extendObject('account.storage.family', {
+            type: 'channel',
+            common: { name: 'Family Storage' },
             native: {},
         });
     }
@@ -465,6 +512,12 @@ class Icloud extends utils.Adapter {
             this.scheduleCalendarRefresh();
         }
 
+        // ── Account Storage ───────────────────────────────────────────────────
+        if (this.config.accountStorageEnabled) {
+            await this.refreshAccountStorage();
+            this.scheduleAccountStorageRefresh();
+        }
+
         // ── Done: mark connection as established ──────────────────────────────
         this.log.info('iCloud connection established successfully');
         await this.setState('info.connection', true, true);
@@ -479,14 +532,14 @@ class Icloud extends utils.Adapter {
      */
     private async resolveLocationPoints(): Promise<Array<{ index: string; lat: number; lon: number; name: string }>> {
         const pts = (this.config.locationPoints ?? []).filter(
-            p => p.index?.trim() && !isNaN(Number(p.latitude)) && !isNaN(Number(p.longitude)),
+            p => String(p.index)?.trim() && !isNaN(Number(p.latitude)) && !isNaN(Number(p.longitude)),
         );
         if (pts.length > 0) {
             return pts.map(p => ({
-                index: p.index.trim(),
+                index: String(p.index).trim(),
                 lat: Number(p.latitude),
                 lon: Number(p.longitude),
-                name: p.name?.trim() || p.index.trim(),
+                name: p.name?.trim() || String(p.index).trim(),
             }));
         }
         // fallback: system.config
@@ -519,8 +572,10 @@ class Icloud extends utils.Adapter {
         }
         try {
             const findMe = this.icloud.getService('findme');
+            this.log.debug('FindMy: calling API refresh...');
             await findMe.refresh();
             const devices = findMe.devices;
+            this.log.debug(`FindMy: API returned ${devices.size} device(s)`);
 
             const regularDevices: iCloudFindMyDeviceInfo[] = [];
             const accessories: iCloudFindMyDeviceInfo[] = [];
@@ -672,6 +727,7 @@ class Icloud extends utils.Adapter {
                     }
                 }
             }
+            this.log.debug(`FindMy: refresh done — ${allDevices.length} device(s) written`);
         } catch (err) {
             this.log.warn(`FindMy refresh failed: ${(err as Error)?.message ?? String(err)}`);
         }
@@ -816,14 +872,6 @@ class Icloud extends utils.Adapter {
             const collections = startupResp.Collection ?? [];
             const events = startupResp.Event ?? [];
             const maxCount = Math.max(1, Math.floor(this.config.calendarEventCount ?? 10));
-
-            // Log first collection + first event for type inspection
-            if (collections.length > 0) {
-                this.log.debug(`[Calendar] first collection: ${JSON.stringify(collections[0])}`);
-            }
-            if (events.length > 0) {
-                this.log.debug(`[Calendar] first event: ${JSON.stringify(events[0])}`);
-            }
 
             // Group events by pGuid (calendar guid), skip already-ended events
             const eventsByCalendar = new Map<string, typeof events>();
@@ -1082,6 +1130,136 @@ class Icloud extends utils.Adapter {
         this.log.debug(`Calendar refresh scheduled every ${intervalMin} min`);
     }
 
+    // ── Account Storage helpers ───────────────────────────────────────────────
+
+    private async refreshAccountStorage(): Promise<void> {
+        if (!this.icloud) {
+            return;
+        }
+        try {
+            const storage = await this.icloud.getStorageUsage(true);
+            const info = storage.storageUsageInfo;
+            const quota = storage.quotaStatus;
+
+            const used = info.usedStorageInBytes ?? 0;
+            const total = info.totalStorageInBytes ?? 0;
+            const available = total - used;
+            const usedPercent = total > 0 ? Math.round((used / total) * 1000) / 10 : 0;
+
+            const toMB = (bytes: number): number => Math.round(bytes / 1024 / 1024);
+
+            await this.setState('account.storage.usedMB', toMB(used), true);
+            await this.setState('account.storage.totalMB', toMB(total), true);
+            await this.setState('account.storage.availableMB', toMB(available), true);
+            await this.setState('account.storage.usedPercent', usedPercent, true);
+            await this.setState('account.storage.overQuota', quota.overQuota ?? false, true);
+            await this.setState('account.storage.almostFull', quota['almost-full'] ?? false, true);
+            await this.setState('account.storage.paidQuota', quota.paidQuota ?? false, true);
+
+            for (const media of storage.storageUsageByMedia ?? []) {
+                const rawKey = media.mediaKey ?? '';
+                if (!rawKey) {
+                    continue;
+                }
+                const mediaStateId = rawKey.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                await this.extendObject(`account.storage.byMedia.${mediaStateId}`, {
+                    type: 'state',
+                    common: {
+                        name: media.displayLabel ?? rawKey,
+                        type: 'number',
+                        role: 'value',
+                        unit: 'MB',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                await this.setState(
+                    `account.storage.byMedia.${mediaStateId}`,
+                    media.usageInBytes != null ? toMB(media.usageInBytes) : null,
+                    true,
+                );
+            }
+
+            // family storage
+            const fam = storage.familyStorageUsageInfo;
+            if (fam) {
+                await this.extendObject('account.storage.family.totalMB', {
+                    type: 'state',
+                    common: {
+                        name: 'Family Total Storage',
+                        type: 'number',
+                        role: 'value',
+                        unit: 'MB',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                await this.setState('account.storage.family.totalMB', toMB(fam.usageInBytes ?? 0), true);
+
+                for (const member of fam.familyMembers ?? []) {
+                    const memberId = (member.id ?? member.dsid?.toString() ?? '').replace(/[^a-z0-9]/gi, '_');
+                    if (!memberId) {
+                        continue;
+                    }
+                    await this.extendObject(`account.storage.family.${memberId}`, {
+                        type: 'state',
+                        common: {
+                            name: member.fullName ?? member.appleId ?? memberId,
+                            type: 'number',
+                            role: 'value',
+                            unit: 'MB',
+                            read: true,
+                            write: false,
+                        },
+                        native: {},
+                    });
+                    await this.setState(
+                        `account.storage.family.${memberId}`,
+                        member.usageInBytes != null ? toMB(member.usageInBytes) : null,
+                        true,
+                    );
+                }
+            }
+
+            this.log.debug(`Account storage: ${toMB(used)} / ${toMB(total)} MB (${usedPercent}%)`);
+        } catch (err) {
+            this.log.warn(`Account storage refresh failed: ${(err as Error)?.message ?? String(err)}`);
+        }
+    }
+
+    private scheduleAccountStorageRefresh(): void {
+        if (this.accountStorageRefreshTimer) {
+            this.clearTimeout(this.accountStorageRefreshTimer);
+            this.accountStorageRefreshTimer = null;
+        }
+        let intervalMin = Math.floor(this.config.accountStorageInterval ?? 60);
+        if (!Number.isFinite(intervalMin) || intervalMin < 30) {
+            this.log.warn(
+                `Account storage interval is ${this.config.accountStorageInterval} — value below 30 minutes, falling back to 60 minutes`,
+            );
+            intervalMin = 60;
+        } else if (intervalMin > 1440) {
+            this.log.warn(`Account storage interval is ${intervalMin} minutes — clamping to 1440 minutes`);
+            intervalMin = 1440;
+        }
+        const INTERVAL_MS = intervalMin * 60 * 1000;
+        const schedule = (): void => {
+            this.accountStorageRefreshTimer = this.setTimeout(async () => {
+                this.accountStorageRefreshTimer = null;
+                if (!this.icloud) {
+                    return;
+                }
+                this.log.debug('Account storage scheduled refresh starting...');
+                await this.refreshAccountStorage();
+                schedule();
+            }, INTERVAL_MS);
+        };
+        schedule();
+        this.log.debug(`Account storage refresh scheduled every ${intervalMin} min`);
+    }
+
     /**
      * Is called when adapter shuts down - callback has to be called under any circumstances!
      *
@@ -1096,6 +1274,10 @@ class Icloud extends utils.Adapter {
             if (this.calendarRefreshTimer) {
                 this.clearTimeout(this.calendarRefreshTimer);
                 this.calendarRefreshTimer = null;
+            }
+            if (this.accountStorageRefreshTimer) {
+                this.clearTimeout(this.accountStorageRefreshTimer);
+                this.accountStorageRefreshTimer = null;
             }
             if (this.icloud) {
                 this.icloud.removeAllListeners();

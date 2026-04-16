@@ -15,5 +15,9 @@
 	"calendarEventCount": "Number of upcoming events",
 	"calendarEventCountHelp": "Number of future events to fetch per calendar (1–50)",
 	"calendarInterval": "Refresh interval (minutes)",
-	"calendarIntervalHelp": "How often calendar events are fetched (5–1440 minutes)"
+	"calendarIntervalHelp": "How often calendar events are fetched (5–1440 minutes)",
+	"accountHeader": "Compte",
+	"accountStorageEnabled": "Récupérer les infos de stockage",
+	"accountStorageInterval": "Intervalle de mise à jour (minutes)",
+	"accountStorageIntervalHelp": "Fréquence de récupération de l'utilisation du stockage (30–1440 minutes)"
 }

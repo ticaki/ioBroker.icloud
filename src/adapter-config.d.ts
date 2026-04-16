@@ -4,7 +4,7 @@
 declare global {
 	namespace ioBroker {
 		interface LocationPoint {
-			index: string;
+			index: string | number;
 			latitude: number;
 			longitude: number;
 			name: string;
@@ -18,6 +18,8 @@ declare global {
 			calendarEnabled: boolean;
 			calendarEventCount: number;
 			calendarInterval: number;
+			accountStorageEnabled: boolean;
+			accountStorageInterval: number;
 		}
 	}
 }

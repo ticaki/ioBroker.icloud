@@ -22,12 +22,6 @@
             "lg": 6,
             "xl": 6
         },
-        "_coordHeader": {
-            "type": "header",
-            "text": "locationPointsHeader",
-            "size": 5,
-            "newLine": true
-        },
         "_findMyHeader": {
             "type": "header",
             "text": "findMyHeader",
@@ -73,23 +67,26 @@
             "xl": 12,
             "items": [
                 {
-                    "type": "text",
+                    "type": "number",
                     "label": "locationPointIndex",
-                    "width": "15%",
-                    "attr": "index"
+                    "attr": "index",
+                    "min": 0,
+                    "max": 100000000000000,
+                    "step": 1,
+                    "validator": "const x={};for (const c of globalData.locationPoints) {if (x[c.index]==='x') return false; x[c.index]='x';}; return !isNaN(data.index);",
+                    "validatorNoSaveOnError": true
+                        
                 },
                 {
                     "type": "coordinates",
                     "label": "locationPointCoordinates",
                     "longitudeName": "longitude",
                     "latitudeName": "latitude",
-                    "width": "55%",
                     "attr": "coordinates"
                 },
                 {
                     "type": "text",
                     "label": "locationPointName",
-                    "width": "30%",
                     "attr": "name"
                 }
             ],
@@ -144,6 +141,39 @@
             "step": 1,
             "default": 60,
             "disabled": "!data.calendarEnabled"
+        },
+        "_accountHeader": {
+            "type": "header",
+            "text": "accountHeader",
+            "size": 5,
+            "newLine": true
+        },
+        "accountStorageEnabled": {
+            "type": "checkbox",
+            "label": "accountStorageEnabled",
+            "newLine": true,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "default": false
+        },
+        "accountStorageInterval": {
+            "type": "number",
+            "label": "accountStorageInterval",
+            "help": "accountStorageIntervalHelp",
+            "newLine": false,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "min": 30,
+            "max": 1440,
+            "step": 1,
+            "default": 60,
+            "disabled": "!data.accountStorageEnabled"
         }
     }
 }
