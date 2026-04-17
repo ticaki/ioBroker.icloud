@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.2.0-alpha.0",
+    "version": "0.2.0",
     "news": {
+      "0.2.0": {
+        "en": "iCloud Drive integration: browse folders, upload/download files, create folders, delete and rename items via sendTo()\nAdded Blockly blocks for uploading and downloading iCloud Drive files\nDrive root metadata exposed as states (drive.name, drive.fileCount, drive.rootItems, etc.)",
+        "de": "iCloud Drive-Integration: Ordner durchsuchen, Dateien hochladen/herunterladen, Ordner erstellen, Elemente löschen und umbenennen via sendTo()\nBlockly-Blöcke zum Hochladen und Herunterladen von iCloud Drive-Dateien hinzugefügt\nDrive-Root-Metadaten als Datenpunkte verfügbar (drive.name, drive.fileCount, drive.rootItems, etc.)",
+        "ru": "Интеграция iCloud Drive: просмотр папок, загрузка/скачивание файлов, создание папок, удаление и переименование элементов через sendTo()\nДобавлены блоки Blockly для загрузки и скачивания файлов iCloud Drive\nМетаданные корневого каталога Drive, доступные как состояния (drive.name, drive.fileCount, drive.rootItems и т.д.)",
+        "pt": "Integração do iCloud Drive: navegue por pastas, upload/download de arquivos, crie pastas, apague e renomeie itens via sendTo()\nAdicionados blocos Blockly para carregar e baixar arquivos do iCloud Drive\nMetadados raiz do Drive expostos como estados (drive.name, drive.fileCount, drive.rootItems, etc.)",
+        "nl": "iCloud Drive-integratie: blader door mappen, upload/download bestanden, maak mappen, verwijder en hernoem items via sendTo()\nBlockly-blokken toegevoegd voor het uploaden en downloaden van iCloud Drive-bestanden\nDrive-root-metadata beschikbaar als staten (drive.name, drive.fileCount, drive.rootItems, etc.)",
+        "fr": "Intégration iCloud Drive : parcourir les dossiers, charger/télécharger des fichiers, créer des dossiers, supprimer et renommer des éléments via sendTo()\nAjout de blocs Blockly pour le chargement et le téléchargement de fichiers iCloud Drive\nMétadonnées racine du Drive exposées comme états (drive.name, drive.fileCount, drive.rootItems, etc.)",
+        "it": "Integrazione iCloud Drive: sfogliare cartelle, caricare/scaricare file, creare cartelle, eliminare e rinominare gli elementi tramite sendTo()\nAggiunti blocchi Blockly per il caricamento e il download dei file iCloud Drive\nMetadati root del Drive esposti come stati (drive.name, drive.fileCount, drive.rootItems, ecc.)",
+        "es": "Integración de iCloud Drive: navegar por carpetas, subir/descargar archivos, crear carpetas, eliminar y cambiar el nombre de elementos mediante sendTo()\nBloques de Blockly añadidos para subir y descargar archivos de iCloud Drive\nMetadatos raíz del Drive expuestos como estados (drive.name, drive.fileCount, drive.rootItems, etc.)",
+        "pl": "Integracja iCloud Drive: przeglądaj foldery, wysyłaj/pobieraj pliki, twórz foldery, usuwaj i zmieniaj nazwy elementów przez sendTo()\nDodano bloki Blockly do wysyłania i pobierania plików iCloud Drive\nMetadane root dysku udostępnione jako stany (drive.name, drive.fileCount, drive.rootItems itp.)",
+        "uk": "Інтеграція iCloud Drive: перегляд папок, завантаження/вивантаження файлів, створення папок, видалення та перейменування елементів через sendTo()\nДодано блоки Blockly для завантаження та вивантаження файлів iCloud Drive\nКореневі метадані Drive доступні як стани (drive.name, drive.fileCount, drive.rootItems тощо)",
+        "zh-cn": "iCloud Drive 集成：浏览文件夹、上传/下载文件、创建文件夹、通过 sendTo() 删除和重命名项目\n已添加 Blockly 块用于上传和下载 iCloud Drive 文件\nDrive 根目录元数据作为状态公开（drive.name、drive.fileCount、drive.rootItems 等）"
+      },
       "0.2.0-alpha.0": {
         "en": "iCloud Reminders are read and provided as data points (lists & reminders with due date, priority, and status)\nAdded Blockly sendTo blocks for creating, updating, completing, deleting, and querying iCloud Reminders",
         "de": "iCloud Reminders werden als Datenpunkte gelesen und bereitgestellt (Listen & Erinnerungen mit Fälligkeitsdatum, Priorität und Status)\nBlockly sendTo-Blöcke hinzugefügt für das Erstellen, Aktualisieren, Abschließen, Löschen und Abfragen von iCloud Reminders",

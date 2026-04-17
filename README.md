@@ -413,7 +413,7 @@ sendTo('icloud.0', 'driveRenameItem', {
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### 0.3.0-alpha.0 (2026-04-18)
+### 0.2.0 (2026-04-17)
 * (ticaki) iCloud Drive integration: browse folders, upload/download files, create folders, delete and rename items via sendTo()
 * (ticaki) Added Blockly blocks for uploading and downloading iCloud Drive files
 * (ticaki) Drive root metadata exposed as states (drive.name, drive.fileCount, drive.rootItems, etc.)
@@ -422,8 +422,6 @@ sendTo('icloud.0', 'driveRenameItem', {
 * (ticaki) iCloud Reminders are read and provided as data points (lists & reminders with due date, priority, and status)
 * (ticaki) Added Blockly sendTo blocks for creating, updating, completing, deleting, and querying iCloud Reminders
 
-### 0.1.0-alpha.0 (2026-04-16)
-* (ticaki) initial release
 
 ## License
 MIT License
