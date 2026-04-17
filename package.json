@@ -29,7 +29,7 @@
     "@iobroker/adapter-core": "^3.3.2",
     "dayjs": "^1.11.20",
     "fetch-cookie": "^3.2.0",
-    "tough-cookie": "^4.1.4"
+    "tough-cookie": "^6.0.1"
   },
   "optionalDependencies": {
     "keytar": "^7.9.0"
