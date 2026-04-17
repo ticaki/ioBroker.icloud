@@ -461,7 +461,7 @@ class iCloudService extends import_node_events.default {
    * Use this when no push notification arrives on trusted devices.
    * phoneNumberId defaults to 1 (the first trusted phone number).
    *
-   * @param phoneNumberId
+   * @param phoneNumberId - Optional phone number ID for SMS delivery. Defaults to 1 (first trusted phone).
    */
   async requestSmsMfaCode(phoneNumberId) {
     var _a, _b, _c;
@@ -621,8 +621,8 @@ class iCloudService extends import_node_events.default {
   /**
    * Requests PCS access to a specific service. Required to call before accessing any PCS protected services when iCloud Advanced Data Protection is enabled.
    *
-   * @remarks Should only be called when iCloudService.ICDRSDisabled is `false`, however this function will check for you, and immediately return as it's not required..
-   * @experimental
+   * Note: Should only be called when iCloudService.ICDRSDisabled is `false`, however this function will check for you, and immediately return as it's not required.
+   *
    * @param appName The service name to request access to.
    */
   async requestServiceAccess(appName) {
@@ -678,7 +678,8 @@ class iCloudService extends import_node_events.default {
    * A mapping of service names to their classes.
    * This is used by {@link iCloudService.getService} to return the correct service class.
    *
-   * @remarks You should **not** use this to instantiate services, use {@link iCloudService.getService} instead.
+   * Note: You should **not** use this to instantiate services, use {@link iCloudService.getService} instead.
+   *
    * @see {@link iCloudService.getService}
    */
   serviceConstructors = {
@@ -694,7 +695,7 @@ class iCloudService extends import_node_events.default {
    * Returns an instance of the specified service. Results are cached, so subsequent calls will return the same instance.
    *
    * @param service The service name to return an instance of. Must be one of the keys in {@link iCloudService.serviceConstructors}.
-   * @returns
+   * @returns The service instance for the specified service name.
    */
   getService(service) {
     var _a, _b, _c, _d;

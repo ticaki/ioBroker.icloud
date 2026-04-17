@@ -350,7 +350,7 @@ class iCloudRemindersService {
   /**
    * Restore in-memory state from a persisted syncMap.
    *
-   * @param map
+   * @param map - Persisted sync map containing lists, reminders and sync token.
    */
   loadSyncMap(map) {
     this._syncToken = map.syncToken || void 0;
@@ -543,14 +543,14 @@ class iCloudRemindersService {
    * Reference: timlaing/pyicloud RemindersWriteAPI.create
    *
    * @param options - reminder creation options
-   * @param options.listId
-   * @param options.title
-   * @param options.description
-   * @param options.completed
-   * @param options.dueDate
-   * @param options.priority
-   * @param options.flagged
-   * @param options.allDay
+   * @param options.listId - The ID of the reminder list to add the reminder to.
+   * @param options.title - The title of the reminder.
+   * @param options.description - Optional notes/description text.
+   * @param options.completed - Whether the reminder is already completed.
+   * @param options.dueDate - Due date as Unix timestamp (ms), or null/undefined for no due date.
+   * @param options.priority - Priority level: 0=none, 1=high, 5=medium, 9=low.
+   * @param options.flagged - Whether the reminder is flagged.
+   * @param options.allDay - Whether the due date is an all-day event.
    * @returns the created Reminder (after re-fetching from CloudKit)
    */
   async createReminder(options) {
@@ -764,7 +764,7 @@ class iCloudRemindersService {
   /**
    * Get a reminder by ID.
    *
-   * @param reminderId
+   * @param reminderId - The ID of the reminder to retrieve.
    */
   getReminder(reminderId) {
     return this.remindersById.get(reminderId);

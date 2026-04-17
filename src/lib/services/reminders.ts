@@ -270,8 +270,8 @@ function encodeCrdtDocument(text: string): string {
     /**
      * Build a CharID sub-message { replicaID, clock }.
      *
-     * @param replicaID
-     * @param clock
+     * @param replicaID - The replica identifier.
+     * @param clock - The logical clock value.
      */
     function charID(replicaID: number, clock: number): Buffer {
         return Buffer.concat([writeProtobufVarint(1, replicaID), writeProtobufVarint(2, clock)]);
@@ -353,8 +353,8 @@ function encodeCrdtDocument(text: string): string {
 /**
  * Encode a varint protobuf field (wire type 0).
  *
- * @param fieldNumber
- * @param value
+ * @param fieldNumber - The protobuf field number.
+ * @param value - The integer value to encode.
  */
 function writeProtobufVarint(fieldNumber: number, value: number): Buffer {
     const tag = (fieldNumber << 3) | 0;
@@ -379,8 +379,8 @@ function writeProtobufVarint(fieldNumber: number, value: number): Buffer {
 /**
  * Encode a length-delimited protobuf field (wire type 2).
  *
- * @param fieldNumber
- * @param data
+ * @param fieldNumber - The protobuf field number.
+ * @param data - The byte data to encode as the field value.
  */
 function writeProtobufField(fieldNumber: number, data: Buffer): Buffer {
     const tag = (fieldNumber << 3) | 2;
@@ -514,7 +514,7 @@ export class iCloudRemindersService {
     /**
      * Restore in-memory state from a persisted syncMap.
      *
-     * @param map
+     * @param map - Persisted sync map containing lists, reminders and sync token.
      */
     loadSyncMap(map: RemindersSyncMap): void {
         this._syncToken = map.syncToken || undefined;
@@ -728,14 +728,14 @@ export class iCloudRemindersService {
      * Reference: timlaing/pyicloud RemindersWriteAPI.create
      *
      * @param options - reminder creation options
-     * @param options.listId
-     * @param options.title
-     * @param options.description
-     * @param options.completed
-     * @param options.dueDate
-     * @param options.priority
-     * @param options.flagged
-     * @param options.allDay
+     * @param options.listId - The ID of the reminder list to add the reminder to.
+     * @param options.title - The title of the reminder.
+     * @param options.description - Optional notes/description text.
+     * @param options.completed - Whether the reminder is already completed.
+     * @param options.dueDate - Due date as Unix timestamp (ms), or null/undefined for no due date.
+     * @param options.priority - Priority level: 0=none, 1=high, 5=medium, 9=low.
+     * @param options.flagged - Whether the reminder is flagged.
+     * @param options.allDay - Whether the due date is an all-day event.
      * @returns the created Reminder (after re-fetching from CloudKit)
      */
     async createReminder(options: {
@@ -988,7 +988,7 @@ export class iCloudRemindersService {
     /**
      * Get a reminder by ID.
      *
-     * @param reminderId
+     * @param reminderId - The ID of the reminder to retrieve.
      */
     getReminder(reminderId: string): Reminder | undefined {
         return this.remindersById.get(reminderId);

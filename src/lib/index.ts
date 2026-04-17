@@ -614,7 +614,7 @@ export default class iCloudService extends EventEmitter {
      * Use this when no push notification arrives on trusted devices.
      * phoneNumberId defaults to 1 (the first trusted phone number).
      *
-     * @param phoneNumberId
+     * @param phoneNumberId - Optional phone number ID for SMS delivery. Defaults to 1 (first trusted phone).
      */
     async requestSmsMfaCode(phoneNumberId?: number | string): Promise<void> {
         // Use explicit ID, then the one from Apple's auth options, then fall back to 1
@@ -793,8 +793,8 @@ export default class iCloudService extends EventEmitter {
     /**
      * Requests PCS access to a specific service. Required to call before accessing any PCS protected services when iCloud Advanced Data Protection is enabled.
      *
-     * @remarks Should only be called when iCloudService.ICDRSDisabled is `false`, however this function will check for you, and immediately return as it's not required..
-     * @experimental
+     * Note: Should only be called when iCloudService.ICDRSDisabled is `false`, however this function will check for you, and immediately return as it's not required.
+     *
      * @param appName The service name to request access to.
      */
     async requestServiceAccess(appName: 'iclouddrive'): Promise<boolean> {
@@ -853,7 +853,8 @@ export default class iCloudService extends EventEmitter {
      * A mapping of service names to their classes.
      * This is used by {@link iCloudService.getService} to return the correct service class.
      *
-     * @remarks You should **not** use this to instantiate services, use {@link iCloudService.getService} instead.
+     * Note: You should **not** use this to instantiate services, use {@link iCloudService.getService} instead.
+     *
      * @see {@link iCloudService.getService}
      */
     serviceConstructors: { [key: string]: any } = {
@@ -888,7 +889,7 @@ export default class iCloudService extends EventEmitter {
      * Returns an instance of the specified service. Results are cached, so subsequent calls will return the same instance.
      *
      * @param service The service name to return an instance of. Must be one of the keys in {@link iCloudService.serviceConstructors}.
-     * @returns
+     * @returns The service instance for the specified service name.
      */
     getService(service: string): unknown {
         if (!this.serviceConstructors[service]) {

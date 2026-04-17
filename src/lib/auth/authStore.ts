@@ -54,7 +54,7 @@ export class iCloudAuthenticationStore {
     /**
      * Sanitise account name for use as a filename component (matches pyicloud behaviour).
      *
-     * @param account
+     * @param account - The iCloud account identifier (e.g. email address).
      */
     private _accountFilename(account: string): string {
         return account.replace(/\W/g, '');
@@ -75,7 +75,7 @@ export class iCloudAuthenticationStore {
      * Populates scnt, sessionId, sessionToken, accountCountry, trustToken, clientId.
      * Returns the raw JSON object so the caller can read client_id etc.
      *
-     * @param account
+     * @param account - The iCloud account identifier (e.g. email address).
      */
     loadSession(account: string): Record<string, string> {
         try {
@@ -109,7 +109,7 @@ export class iCloudAuthenticationStore {
     /**
      * Persist current session data to disk.
      *
-     * @param account
+     * @param account - The iCloud account identifier (e.g. email address).
      */
     saveSession(account: string): void {
         try {
@@ -148,7 +148,7 @@ export class iCloudAuthenticationStore {
      * Load the persisted CookieJar from disk.
      * Automatically migrates legacy .cookies and .auth-cookies files on first run.
      *
-     * @param account
+     * @param account - The iCloud account identifier (e.g. email address).
      */
     loadCookieJar(account: string): void {
         const jarPath = this._jarPath(account);
@@ -199,7 +199,7 @@ export class iCloudAuthenticationStore {
     /**
      * Persist the CookieJar to disk.
      *
-     * @param account
+     * @param account - The iCloud account identifier (e.g. email address).
      */
     saveCookieJar(account: string): void {
         try {
@@ -220,7 +220,7 @@ export class iCloudAuthenticationStore {
      * Safe to call on ANY response, including error responses — this is the key mechanism
      * that ensures session continuity across login attempts (fixing Apple 503 / rate-limit).
      *
-     * @param response
+     * @param response - The HTTP response to extract session headers from.
      */
     extractSessionHeaders(response: Response): void {
         for (const [header, prop] of Object.entries(SESSION_HEADER_MAP)) {
@@ -272,7 +272,7 @@ export class iCloudAuthenticationStore {
      * Delete persisted session + cookie files and clear all in-memory tokens.
      * Call this to force a full re-authentication on the next authenticate() call.
      *
-     * @param account
+     * @param account - The iCloud account identifier (e.g. email address).
      */
     clearPersistedSession(account: string): void {
         this.sessionToken = undefined;
@@ -297,8 +297,8 @@ export class iCloudAuthenticationStore {
      * Process a sign-in response: extract session headers.
      * Cookies are handled automatically by fetch-cookie (stored in cookieJar).
      *
-     * @param authResponse
-     * @param account
+     * @param authResponse - The HTTP sign-in response.
+     * @param account - The iCloud account identifier (optional; if set, session is persisted).
      */
     processAuthSecrets(authResponse: Response, account?: string): boolean {
         try {
@@ -317,8 +317,8 @@ export class iCloudAuthenticationStore {
      * Process a cloud-setup response: extract session headers.
      * Cookies are handled automatically by fetch-cookie (stored in cookieJar).
      *
-     * @param cloudSetupResponse
-     * @param account
+     * @param cloudSetupResponse - The HTTP cloud-setup response.
+     * @param account - The iCloud account identifier (optional; if set, cookies and session are persisted).
      */
     processCloudSetupResponse(cloudSetupResponse: Response, account?: string): boolean {
         this.extractSessionHeaders(cloudSetupResponse);
@@ -332,8 +332,8 @@ export class iCloudAuthenticationStore {
     /**
      * Process a 2sv/trust response: extract session headers, persist trust token.
      *
-     * @param account
-     * @param trustResponse
+     * @param account - The iCloud account identifier.
+     * @param trustResponse - The HTTP trust/2SV response.
      */
     processAccountTokens(account: string, trustResponse: Response): boolean {
         this.extractSessionHeaders(trustResponse);

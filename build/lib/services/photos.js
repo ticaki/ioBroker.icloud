@@ -201,7 +201,7 @@ class iCloudPhotosEndpointService {
   /**
    * Raw download fetch — uses the cookie-jar-backed fetch for CDN/download URLs.
    *
-   * @param url
+   * @param url - The download URL to fetch.
    */
   async download(url) {
     return this._fetchFn(url);
