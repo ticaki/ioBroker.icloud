@@ -195,12 +195,229 @@ sendTo('icloud.0', 'deleteReminder', {
 
 > **Tip:** The `reminderId` is available in the state `reminders.<list>.<slot>.id` or in the `id` field returned by `getReminders`.
 
+---
+
+## iCloud Drive — sendTo() API
+
+You can list folders, upload files, download files, create folders, delete and rename items in iCloud Drive using `sendTo()`.
+
+> **Note:** Enable "iCloud Drive" in the adapter settings first. File content is transferred as **Base64** strings.
+
+### Field reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | `string` | Slash-separated path relative to the Drive root, e.g. `"Documents/Photos/cat.jpg"`. |
+| `folderId` | `string` | The `drivewsid` of a folder (returned by `driveListFolder`). Alternative to `path`. |
+| `fileId` | `string` | The `drivewsid` of a file (returned by `driveListFolder`). Alternative to `path`. |
+| `itemId` | `string` | The `drivewsid` of any item (file or folder) for `driveGetMetadata`. Alternative to `path`. |
+| `fileName` | `string` | Name for the uploaded file, e.g. `"photo.jpg"`. |
+| `base64` | `string` | File content encoded as Base64 string. |
+| `contentType` | `string` | MIME type, e.g. `"image/jpeg"`. Optional — defaults to `"application/octet-stream"`. |
+| `folderPath` | `string` | Slash-separated path to the target folder for uploads. Optional — defaults to root. |
+| `parentPath` | `string` | Slash-separated path to the parent folder for `driveCreateFolder`. Optional — defaults to root. |
+| `parentId` | `string` | The `drivewsid` of the parent folder. Alternative to `parentPath`. |
+| `name` | `string` | Name for a new folder. |
+| `newName` | `string` | New name for renaming an item. |
+| `drivewsid` | `string` | Drive item ID for delete/rename operations. |
+| `etag` | `string` | ETag of the item (required together with `drivewsid` for delete/rename). |
+
+---
+
+### List a folder
+
+```javascript
+// List root folder:
+sendTo('icloud.0', 'driveListFolder', {}, (result) => {
+    if (result.success) {
+        // result.items = [
+        //   { name: "Documents", type: "FOLDER", drivewsid: "FOLDER::...", docwsid: "...", size: 0, etag: "..." },
+        //   { name: "photo.jpg", type: "FILE",   drivewsid: "FILE::...",   docwsid: "...", size: 123456, etag: "..." },
+        // ]
+        result.items.forEach(item => {
+            console.log(item.name + ' (' + item.type + ', ' + item.size + ' bytes)');
+        });
+    } else {
+        console.error(result.error);
+    }
+});
+
+// List a subfolder by path:
+sendTo('icloud.0', 'driveListFolder', { path: 'Documents/Photos' }, (result) => {
+    if (result.success) {
+        console.log(result.items.length + ' item(s) in Documents/Photos');
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Get metadata of a file or folder
+
+Returns all available metadata without downloading the file content.
+
+```javascript
+sendTo('icloud.0', 'driveGetMetadata', {
+    path: 'Documents/photo.jpg',  // path or itemId (drivewsid)
+}, (result) => {
+    if (result.success) {
+        // result.item = {
+        //   name:                "photo.jpg",
+        //   type:                "FILE",           // "FILE" | "FOLDER" | "APP_LIBRARY"
+        //   drivewsid:           "FILE::com.apple.CloudDocs::...",
+        //   docwsid:             "...",
+        //   parentId:            "FOLDER::...",
+        //   etag:                "abc123",
+        //   size:                123456,           // bytes (0 for folders)
+        //   fileCount:           0,                // only relevant for folders
+        //   directChildrenCount: 0,                // only relevant for folders
+        //   dateCreated:         1745000000000,    // ms timestamp
+        //   dateModified:        1745000000000,    // ms timestamp (null if not set)
+        //   dateChanged:         1745000000000,    // ms timestamp (null if not set)
+        //   dateLastOpen:        1745000000000,    // ms timestamp (null if not set)
+        //   extension:           "jpg",            // null for folders
+        // }
+        const item = result.item;
+        console.log(item.name + ': ' + item.size + ' bytes, modified ' + new Date(item.dateModified).toLocaleString());
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Download a file
+
+Returns the file content as a Base64 string. Ideal for images.
+
+```javascript
+sendTo('icloud.0', 'driveGetFile', {
+    path: 'Documents/photo.jpg',       // path or fileId (drivewsid)
+}, (result) => {
+    if (result.success) {
+        // result.name   = "photo.jpg"
+        // result.size   = 123456        (bytes)
+        // result.base64 = "/9j/4AAQ..." (Base64 encoded content)
+        console.log('Downloaded: ' + result.name + ' (' + result.size + ' bytes)');
+
+        // Example: write image to a file in ioBroker missing callback
+        // writeFile('0_userdata.0', '/icloud/' + result.name, Buffer.from(result.base64, 'base64'));
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Upload a file
+
+Required fields: `fileName`, `base64`. Optionally specify `folderPath` or `folderId`.
+
+```javascript
+// Upload an image to the root folder:
+sendTo('icloud.0', 'driveUploadFile', {
+    fileName:    'screenshot.png',       // required — file name
+    base64:      '/9j/4AAQSkZJRg...',    // required — Base64 encoded content
+    contentType: 'image/png',            // optional — MIME type
+    folderPath:  'Documents/Photos',     // optional — target folder path (default: root)
+}, (result) => {
+    if (result.success) {
+        console.log('Upload successful!');
+    } else {
+        console.error(result.error);
+    }
+});
+
+// Example: read a local file and upload it
+const data = readFileSync('0_userdata.0', '/cameras/snapshot.jpg');
+sendTo('icloud.0', 'driveUploadFile', {
+    fileName:    'snapshot.jpg',
+    base64:      data.toString('base64'),
+    contentType: 'image/jpeg',
+    folderPath:  'Documents',
+}, (result) => { /* ... */ });
+
+// Example: without file
+const content = 'Hallo iCloud Drive!';
+const base64 = Buffer.from(content).toString('base64');
+
+sendTo('icloud.0', 'driveUploadFile', {
+    fileName:    'test.txt',
+    base64:      base64,
+    contentType: 'text/plain',
+}, (result) => {
+    console.log(JSON.stringify(result));
+});
+```
+
+### Create a folder
+
+Required field: `name`. Optionally specify `parentPath` or `parentId`.
+
+```javascript
+sendTo('icloud.0', 'driveCreateFolder', {
+    name:       'Backups',               // required — folder name
+    parentPath: 'Documents',             // optional — parent folder (default: root)
+}, (result) => {
+    if (result.success) {
+        console.log('Folder created!');
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Delete an item
+
+You can delete by path or by `drivewsid` + `etag`.
+
+```javascript
+// Delete by path:
+sendTo('icloud.0', 'driveDeleteItem', {
+    path: 'Documents/old-file.txt',
+}, (result) => {
+    if (result.success) {
+        console.log('Deleted!');
+    } else {
+        console.error(result.error);
+    }
+});
+
+// Delete by ID (from driveListFolder result):
+sendTo('icloud.0', 'driveDeleteItem', {
+    drivewsid: 'FILE::com.apple.CloudDocs::...',
+    etag:      'abc123',
+}, (result) => { /* ... */ });
+```
+
+### Rename an item
+
+Required field: `newName`. Identify the item by path or by `drivewsid` + `etag`.
+
+```javascript
+sendTo('icloud.0', 'driveRenameItem', {
+    path:    'Documents/old-name.txt',   // path or drivewsid + etag
+    newName: 'new-name.txt',             // required — new name
+}, (result) => {
+    if (result.success) {
+        console.log('Renamed!');
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+> **Tip:** Use `driveListFolder` to discover file/folder IDs and etags. The `drivewsid` and `etag` are returned for each item.
+
 
 ## Changelog
 <!--
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.3.0-alpha.0 (2026-04-18)
+* (ticaki) iCloud Drive integration: browse folders, upload/download files, create folders, delete and rename items via sendTo()
+* (ticaki) Added Blockly blocks for uploading and downloading iCloud Drive files
+* (ticaki) Drive root metadata exposed as states (drive.name, drive.fileCount, drive.rootItems, etc.)
+
 ### 0.2.0-alpha.0 (2026-04-17)
 * (ticaki) iCloud Reminders are read and provided as data points (lists & reminders with due date, priority, and status)
 * (ticaki) Added Blockly sendTo blocks for creating, updating, completing, deleting, and querying iCloud Reminders

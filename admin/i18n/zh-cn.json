@@ -33,5 +33,7 @@
 	"remindersFilterDue": "仅到期 / 已开始",
 	"remindersFilterAll": "所有未完成的提醒",
 	"remindersShowCompleted": "显示已完成的提醒",
-	"remindersShowCompletedHelp": "在每个列表下的单独 'completed' 子文件夹中显示已完成的提醒。"
+	"remindersShowCompletedHelp": "在每个列表下的单独 'completed' 子文件夹中显示已完成的提醒。",
+	"driveHeader": "iCloud Drive",
+	"driveEnabled": "启用 iCloud Drive"
 }

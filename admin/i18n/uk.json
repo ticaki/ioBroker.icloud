@@ -33,5 +33,7 @@
 	"remindersFilterDue": "Тільки прострочені / розпочаті",
 	"remindersFilterAll": "Всі відкриті нагадування",
 	"remindersShowCompleted": "Показати завершені нагадування",
-	"remindersShowCompletedHelp": "Показати завершені нагадування в окремій підпапці 'completed' для кожного списку."
+	"remindersShowCompletedHelp": "Показати завершені нагадування в окремій підпапці 'completed' для кожного списку.",
+	"driveHeader": "iCloud Drive",
+	"driveEnabled": "Увімкнути iCloud Drive"
 }

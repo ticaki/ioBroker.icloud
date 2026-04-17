@@ -805,3 +805,252 @@ Blockly.JavaScript['icloud_get_data'] = function (block) {
     code += '})()';
     return [code, Blockly.JavaScript.ORDER_FUNCTION_CALL];
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Translations — Drive blocks
+// ══════════════════════════════════════════════════════════════════════════════
+
+Blockly.Words['icloud_drive_upload'] = {
+    en: 'iCloud Drive: Upload file',
+    de: 'iCloud Drive: Datei hochladen',
+    ru: 'iCloud Drive: Загрузить файл',
+    pt: 'iCloud Drive: Enviar arquivo',
+    nl: 'iCloud Drive: Bestand uploaden',
+    fr: 'iCloud Drive: Envoyer un fichier',
+    it: 'iCloud Drive: Carica file',
+    es: 'iCloud Drive: Subir archivo',
+    pl: 'iCloud Drive: Prześlij plik',
+    uk: 'iCloud Drive: Завантажити файл',
+    'zh-cn': 'iCloud Drive: 上传文件',
+};
+Blockly.Words['icloud_drive_fileName'] = {
+    en: 'File name',
+    de: 'Dateiname',
+    ru: 'Имя файла',
+    pt: 'Nome do arquivo',
+    nl: 'Bestandsnaam',
+    fr: 'Nom du fichier',
+    it: 'Nome file',
+    es: 'Nombre de archivo',
+    pl: 'Nazwa pliku',
+    uk: 'Ім\'я файлу',
+    'zh-cn': '文件名',
+};
+Blockly.Words['icloud_drive_base64'] = {
+    en: 'Content (Base64)',
+    de: 'Inhalt (Base64)',
+    ru: 'Содержимое (Base64)',
+    pt: 'Conteúdo (Base64)',
+    nl: 'Inhoud (Base64)',
+    fr: 'Contenu (Base64)',
+    it: 'Contenuto (Base64)',
+    es: 'Contenido (Base64)',
+    pl: 'Zawartość (Base64)',
+    uk: 'Вміст (Base64)',
+    'zh-cn': '内容（Base64）',
+};
+Blockly.Words['icloud_drive_folderPath'] = {
+    en: 'Folder path (optional)',
+    de: 'Ordnerpfad (optional)',
+    ru: 'Путь к папке (необязательно)',
+    pt: 'Caminho da pasta (opcional)',
+    nl: 'Mappad (optioneel)',
+    fr: 'Chemin du dossier (facultatif)',
+    it: 'Percorso cartella (opzionale)',
+    es: 'Ruta de carpeta (opcional)',
+    pl: 'Ścieżka folderu (opcjonalnie)',
+    uk: 'Шлях до теки (необов\'язково)',
+    'zh-cn': '文件夹路径（可选）',
+};
+Blockly.Words['icloud_drive_contentType'] = {
+    en: 'Content type (optional)',
+    de: 'Inhaltstyp (optional)',
+    ru: 'Тип содержимого (необязательно)',
+    pt: 'Tipo de conteúdo (opcional)',
+    nl: 'Inhoudstype (optioneel)',
+    fr: 'Type de contenu (facultatif)',
+    it: 'Tipo di contenuto (opzionale)',
+    es: 'Tipo de contenido (opcional)',
+    pl: 'Typ zawartości (opcjonalnie)',
+    uk: 'Тип вмісту (необов\'язково)',
+    'zh-cn': '内容类型（可选）',
+};
+Blockly.Words['icloud_drive_get'] = {
+    en: 'iCloud Drive: Get file',
+    de: 'iCloud Drive: Datei abrufen',
+    ru: 'iCloud Drive: Получить файл',
+    pt: 'iCloud Drive: Obter arquivo',
+    nl: 'iCloud Drive: Bestand ophalen',
+    fr: 'iCloud Drive: Obtenir un fichier',
+    it: 'iCloud Drive: Ottieni file',
+    es: 'iCloud Drive: Obtener archivo',
+    pl: 'iCloud Drive: Pobierz plik',
+    uk: 'iCloud Drive: Отримати файл',
+    'zh-cn': 'iCloud Drive: 获取文件',
+};
+Blockly.Words['icloud_drive_filePath'] = {
+    en: 'File path',
+    de: 'Dateipfad',
+    ru: 'Путь к файлу',
+    pt: 'Caminho do arquivo',
+    nl: 'Bestandspad',
+    fr: 'Chemin du fichier',
+    it: 'Percorso file',
+    es: 'Ruta del archivo',
+    pl: 'Ścieżka pliku',
+    uk: 'Шлях до файлу',
+    'zh-cn': '文件路径',
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  5) icloud_drive_upload (upload / send file, mainly images)
+// ══════════════════════════════════════════════════════════════════════════════
+
+Blockly.Sendto.blocks['icloud_drive_upload'] =
+    '<sep gap="5"></sep>' +
+    '<block type="icloud_drive_upload">' +
+    '  <field name="INSTANCE"></field>' +
+    '  <field name="LOG"></field>' +
+    '  <value name="FILE_NAME">' +
+    '    <shadow type="text"><field name="TEXT">photo.jpg</field></shadow>' +
+    '  </value>' +
+    '  <value name="BASE64">' +
+    '    <shadow type="text"><field name="TEXT"></field></shadow>' +
+    '  </value>' +
+    '  <value name="FOLDER_PATH">' +
+    '    <shadow type="text"><field name="TEXT"></field></shadow>' +
+    '  </value>' +
+    '  <value name="CONTENT_TYPE">' +
+    '    <shadow type="text"><field name="TEXT">image/jpeg</field></shadow>' +
+    '  </value>' +
+    '</block>';
+
+Blockly.Blocks['icloud_drive_upload'] = {
+    init: function () {
+        var options = icloudGetInstances(Blockly.Translate('icloud_anyInstance'));
+
+        this.appendDummyInput('INSTANCE')
+            .appendField(Blockly.Translate('icloud_drive_upload'))
+            .appendField(new Blockly.FieldDropdown(options), 'INSTANCE');
+
+        this.appendValueInput('FILE_NAME').appendField(Blockly.Translate('icloud_drive_fileName'));
+
+        this.appendValueInput('BASE64').appendField(Blockly.Translate('icloud_drive_base64'));
+
+        this.appendValueInput('FOLDER_PATH').appendField(Blockly.Translate('icloud_drive_folderPath'));
+
+        this.appendValueInput('CONTENT_TYPE').appendField(Blockly.Translate('icloud_drive_contentType'));
+
+        this.appendDummyInput('LOG')
+            .appendField(Blockly.Translate('icloud_log'))
+            .appendField(
+                new Blockly.FieldDropdown([
+                    ['none', ''],
+                    ['debug', 'debug'],
+                    ['info', 'info'],
+                    ['warn', 'warn'],
+                    ['error', 'error'],
+                ]),
+                'LOG',
+            );
+
+        this.setInputsInline(false);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(Blockly.Sendto.HUE);
+        this.setTooltip(Blockly.Translate('icloud_drive_upload'));
+        this.setHelpUrl(Blockly.Translate('icloud_help'));
+    },
+};
+
+Blockly.JavaScript['icloud_drive_upload'] = function (block) {
+    var instance = block.getFieldValue('INSTANCE');
+    var fileName = Blockly.JavaScript.valueToCode(block, 'FILE_NAME', Blockly.JavaScript.ORDER_ATOMIC);
+    var base64 = Blockly.JavaScript.valueToCode(block, 'BASE64', Blockly.JavaScript.ORDER_ATOMIC);
+    var folderPath = Blockly.JavaScript.valueToCode(block, 'FOLDER_PATH', Blockly.JavaScript.ORDER_ATOMIC);
+    var contentType = Blockly.JavaScript.valueToCode(block, 'CONTENT_TYPE', Blockly.JavaScript.ORDER_ATOMIC);
+    var logLevel = block.getFieldValue('LOG');
+
+    var code = 'sendTo(\'icloud' + instance + "', 'driveUploadFile', {\n";
+    code += '  fileName: ' + (fileName || "''") + ',\n';
+    code += '  base64: ' + (base64 || "''") + ',\n';
+    if (folderPath) {
+        code += '  folderPath: ' + folderPath + ' || undefined,\n';
+    }
+    if (contentType) {
+        code += '  contentType: ' + contentType + ' || undefined,\n';
+    }
+    code += '}, function (result) {\n';
+    if (logLevel) {
+        code += "  console." + logLevel + "('iCloud driveUploadFile: ' + JSON.stringify(result));\n";
+    }
+    code += '});\n';
+    return code;
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  6) icloud_drive_get (download / read file, mainly images)
+// ══════════════════════════════════════════════════════════════════════════════
+
+Blockly.Sendto.blocks['icloud_drive_get'] =
+    '<sep gap="5"></sep>' +
+    '<block type="icloud_drive_get">' +
+    '  <field name="INSTANCE"></field>' +
+    '  <field name="LOG"></field>' +
+    '  <value name="FILE_PATH">' +
+    '    <shadow type="text"><field name="TEXT">Documents/photo.jpg</field></shadow>' +
+    '  </value>' +
+    '</block>';
+
+Blockly.Blocks['icloud_drive_get'] = {
+    init: function () {
+        var options = icloudGetInstances(Blockly.Translate('icloud_anyInstance'));
+
+        this.appendDummyInput('INSTANCE')
+            .appendField(Blockly.Translate('icloud_drive_get'))
+            .appendField(new Blockly.FieldDropdown(options), 'INSTANCE');
+
+        this.appendValueInput('FILE_PATH').appendField(Blockly.Translate('icloud_drive_filePath'));
+
+        this.appendDummyInput('LOG')
+            .appendField(Blockly.Translate('icloud_log'))
+            .appendField(
+                new Blockly.FieldDropdown([
+                    ['none', ''],
+                    ['debug', 'debug'],
+                    ['info', 'info'],
+                    ['warn', 'warn'],
+                    ['error', 'error'],
+                ]),
+                'LOG',
+            );
+
+        this.setInputsInline(false);
+        this.setOutput(true, null);
+        this.setColour(Blockly.Sendto.HUE);
+        this.setTooltip(Blockly.Translate('icloud_drive_get'));
+        this.setHelpUrl(Blockly.Translate('icloud_help'));
+    },
+};
+
+Blockly.JavaScript['icloud_drive_get'] = function (block) {
+    var instance = block.getFieldValue('INSTANCE');
+    var filePath = Blockly.JavaScript.valueToCode(block, 'FILE_PATH', Blockly.JavaScript.ORDER_ATOMIC);
+    var logLevel = block.getFieldValue('LOG');
+
+    var resultVar = 'icloudDriveResult_' + Blockly.JavaScript.variableDB_.getDistinctName('data', Blockly.Variables.NAME_TYPE);
+
+    var code = '(function () {\n';
+    code += '  var ' + resultVar + ';\n';
+    code += '  sendTo(\'icloud' + instance + "', 'driveGetFile', {\n";
+    code += '    path: ' + (filePath || "''") + '\n';
+    code += '  }, function (result) {\n';
+    if (logLevel) {
+        code += "    console." + logLevel + "('iCloud driveGetFile: ' + JSON.stringify(result));\n";
+    }
+    code += '    ' + resultVar + ' = result;\n';
+    code += '  });\n';
+    code += '  return ' + resultVar + ';\n';
+    code += '})()';
+    return [code, Blockly.JavaScript.ORDER_FUNCTION_CALL];
+};

@@ -7,6 +7,7 @@ import * as utils from '@iobroker/adapter-core';
 import iCloudService, { LogLevel } from './lib/index';
 import type { iCloudFindMyDeviceInfo } from './lib/services/findMy';
 import type { iCloudRemindersService, Reminder, RemindersSyncMap } from './lib/services/reminders';
+import type { iCloudDriveService, iCloudDriveNode, iCloudDriveItem } from './lib/services/drive';
 import { GeoLookup } from './lib/geo';
 
 /** Best-effort human-readable names for Apple FindMy feature flags (not officially documented). */
@@ -185,6 +186,23 @@ const REMINDER_COLLECTION_STATES: Array<{
     { id: 'count', name: 'Reminder Count', type: 'number', role: 'value' },
 ];
 
+/** State definitions for the iCloud Drive root metadata. */
+const DRIVE_ROOT_STATES: Array<{
+    id: string;
+    name: string;
+    type: ioBroker.CommonType;
+    role: string;
+}> = [
+    { id: 'name', name: 'Root Folder Name', type: 'string', role: 'text' },
+    { id: 'docwsid', name: 'Document WS ID', type: 'string', role: 'text' },
+    { id: 'drivewsid', name: 'Drive WS ID', type: 'string', role: 'text' },
+    { id: 'fileCount', name: 'File Count', type: 'number', role: 'value' },
+    { id: 'directChildrenCount', name: 'Direct Children Count', type: 'number', role: 'value' },
+    { id: 'dateCreated', name: 'Date Created', type: 'number', role: 'value.time' },
+    { id: 'etag', name: 'ETag', type: 'string', role: 'text' },
+    { id: 'lastRefresh', name: 'Last Refresh', type: 'number', role: 'value.time' },
+];
+
 /**
  * Haversine distance in km between two WGS84 coordinate pairs.
  *
@@ -212,6 +230,7 @@ class Icloud extends utils.Adapter {
     private calendarRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersSyncMapLoaded = false;
+    private driveRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private accountStorageRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private geoLookup: GeoLookup = new GeoLookup();
 
@@ -565,6 +584,11 @@ class Icloud extends utils.Adapter {
         if (activeServices.includes('reminders') && this.config.remindersEnabled) {
             await this.refreshReminders();
             this.scheduleRemindersRefresh();
+        }
+
+        // ── iCloud Drive ──────────────────────────────────────────────────────
+        if (activeServices.includes('drivews') && this.config.driveEnabled) {
+            await this.refreshDrive();
         }
 
         // ── Account Storage ───────────────────────────────────────────────────
@@ -1482,6 +1506,77 @@ class Icloud extends utils.Adapter {
         this.log.debug(`Reminders refresh scheduled every ${intervalMin} min`);
     }
 
+    // ── iCloud Drive helpers ──────────────────────────────────────────────────
+
+    private async refreshDrive(): Promise<void> {
+        if (!this.icloud) {
+            return;
+        }
+        try {
+            const driveService = this.icloud.getService('drivews');
+            const root = await driveService.getNode();
+            await this.writeDriveStates(root);
+        } catch (err) {
+            const msg = (err as Error)?.message ?? String(err);
+            this.log.warn(`Drive refresh failed: ${msg}`);
+        }
+    }
+
+    private async writeDriveStates(root: iCloudDriveNode): Promise<void> {
+        await this.extendObject('drive', {
+            type: 'channel',
+            common: { name: 'iCloud Drive' },
+            native: {},
+        });
+
+        const vals: Record<string, ioBroker.StateValue> = {
+            name: root.name ?? 'root',
+            docwsid: root.docwsid ?? '',
+            drivewsid: root.nodeId ?? '',
+            fileCount: root.fileCount ?? 0,
+            directChildrenCount: root.directChildrenCount ?? 0,
+            dateCreated: root.dateCreated ? root.dateCreated.getTime() : 0,
+            etag: root.etag ?? '',
+            lastRefresh: Date.now(),
+        };
+
+        for (const s of DRIVE_ROOT_STATES) {
+            await this.extendObject(`drive.${s.id}`, {
+                type: 'state',
+                common: { name: s.name, type: s.type, role: s.role, read: true, write: false },
+                native: {},
+            });
+            const v = vals[s.id];
+            if (v !== undefined) {
+                await this.setState(`drive.${s.id}`, v, true);
+            }
+        }
+
+        // Write root children as JSON summary (one state, avoids hundreds of objects)
+        await this.extendObject('drive.rootItems', {
+            type: 'state',
+            common: { name: 'Root Items (JSON)', type: 'string', role: 'json', read: true, write: false },
+            native: {},
+        });
+        const items = (root.items ?? []).map((item: iCloudDriveItem) => ({
+            name: item.extension ? `${item.name}.${item.extension}` : item.name,
+            type: item.type,
+            drivewsid: item.drivewsid,
+            docwsid: item.docwsid,
+            size: item.size ?? 0,
+            dateModified: item.dateModified ? new Date(item.dateModified as unknown as string).getTime() : null,
+            etag: item.etag,
+        }));
+        await this.setState('drive.rootItems', JSON.stringify(items), true);
+    }
+
+    private getDriveService(): iCloudDriveService {
+        if (!this.icloud) {
+            throw new Error('iCloud not connected');
+        }
+        return this.icloud.getService('drivews');
+    }
+
     // ── Account Storage helpers ───────────────────────────────────────────────
 
     private async refreshAccountStorage(): Promise<void> {
@@ -1640,6 +1735,10 @@ class Icloud extends utils.Adapter {
                     if (this.remindersRefreshTimer) {
                         this.clearTimeout(this.remindersRefreshTimer);
                         this.remindersRefreshTimer = null;
+                    }
+                    if (this.driveRefreshTimer) {
+                        this.clearTimeout(this.driveRefreshTimer);
+                        this.driveRefreshTimer = null;
                     }
                     if (this.accountStorageRefreshTimer) {
                         this.clearTimeout(this.accountStorageRefreshTimer);
@@ -1840,12 +1939,33 @@ class Icloud extends utils.Adapter {
             this.handleGetReminders(obj);
         } else if (obj.command === 'getReminderLists') {
             this.handleGetReminderLists(obj);
+        } else if (obj.command === 'driveListFolder') {
+            this.handleDriveListFolder(obj);
+        } else if (obj.command === 'driveGetMetadata') {
+            this.handleDriveGetMetadata(obj);
+        } else if (obj.command === 'driveGetFile') {
+            this.handleDriveGetFile(obj);
+        } else if (obj.command === 'driveUploadFile') {
+            this.handleDriveUploadFile(obj);
+        } else if (obj.command === 'driveCreateFolder') {
+            this.handleDriveCreateFolder(obj);
+        } else if (obj.command === 'driveDeleteItem') {
+            this.handleDriveDeleteItem(obj);
+        } else if (obj.command === 'driveRenameItem') {
+            this.handleDriveRenameItem(obj);
         }
     }
 
     // ── onMessage Reminder handlers ───────────────────────────────────────────
 
     private handleCreateReminder(obj: ioBroker.Message): void {
+        if (!this.config.remindersEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Reminders are disabled — enable them in the adapter settings first',
+            });
+            return;
+        }
         const msg = obj.message as Record<string, unknown> | undefined;
         if (!msg || typeof msg !== 'object') {
             this.sendCallback(obj, { success: false, error: 'Message must be an object' });
@@ -1886,6 +2006,13 @@ class Icloud extends utils.Adapter {
     }
 
     private handleCompleteReminder(obj: ioBroker.Message): void {
+        if (!this.config.remindersEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Reminders are disabled — enable them in the adapter settings first',
+            });
+            return;
+        }
         const msg = obj.message as Record<string, unknown> | undefined;
         if (!msg || typeof msg !== 'object') {
             this.sendCallback(obj, { success: false, error: 'Message must be an object' });
@@ -1917,6 +2044,13 @@ class Icloud extends utils.Adapter {
     }
 
     private handleUpdateReminder(obj: ioBroker.Message): void {
+        if (!this.config.remindersEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Reminders are disabled — enable them in the adapter settings first',
+            });
+            return;
+        }
         const msg = obj.message as Record<string, unknown> | undefined;
         if (!msg || typeof msg !== 'object') {
             this.sendCallback(obj, { success: false, error: 'Message must be an object' });
@@ -1977,6 +2111,13 @@ class Icloud extends utils.Adapter {
     }
 
     private handleDeleteReminder(obj: ioBroker.Message): void {
+        if (!this.config.remindersEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Reminders are disabled — enable them in the adapter settings first',
+            });
+            return;
+        }
         const msg = obj.message as Record<string, unknown> | undefined;
         if (!msg || typeof msg !== 'object') {
             this.sendCallback(obj, { success: false, error: 'Message must be an object' });
@@ -2007,6 +2148,13 @@ class Icloud extends utils.Adapter {
     }
 
     private handleGetReminders(obj: ioBroker.Message): void {
+        if (!this.config.remindersEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Reminders are disabled — enable them in the adapter settings first',
+            });
+            return;
+        }
         if (!this.icloud) {
             this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
             return;
@@ -2024,6 +2172,13 @@ class Icloud extends utils.Adapter {
     }
 
     private handleGetReminderLists(obj: ioBroker.Message): void {
+        if (!this.config.remindersEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Reminders are disabled — enable them in the adapter settings first',
+            });
+            return;
+        }
         if (!this.icloud) {
             this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
             return;
@@ -2032,6 +2187,393 @@ class Icloud extends utils.Adapter {
         // Expose `listId` as the canonical key (mirrors the `listId` parameter used everywhere else)
         const lists = remService.lists.map(l => ({ listId: l.id, title: l.title, color: l.color, count: l.count }));
         this.sendCallback(obj, { success: true, lists });
+    }
+
+    // ── onMessage Drive handlers ──────────────────────────────────────────────
+
+    private handleDriveListFolder(obj: ioBroker.Message): void {
+        if (!this.config.driveEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'iCloud Drive is disabled — enable it in the adapter settings first',
+            });
+            return;
+        }
+        const msg = obj.message as Record<string, unknown> | undefined;
+        const folderPath = (msg && typeof msg === 'object' ? (msg.path as string) : undefined) ?? '';
+        const folderId = msg && typeof msg === 'object' ? (msg.folderId as string) : undefined;
+
+        let driveService: iCloudDriveService;
+        try {
+            driveService = this.getDriveService();
+        } catch {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+
+        (async (): Promise<void> => {
+            let node: iCloudDriveNode;
+            if (folderId) {
+                node = await driveService.getNode(folderId);
+            } else if (folderPath) {
+                node = await driveService.getNodeByPath(folderPath);
+            } else {
+                node = await driveService.getNode();
+            }
+            const children = await node.getChildren();
+            const items = children.map(c => ({
+                name: c.fullName,
+                type: c.type,
+                drivewsid: c.nodeId,
+                docwsid: c.docwsid ?? '',
+                size: c.size ?? 0,
+                etag: c.etag,
+                dateCreated: c.dateCreated ? c.dateCreated.getTime() : null,
+                dateModified: c.dateModified ? c.dateModified.getTime() : null,
+            }));
+            this.sendCallback(obj, { success: true, items });
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
+    }
+
+    private handleDriveGetMetadata(obj: ioBroker.Message): void {
+        if (!this.config.driveEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'iCloud Drive is disabled — enable it in the adapter settings first',
+            });
+            return;
+        }
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const itemPath = msg.path as string | undefined;
+        const itemId = msg.itemId as string | undefined;
+        if (!itemPath && !itemId) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Required: "path" (slash-separated) or "itemId" (drivewsid)',
+            });
+            return;
+        }
+
+        let driveService: iCloudDriveService;
+        try {
+            driveService = this.getDriveService();
+        } catch {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+
+        (async (): Promise<void> => {
+            const node = itemId ? await driveService.getNode(itemId) : await driveService.getNodeByPath(itemPath!);
+            this.sendCallback(obj, {
+                success: true,
+                item: {
+                    name: node.fullName,
+                    type: node.type,
+                    drivewsid: node.nodeId,
+                    docwsid: node.docwsid ?? '',
+                    parentId: node.parentId ?? '',
+                    etag: node.etag,
+                    size: node.size ?? 0,
+                    fileCount: node.fileCount ?? 0,
+                    shareCount: node.shareCount ?? 0,
+                    directChildrenCount: node.directChildrenCount ?? 0,
+                    dateCreated: node.dateCreated ? node.dateCreated.getTime() : null,
+                    dateModified: node.dateModified ? node.dateModified.getTime() : null,
+                    dateChanged: node.dateChanged ? node.dateChanged.getTime() : null,
+                    dateLastOpen: node.dateLastOpen ? node.dateLastOpen.getTime() : null,
+                    extension: node.extension ?? null,
+                },
+            });
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
+    }
+
+    private handleDriveGetFile(obj: ioBroker.Message): void {
+        if (!this.config.driveEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'iCloud Drive is disabled — enable it in the adapter settings first',
+            });
+            return;
+        }
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const filePath = msg.path as string | undefined;
+        const fileId = msg.fileId as string | undefined;
+        if (!filePath && !fileId) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Required: "path" (slash-separated) or "fileId" (drivewsid)',
+            });
+            return;
+        }
+
+        let driveService: iCloudDriveService;
+        try {
+            driveService = this.getDriveService();
+        } catch {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+
+        (async (): Promise<void> => {
+            let node: iCloudDriveNode;
+            if (fileId) {
+                node = await driveService.getNode(fileId);
+            } else {
+                node = await driveService.getNodeByPath(filePath!);
+            }
+            if (node.type !== 'FILE') {
+                this.sendCallback(obj, { success: false, error: `"${node.fullName}" is not a file` });
+                return;
+            }
+            const stream = await node.open();
+            if (!stream) {
+                this.sendCallback(obj, { success: false, error: 'Download returned empty stream' });
+                return;
+            }
+            // Collect stream into a Buffer, return as base64
+            const reader = stream.getReader();
+            const chunks: Uint8Array[] = [];
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) {
+                    break;
+                }
+                chunks.push(value);
+            }
+            const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+            const merged = new Uint8Array(totalLen);
+            let offset = 0;
+            for (const c of chunks) {
+                merged.set(c, offset);
+                offset += c.length;
+            }
+            const base64 = Buffer.from(merged).toString('base64');
+            this.sendCallback(obj, {
+                success: true,
+                name: node.fullName,
+                size: totalLen,
+                base64,
+            });
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
+    }
+
+    private handleDriveUploadFile(obj: ioBroker.Message): void {
+        if (!this.config.driveEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'iCloud Drive is disabled — enable it in the adapter settings first',
+            });
+            return;
+        }
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const folderId = msg.folderId as string | undefined;
+        const folderPath = msg.folderPath as string | undefined;
+        const fileName = msg.fileName as string | undefined;
+        const base64Content = msg.base64 as string | undefined;
+        const contentType = (msg.contentType as string) ?? undefined;
+
+        if (!fileName) {
+            this.sendCallback(obj, { success: false, error: 'Required field missing: "fileName"' });
+            return;
+        }
+        if (!base64Content) {
+            this.sendCallback(obj, { success: false, error: 'Required field missing: "base64" (file content)' });
+            return;
+        }
+
+        let driveService: iCloudDriveService;
+        try {
+            driveService = this.getDriveService();
+        } catch {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+
+        (async (): Promise<void> => {
+            let targetFolderDocwsid: string;
+            if (folderId) {
+                targetFolderDocwsid = folderId;
+            } else if (folderPath) {
+                const folder = await driveService.getNodeByPath(folderPath);
+                if (!folder.docwsid) {
+                    throw new Error(`Folder "${folderPath}" has no docwsid — call refresh() first`);
+                }
+                targetFolderDocwsid = folder.docwsid;
+            } else {
+                // Default: root folder
+                const root = await driveService.getNode();
+                if (!root.docwsid) {
+                    throw new Error('Root folder has no docwsid');
+                }
+                targetFolderDocwsid = root.docwsid;
+            }
+
+            const content = new Uint8Array(Buffer.from(base64Content, 'base64'));
+            await driveService.sendFile(targetFolderDocwsid, { name: fileName, content, contentType });
+            this.sendCallback(obj, { success: true });
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
+    }
+
+    private handleDriveCreateFolder(obj: ioBroker.Message): void {
+        if (!this.config.driveEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'iCloud Drive is disabled — enable it in the adapter settings first',
+            });
+            return;
+        }
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const name = msg.name as string | undefined;
+        const parentId = msg.parentId as string | undefined;
+        const parentPath = msg.parentPath as string | undefined;
+
+        if (!name) {
+            this.sendCallback(obj, { success: false, error: 'Required field missing: "name"' });
+            return;
+        }
+
+        let driveService: iCloudDriveService;
+        try {
+            driveService = this.getDriveService();
+        } catch {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+
+        (async (): Promise<void> => {
+            let targetParentId: string;
+            if (parentId) {
+                targetParentId = parentId;
+            } else if (parentPath) {
+                const parent = await driveService.getNodeByPath(parentPath);
+                targetParentId = parent.nodeId;
+            } else {
+                const root = await driveService.getNode();
+                targetParentId = root.nodeId;
+            }
+            const result = await driveService.mkdir(targetParentId, name);
+            this.sendCallback(obj, { success: true, result });
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
+    }
+
+    private handleDriveDeleteItem(obj: ioBroker.Message): void {
+        if (!this.config.driveEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'iCloud Drive is disabled — enable it in the adapter settings first',
+            });
+            return;
+        }
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const drivewsid = msg.drivewsid as string | undefined;
+        const etag = msg.etag as string | undefined;
+        const itemPath = msg.path as string | undefined;
+
+        let driveService: iCloudDriveService;
+        try {
+            driveService = this.getDriveService();
+        } catch {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+
+        (async (): Promise<void> => {
+            if (drivewsid && etag) {
+                await driveService.del(drivewsid, etag);
+            } else if (itemPath) {
+                const node = await driveService.getNodeByPath(itemPath);
+                await node.delete();
+            } else {
+                this.sendCallback(obj, {
+                    success: false,
+                    error: 'Required: "drivewsid" + "etag", or "path"',
+                });
+                return;
+            }
+            this.sendCallback(obj, { success: true });
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
+    }
+
+    private handleDriveRenameItem(obj: ioBroker.Message): void {
+        if (!this.config.driveEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'iCloud Drive is disabled — enable it in the adapter settings first',
+            });
+            return;
+        }
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const drivewsid = msg.drivewsid as string | undefined;
+        const etag = msg.etag as string | undefined;
+        const newName = msg.newName as string | undefined;
+        const itemPath = msg.path as string | undefined;
+
+        if (!newName) {
+            this.sendCallback(obj, { success: false, error: 'Required field missing: "newName"' });
+            return;
+        }
+
+        let driveService: iCloudDriveService;
+        try {
+            driveService = this.getDriveService();
+        } catch {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+
+        (async (): Promise<void> => {
+            if (drivewsid && etag) {
+                await driveService.renameItem(drivewsid, etag, newName);
+            } else if (itemPath) {
+                const node = await driveService.getNodeByPath(itemPath);
+                await node.rename(newName);
+            } else {
+                this.sendCallback(obj, {
+                    success: false,
+                    error: 'Required: "drivewsid" + "etag", or "path"',
+                });
+                return;
+            }
+            this.sendCallback(obj, { success: true });
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
     }
 
     private sendCallback(obj: ioBroker.Message, response: Record<string, unknown>): void {

@@ -176,7 +176,12 @@ class iCloudDriveNode {
     return this.service.downloadFile({ docwsid, size: this.size });
   }
   async upload(file) {
-    return this.service.sendFile(this.nodeId, file);
+    var _a, _b;
+    const docwsid = (_b = this.docwsid) != null ? _b : (_a = this.rawData) == null ? void 0 : _a.docwsid;
+    if (!docwsid) {
+      throw new Error("Node has no docwsid, call refresh() first");
+    }
+    return this.service.sendFile(docwsid, file);
   }
 }
 class iCloudDriveService {
@@ -263,7 +268,28 @@ class iCloudDriveService {
     const json = await response.json();
     return json.items;
   }
-  async sendFile(folderId, file) {
+  /**
+   * Navigate to a node by its slash-separated path relative to the root folder.
+   * Example: `getNodeByPath('Documents/Photos/cat.jpg')`
+   *
+   * @param pathStr - Slash-separated path, e.g. `"Documents/Photos/cat.jpg"`
+   */
+  async getNodeByPath(pathStr) {
+    const parts = pathStr.split("/").map((p) => p.trim()).filter(Boolean);
+    let node = await this.getNode();
+    for (const part of parts) {
+      const child = await node.get(part);
+      if (!child) {
+        throw new Error(`Path segment "${part}" not found in "${node.fullName}"`);
+      }
+      node = child;
+      if (node.type === "FOLDER" && !node.hasData) {
+        await node.refresh();
+      }
+    }
+    return node;
+  }
+  async sendFile(folderDocwsid, file) {
     var _a;
     const contentType = (_a = file.contentType) != null ? _a : "application/octet-stream";
     const uploadResponse = await this.service.fetch(`${this.docsServiceUri}/ws/com.apple.CloudDocs/upload/web`, {
@@ -289,9 +315,9 @@ class iCloudDriveService {
     );
     const contentResponse = await this.service.fetch(url, { method: "POST", body: formData });
     const contentJson = await contentResponse.json();
-    await this._updateContentws(folderId, contentJson.singleFile, document_id, file.name);
+    await this._updateContentws(folderDocwsid, contentJson.singleFile, document_id, file.name);
   }
-  async _updateContentws(folderId, sfInfo, documentId, fileName) {
+  async _updateContentws(folderDocwsid, sfInfo, documentId, fileName) {
     const data = {
       data: {
         signature: sfInfo.fileChecksum,
@@ -303,7 +329,7 @@ class iCloudDriveService {
       command: "add_file",
       create_short_guid: true,
       document_id: documentId,
-      path: { starting_document_id: folderId, path: fileName },
+      path: { starting_document_id: folderDocwsid, path: fileName },
       allow_conflict: true,
       file_flags: { is_writable: true, is_executable: false, is_hidden: false },
       mtime: Date.now(),

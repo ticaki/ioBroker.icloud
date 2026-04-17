@@ -35,5 +35,7 @@
 	"remindersFilterDue": "Nur fällige / begonnene",
 	"remindersFilterAll": "Alle offenen Erinnerungen",
 	"remindersShowCompleted": "Erledigte Erinnerungen anzeigen",
-	"remindersShowCompletedHelp": "Erledigte Erinnerungen in einem separaten Unterordner 'completed' pro Liste anzeigen."
+	"remindersShowCompletedHelp": "Erledigte Erinnerungen in einem separaten Unterordner 'completed' pro Liste anzeigen.",
+	"driveHeader": "iCloud Drive",
+	"driveEnabled": "iCloud Drive aktivieren"
 }

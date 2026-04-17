@@ -33,5 +33,7 @@
 	"remindersFilterDue": "Alleen verlopen / gestart",
 	"remindersFilterAll": "Alle open herinneringen",
 	"remindersShowCompleted": "Voltooide herinneringen tonen",
-	"remindersShowCompletedHelp": "Voltooide herinneringen tonen in een aparte submap 'completed' per lijst."
+	"remindersShowCompletedHelp": "Voltooide herinneringen tonen in een aparte submap 'completed' per lijst.",
+	"driveHeader": "iCloud Drive",
+	"driveEnabled": "iCloud Drive activeren"
 }

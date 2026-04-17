@@ -33,5 +33,7 @@
 	"remindersFilterDue": "Solo vencidos / iniciados",
 	"remindersFilterAll": "Todos los recordatorios abiertos",
 	"remindersShowCompleted": "Mostrar recordatorios completados",
-	"remindersShowCompletedHelp": "Mostrar recordatorios completados en una subcarpeta 'completed' separada por lista."
+	"remindersShowCompletedHelp": "Mostrar recordatorios completados en una subcarpeta 'completed' separada por lista.",
+	"driveHeader": "iCloud Drive",
+	"driveEnabled": "Activar iCloud Drive"
 }

@@ -33,5 +33,7 @@
 	"remindersFilterDue": "Tylko zaległe / rozpoczęte",
 	"remindersFilterAll": "Wszystkie otwarte przypomnienia",
 	"remindersShowCompleted": "Pokaż ukończone przypomnienia",
-	"remindersShowCompletedHelp": "Pokaż ukończone przypomnienia w osobnym podfolderze 'completed' na liście."
+	"remindersShowCompletedHelp": "Pokaż ukończone przypomnienia w osobnym podfolderze 'completed' na liście.",
+	"driveHeader": "iCloud Drive",
+	"driveEnabled": "Włącz iCloud Drive"
 }

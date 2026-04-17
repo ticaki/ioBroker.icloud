@@ -33,5 +33,7 @@
 	"remindersFilterDue": "Solo scaduti / iniziati",
 	"remindersFilterAll": "Tutti i promemoria aperti",
 	"remindersShowCompleted": "Mostra promemoria completati",
-	"remindersShowCompletedHelp": "Mostra i promemoria completati in una sottocartella 'completed' separata per lista."
+	"remindersShowCompletedHelp": "Mostra i promemoria completati in una sottocartella 'completed' separata per lista.",
+	"driveHeader": "iCloud Drive",
+	"driveEnabled": "Attiva iCloud Drive"
 }

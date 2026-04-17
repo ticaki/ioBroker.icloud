@@ -234,6 +234,23 @@
             "default": false,
             "disabled": "!data.remindersEnabled"
         },
+        "_driveHeader": {
+            "type": "header",
+            "text": "driveHeader",
+            "size": 5,
+            "newLine": true
+        },
+        "driveEnabled": {
+            "type": "checkbox",
+            "label": "driveEnabled",
+            "newLine": true,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "default": false
+        },
         "_accountHeader": {
             "type": "header",
             "text": "accountHeader",

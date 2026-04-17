@@ -35,5 +35,7 @@
 	"remindersFilterDue": "Due / started only",
 	"remindersFilterAll": "All open reminders",
 	"remindersShowCompleted": "Show completed reminders",
-	"remindersShowCompletedHelp": "Show completed reminders in a separate 'completed' subfolder per list."
+	"remindersShowCompletedHelp": "Show completed reminders in a separate 'completed' subfolder per list.",
+	"driveHeader": "iCloud Drive",
+	"driveEnabled": "Enable iCloud Drive"
 }

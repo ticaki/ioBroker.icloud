@@ -33,5 +33,7 @@
 	"remindersFilterDue": "Échéance / commencé uniquement",
 	"remindersFilterAll": "Tous les rappels ouverts",
 	"remindersShowCompleted": "Afficher les rappels terminés",
-	"remindersShowCompletedHelp": "Afficher les rappels terminés dans un sous-dossier 'completed' séparé par liste."
+	"remindersShowCompletedHelp": "Afficher les rappels terminés dans un sous-dossier 'completed' séparé par liste.",
+	"driveHeader": "iCloud Drive",
+	"driveEnabled": "Activer iCloud Drive"
 }

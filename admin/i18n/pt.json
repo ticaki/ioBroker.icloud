@@ -33,5 +33,7 @@
 	"remindersFilterDue": "Apenas vencidos / iniciados",
 	"remindersFilterAll": "Todos os lembretes abertos",
 	"remindersShowCompleted": "Mostrar lembretes concluídos",
-	"remindersShowCompletedHelp": "Mostrar lembretes concluídos em uma subpasta 'completed' separada por lista."
+	"remindersShowCompletedHelp": "Mostrar lembretes concluídos em uma subpasta 'completed' separada por lista.",
+	"driveHeader": "iCloud Drive",
+	"driveEnabled": "Ativar iCloud Drive"
 }
