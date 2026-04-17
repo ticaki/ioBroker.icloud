@@ -48,6 +48,7 @@ var import_calendar = require("./services/calendar");
 var import_drive = require("./services/drive");
 var import_findMy = require("./services/findMy");
 var import_photos = require("./services/photos");
+var import_reminders = require("./services/reminders");
 var import_ubiquity = require("./services/ubiquity");
 const LogLevel = {
   Debug: 0,
@@ -314,9 +315,8 @@ class iCloudService extends import_node_events.default {
         JSON.stringify(Object.fromEntries(authResponse.headers.entries()))
       );
       this.authStore.extractSessionHeaders(authResponse);
-      this.authStore.saveCookieJar(this.options.username);
-      this.authStore.saveSession(this.options.username);
       if (authResponse.status == 200) {
+        this.authStore.saveCookieJar(this.options.username);
         if (this.authStore.processAuthSecrets(authResponse, this.options.username)) {
           this._setState("Trusted" /* Trusted */);
           void this._getiCloudCookies();
@@ -439,9 +439,12 @@ class iCloudService extends import_node_events.default {
         const body = (await authResponse.text()).slice(0, 300);
         this._log(LogLevel.Error, "[auth] unexpected response body (truncated):", body);
         if (authResponse.status == 401 || authResponse.status == 403) {
+          this.authStore.clearPersistedSession(this.options.username);
           throw new Error(`Falsche Apple-ID oder falsches Passwort (HTTP ${authResponse.status}): ${body}`);
         }
         if (authResponse.status == 503) {
+          this.authStore.saveCookieJar(this.options.username);
+          this.authStore.saveSession(this.options.username);
           throw new Error(
             "RATE_LIMITED: Apple hat den Login vor\xFCbergehend gesperrt (HTTP 503). Bitte 30\u201360 Minuten warten und dann erneut versuchen."
           );
@@ -684,7 +687,8 @@ class iCloudService extends import_node_events.default {
     ubiquity: import_ubiquity.iCloudUbiquityService,
     drivews: import_drive.iCloudDriveService,
     calendar: import_calendar.iCloudCalendarService,
-    photos: import_photos.iCloudPhotosService
+    photos: import_photos.iCloudPhotosService,
+    reminders: import_reminders.iCloudRemindersService
   };
   /**
    * Returns an instance of the specified service. Results are cached, so subsequent calls will return the same instance.
@@ -693,7 +697,7 @@ class iCloudService extends import_node_events.default {
    * @returns
    */
   getService(service) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     if (!this.serviceConstructors[service]) {
       throw new TypeError(
         `getService(service: string): 'service' was ${service.toString()}, must be one of ${Object.keys(this.serviceConstructors).join(", ")}`
@@ -707,8 +711,14 @@ class iCloudService extends import_node_events.default {
         (_c = webservices.ckdatabasews) == null ? void 0 : _c.url
       );
     }
+    if (service === "reminders") {
+      this._serviceCache[service] = new this.serviceConstructors[service](
+        this,
+        (_d = webservices.ckdatabasews) == null ? void 0 : _d.url
+      );
+    }
     if (!this._serviceCache[service]) {
-      this._serviceCache[service] = new this.serviceConstructors[service](this, (_d = ws[service]) == null ? void 0 : _d.url);
+      this._serviceCache[service] = new this.serviceConstructors[service](this, (_e = ws[service]) == null ? void 0 : _e.url);
     }
     return this._serviceCache[service];
   }

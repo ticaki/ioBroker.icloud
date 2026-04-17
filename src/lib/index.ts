@@ -13,6 +13,7 @@ import { iCloudCalendarService } from './services/calendar';
 import { iCloudDriveService } from './services/drive';
 import { iCloudFindMyService } from './services/findMy';
 import { iCloudPhotosService } from './services/photos';
+import { iCloudRemindersService } from './services/reminders';
 import { iCloudUbiquityService } from './services/ubiquity';
 import type { AccountInfo } from './types';
 
@@ -433,15 +434,12 @@ export default class iCloudService extends EventEmitter {
                 JSON.stringify(Object.fromEntries(authResponse.headers.entries())),
             );
 
-            // Always extract + persist session headers — even on error responses.
-            // This is the pyicloud pattern: Apple may return scnt/session_id on a 503 and
-            // expects them back on the next request. Without this, every retry looks like a
-            // brand-new client and the rate-limit window resets/extends.
+            // Always extract session headers in-memory — Apple may return a new scnt even on
+            // error responses, and we need it for in-session retries (pyicloud pattern).
             this.authStore.extractSessionHeaders(authResponse);
-            this.authStore.saveCookieJar(this.options.username);
-            this.authStore.saveSession(this.options.username);
 
             if (authResponse.status == 200) {
+                this.authStore.saveCookieJar(this.options.username);
                 if (this.authStore.processAuthSecrets(authResponse, this.options.username)) {
                     this._setState(iCloudServiceStatus.Trusted);
                     void this._getiCloudCookies();
@@ -588,9 +586,16 @@ export default class iCloudService extends EventEmitter {
                 const body = (await authResponse.text()).slice(0, 300);
                 this._log(LogLevel.Error, '[auth] unexpected response body (truncated):', body);
                 if (authResponse.status == 401 || authResponse.status == 403) {
+                    // Clear persisted session so the next startup does not reuse the stale/invalid scnt
+                    // from this error response. The in-memory scnt (already extracted above) can still
+                    // be used for immediate in-session retries, but must not reach disk.
+                    this.authStore.clearPersistedSession(this.options.username);
                     throw new Error(`Falsche Apple-ID oder falsches Passwort (HTTP ${authResponse.status}): ${body}`);
                 }
                 if (authResponse.status == 503) {
+                    // Rate-limited: Apple expects the same scnt on the next attempt → persist it.
+                    this.authStore.saveCookieJar(this.options.username);
+                    this.authStore.saveSession(this.options.username);
                     throw new Error(
                         'RATE_LIMITED: Apple hat den Login vorübergehend gesperrt (HTTP 503). Bitte 30–60 Minuten warten und dann erneut versuchen.',
                     );
@@ -858,6 +863,7 @@ export default class iCloudService extends EventEmitter {
         drivews: iCloudDriveService,
         calendar: iCloudCalendarService,
         photos: iCloudPhotosService,
+        reminders: iCloudRemindersService,
     };
 
     // Returns an instance of the 'account' (Account Details) service.
@@ -876,6 +882,8 @@ export default class iCloudService extends EventEmitter {
     getService(service: 'calendar'): iCloudCalendarService;
     // Returns an instance of the 'photos' (iCloud Photos) service.
     getService(service: 'photos'): iCloudPhotosService;
+    // Returns an instance of the 'reminders' (iCloud Reminders) service.
+    getService(service: 'reminders'): iCloudRemindersService;
     /**
      * Returns an instance of the specified service. Results are cached, so subsequent calls will return the same instance.
      *
@@ -891,6 +899,14 @@ export default class iCloudService extends EventEmitter {
         const webservices = this.accountInfo?.webservices ?? ({} as AccountInfo['webservices']);
         const ws = webservices as unknown as Record<string, { url?: string } | undefined>;
         if (service === 'photos') {
+            this._serviceCache[service] = new this.serviceConstructors[service](
+                this,
+                (webservices as { ckdatabasews?: { url?: string } }).ckdatabasews?.url,
+            );
+        }
+
+        // Reminders uses the CloudKit (ckdatabasews) endpoint, same as Photos
+        if (service === 'reminders') {
             this._serviceCache[service] = new this.serviceConstructors[service](
                 this,
                 (webservices as { ckdatabasews?: { url?: string } }).ckdatabasews?.url,

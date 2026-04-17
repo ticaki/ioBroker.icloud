@@ -44,6 +44,7 @@ This adapter connects ioBroker to your Apple iCloud account. It reads the locati
 -->
 ### 0.1.0-alpha.0 (2026-04-16)
 * (ticaki) initial release
+* (ticaki) iCloud Reminders werden ausgelesen und als Datenpunkte bereitgestellt (Listen & Erinnerungen mit Fälligkeit, Priorität und Status)
 
 ## License
 MIT License

@@ -18,6 +18,9 @@ declare global {
 			calendarEnabled: boolean;
 			calendarEventCount: number;
 			calendarInterval: number;
+			remindersEnabled: boolean;
+			remindersItemCount: number;
+			remindersInterval: number;
 			accountStorageEnabled: boolean;
 			accountStorageInterval: number;
 		}

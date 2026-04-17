@@ -142,6 +142,55 @@
             "default": 60,
             "disabled": "!data.calendarEnabled"
         },
+        "_remindersHeader": {
+            "type": "header",
+            "text": "remindersHeader",
+            "size": 5,
+            "newLine": true
+        },
+        "remindersEnabled": {
+            "type": "checkbox",
+            "label": "remindersEnabled",
+            "newLine": true,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "default": false
+        },
+        "remindersItemCount": {
+            "type": "number",
+            "label": "remindersItemCount",
+            "help": "remindersItemCountHelp",
+            "newLine": false,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "min": 1,
+            "max": 50,
+            "step": 1,
+            "default": 10,
+            "disabled": "!data.remindersEnabled"
+        },
+        "remindersInterval": {
+            "type": "number",
+            "label": "remindersInterval",
+            "help": "remindersIntervalHelp",
+            "newLine": false,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "min": 5,
+            "max": 1440,
+            "step": 1,
+            "default": 60,
+            "disabled": "!data.remindersEnabled"
+        },
         "_accountHeader": {
             "type": "header",
             "text": "accountHeader",

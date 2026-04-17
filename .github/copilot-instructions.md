@@ -12,6 +12,9 @@ npm run lint
 - `npm run build` — TypeScript compilation; no output errors allowed
 - `npm run lint` — ESLint + Prettier; no errors allowed (warnings are acceptable)
 
+Alle während einer Sitzung eingeführten Lint-Fehler und -Warnungen **müssen vor Ende der Sitzung behoben sein** — die Anzahl der Fehler und Warnungen darf nie größer werden als zu Beginn.
+Bereits vorher existierende Fehler und Warnungen **müssen ebenfalls behoben werden**, sofern sie im Rahmen der aktuellen Änderungen berührt werden oder ohne großen Aufwand behebbar sind.
+
 ## Project structure
 
 - `src/main.ts` — ioBroker adapter entry point (all adapter logic lives here)
@@ -26,6 +29,20 @@ pyiCloud ist die Referenzimplementierung: https://github.com/picklepete/pyicloud
 
 - Endpunkte, Request-Parameter, Header und Antwortstrukturen aus pyiCloud übernehmen
 - Bei Abweichungen oder Unklarheiten gilt pyiCloud als autoritäre Quelle
+
+### Reminders — CloudKit v2
+
+Der Legacy-Endpoint `/rd/startup` liefert nur noch alte, nicht-migrierte Erinnerungen.
+Alle modernen iCloud-Clients nutzen seit 2024/2025 die **CloudKit-API**:
+
+- Container: `com.apple.reminders` über den `ckdatabasews`-Webservice
+- Endpoint: `{ckdatabasews.url}/database/1/com.apple.reminders/production/private`
+- CloudKit-Zone: `Reminders` (REGULAR_CUSTOM_ZONE)
+- Listen: `POST /changes/zone` mit `desiredRecordTypes: ['List']`
+- Erinnerungen: `POST /records/query` mit RecordType `reminderList`
+
+Referenz-Implementierung für Reminders: **timlaing/pyicloud** (aktiv gepflegter Fork):
+https://github.com/timlaing/pyicloud/tree/main/pyicloud/services/reminders
 
 ## Key references
 
