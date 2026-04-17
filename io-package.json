@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.1.0-alpha.0",
+    "version": "0.2.0-alpha.0",
     "news": {
+      "0.2.0-alpha.0": {
+        "en": "iCloud Reminders are read and provided as data points (lists & reminders with due date, priority, and status)\nAdded Blockly sendTo blocks for creating, updating, completing, deleting, and querying iCloud Reminders",
+        "de": "iCloud Reminders werden als Datenpunkte gelesen und bereitgestellt (Listen & Erinnerungen mit Fälligkeitsdatum, Priorität und Status)\nBlockly sendTo-Blöcke hinzugefügt für das Erstellen, Aktualisieren, Abschließen, Löschen und Abfragen von iCloud Reminders",
+        "ru": "напоминания iCloud читаются и предоставляются в качестве точек данных (списки и напоминания с указанием даты, приоритета и статуса)\nДобавлены блоки Blockly sendTo для создания, обновления, завершения, удаления и запроса iCloud Reminders",
+        "pt": "os lembretes do iCloud são lidos e fornecidos como pontos de dados (listas e lembretes com data de vencimento, prioridade e status)\nAdicionados blocos Blockly sendTo para criar, atualizar, concluir, excluir e consultar lembretes do iCloud",
+        "nl": "iCloud herinneringen worden gelezen en verstrekt als gegevenspunten (lijsten & herinneringen met vervaldatum, prioriteit en status)\nBlockly sendTo-blokken toegevoegd voor het maken, bijwerken, voltooien, verwijderen en opvragen van iCloud herinneringen",
+        "fr": "les rappels iCloud sont lus et fournis comme points de données (listes et rappels avec date d'échéance, priorité et statut)\nAjout de blocs Blockly sendTo pour créer, mettre à jour, compléter, supprimer et interroger les rappels iCloud",
+        "it": "iCloud Reminders vengono letti e forniti come punti dati (liste e promemoria con data di scadenza, priorità e stato)\nAggiunto blocchi Blockly sendTo per la creazione, l'aggiornamento, il completamento, l'eliminazione e l'interrogazione di iCloud Reminders",
+        "es": "iCloud Reminders son leídos y proporcionados como puntos de datos (listas & recordatorios con fecha de vencimiento, prioridad y estado)\nAñadidos bloques Blockly sendTo para crear, actualizar, completar, eliminar y consultar iCloud Reminders",
+        "pl": "przypomnienia iCloud są odczytywane i dostarczane jako punkty danych (listy i przypomnienia z terminem wymagalności, priorytetem i statusem)\nDodano bloki Blockly sendTo do tworzenia, aktualizacji, uzupełniania, kasowania i wyszukiwania przypomnień iCloud",
+        "uk": "iCloud Reminders читаються та надаються як точки даних (списки та нагадування з датою виконання, пріоритетом та статусом)\nДодано блоки Blockly sendTo для створення, оновлення, завершення, видалення та запиту iCloud Reminders",
+        "zh-cn": "iCloud 提醒作为数据点读取并提供（列表和提醒，包含截止日期、优先级和状态）\n添加了 Blockly sendTo 块，用于创建、更新、完成、删除和查询 iCloud 提醒"
+      },
       "0.1.0-alpha.0": {
         "en": "initial release",
         "de": "erstausstrahlung",

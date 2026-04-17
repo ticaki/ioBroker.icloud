@@ -201,7 +201,7 @@ sendTo('icloud.0', 'deleteReminder', {
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.2.0-alpha.0 (2026-04-17)
 * (ticaki) iCloud Reminders are read and provided as data points (lists & reminders with due date, priority, and status)
 * (ticaki) Added Blockly sendTo blocks for creating, updating, completing, deleting, and querying iCloud Reminders
 
