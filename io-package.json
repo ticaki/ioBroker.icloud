@@ -69,6 +69,7 @@
     "adminUI": {
       "config": "json"
     },
+    "blockly": true,
     "messagebox": true,
     "dependencies": [
       {

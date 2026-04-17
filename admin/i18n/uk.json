@@ -25,5 +25,11 @@
 	"accountHeader": "Акаунт",
 	"accountStorageEnabled": "Отримати інформацію про сховище",
 	"accountStorageInterval": "Інтервал оновлення (хвилини)",
-	"accountStorageIntervalHelp": "Наскільки часто запитується використання сховища (30–1440 хвилин)"
+	"accountStorageIntervalHelp": "Наскільки часто запитується використання сховища (30–1440 хвилин)",
+	"remindersFilter": "Фільтр нагадувань",
+	"remindersFilterHelp": "Прострочені/розпочаті: тільки нагадування, дата початку або терміну яких вже минула. Всі: всі відкриті нагадування.",
+	"remindersFilterDue": "Тільки прострочені / розпочаті",
+	"remindersFilterAll": "Всі відкриті нагадування",
+	"remindersShowCompleted": "Показати завершені нагадування",
+	"remindersShowCompletedHelp": "Показати завершені нагадування в окремій підпапці 'completed' для кожного списку."
 }

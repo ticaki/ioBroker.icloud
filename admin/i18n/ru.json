@@ -25,5 +25,11 @@
 	"accountHeader": "Аккаунт",
 	"accountStorageEnabled": "Получать информацию о хранилище",
 	"accountStorageInterval": "Интервал обновления (минуты)",
-	"accountStorageIntervalHelp": "Как часто запрашивается использование хранилища (30–1440 минут)"
+	"accountStorageIntervalHelp": "Как часто запрашивается использование хранилища (30–1440 минут)",
+	"remindersFilter": "Фильтр напоминаний",
+	"remindersFilterHelp": "Просроченные/начатые: только напоминания, дата начала или срок которых уже прошли. Все: все открытые напоминания.",
+	"remindersFilterDue": "Только просроченные / начатые",
+	"remindersFilterAll": "Все открытые напоминания",
+	"remindersShowCompleted": "Показать завершённые напоминания",
+	"remindersShowCompletedHelp": "Показать завершённые напоминания в отдельной подпапке 'completed' для каждого списка."
 }

@@ -27,5 +27,11 @@
 	"accountHeader": "Account",
 	"accountStorageEnabled": "Fetch storage info",
 	"accountStorageInterval": "Refresh interval (minutes)",
-	"accountStorageIntervalHelp": "How often storage usage is fetched (30–1440 minutes)"
+	"accountStorageIntervalHelp": "How often storage usage is fetched (30–1440 minutes)",
+	"remindersFilter": "Filter reminders",
+	"remindersFilterHelp": "Due/started: only reminders whose start or due date is in the past. All: all open reminders.",
+	"remindersFilterDue": "Due / started only",
+	"remindersFilterAll": "All open reminders",
+	"remindersShowCompleted": "Show completed reminders",
+	"remindersShowCompletedHelp": "Show completed reminders in a separate 'completed' subfolder per list."
 }

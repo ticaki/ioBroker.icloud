@@ -896,25 +896,19 @@ export default class iCloudService extends EventEmitter {
                 `getService(service: string): 'service' was ${service.toString()}, must be one of ${Object.keys(this.serviceConstructors).join(', ')}`,
             );
         }
-        const webservices = this.accountInfo?.webservices ?? ({} as AccountInfo['webservices']);
-        const ws = webservices as unknown as Record<string, { url?: string } | undefined>;
-        if (service === 'photos') {
-            this._serviceCache[service] = new this.serviceConstructors[service](
-                this,
-                (webservices as { ckdatabasews?: { url?: string } }).ckdatabasews?.url,
-            );
-        }
-
-        // Reminders uses the CloudKit (ckdatabasews) endpoint, same as Photos
-        if (service === 'reminders') {
-            this._serviceCache[service] = new this.serviceConstructors[service](
-                this,
-                (webservices as { ckdatabasews?: { url?: string } }).ckdatabasews?.url,
-            );
-        }
 
         if (!this._serviceCache[service]) {
-            this._serviceCache[service] = new this.serviceConstructors[service](this, ws[service]?.url);
+            const webservices = this.accountInfo?.webservices ?? ({} as AccountInfo['webservices']);
+            const ws = webservices as unknown as Record<string, { url?: string } | undefined>;
+            if (service === 'photos' || service === 'reminders') {
+                // Photos & Reminders use the CloudKit (ckdatabasews) endpoint
+                this._serviceCache[service] = new this.serviceConstructors[service](
+                    this,
+                    (webservices as { ckdatabasews?: { url?: string } }).ckdatabasews?.url,
+                );
+            } else {
+                this._serviceCache[service] = new this.serviceConstructors[service](this, ws[service]?.url);
+            }
         }
 
         return this._serviceCache[service];

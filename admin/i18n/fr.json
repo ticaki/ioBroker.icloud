@@ -25,5 +25,11 @@
 	"accountHeader": "Compte",
 	"accountStorageEnabled": "Récupérer les infos de stockage",
 	"accountStorageInterval": "Intervalle de mise à jour (minutes)",
-	"accountStorageIntervalHelp": "Fréquence de récupération de l'utilisation du stockage (30–1440 minutes)"
+	"accountStorageIntervalHelp": "Fréquence de récupération de l'utilisation du stockage (30–1440 minutes)",
+	"remindersFilter": "Filtrer les rappels",
+	"remindersFilterHelp": "Échéance/commencé : seuls les rappels dont la date de début ou d'échéance est passée. Tous : tous les rappels ouverts.",
+	"remindersFilterDue": "Échéance / commencé uniquement",
+	"remindersFilterAll": "Tous les rappels ouverts",
+	"remindersShowCompleted": "Afficher les rappels terminés",
+	"remindersShowCompletedHelp": "Afficher les rappels terminés dans un sous-dossier 'completed' séparé par liste."
 }

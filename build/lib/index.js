@@ -697,28 +697,23 @@ class iCloudService extends import_node_events.default {
    * @returns
    */
   getService(service) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d;
     if (!this.serviceConstructors[service]) {
       throw new TypeError(
         `getService(service: string): 'service' was ${service.toString()}, must be one of ${Object.keys(this.serviceConstructors).join(", ")}`
       );
     }
-    const webservices = (_b = (_a = this.accountInfo) == null ? void 0 : _a.webservices) != null ? _b : {};
-    const ws = webservices;
-    if (service === "photos") {
-      this._serviceCache[service] = new this.serviceConstructors[service](
-        this,
-        (_c = webservices.ckdatabasews) == null ? void 0 : _c.url
-      );
-    }
-    if (service === "reminders") {
-      this._serviceCache[service] = new this.serviceConstructors[service](
-        this,
-        (_d = webservices.ckdatabasews) == null ? void 0 : _d.url
-      );
-    }
     if (!this._serviceCache[service]) {
-      this._serviceCache[service] = new this.serviceConstructors[service](this, (_e = ws[service]) == null ? void 0 : _e.url);
+      const webservices = (_b = (_a = this.accountInfo) == null ? void 0 : _a.webservices) != null ? _b : {};
+      const ws = webservices;
+      if (service === "photos" || service === "reminders") {
+        this._serviceCache[service] = new this.serviceConstructors[service](
+          this,
+          (_c = webservices.ckdatabasews) == null ? void 0 : _c.url
+        );
+      } else {
+        this._serviceCache[service] = new this.serviceConstructors[service](this, (_d = ws[service]) == null ? void 0 : _d.url);
+      }
     }
     return this._serviceCache[service];
   }

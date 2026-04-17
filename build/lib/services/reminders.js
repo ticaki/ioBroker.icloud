@@ -152,6 +152,136 @@ function parseDocumentProto(buf) {
   }
   return "";
 }
+function encodeCrdtDocument(text) {
+  const textLen = text.length;
+  const CLOCK_MAX = 4294967295;
+  const REPLICA_UUID = Buffer.from("d46bcae41b8766c18d75efe35c9145c3", "hex");
+  function charID(replicaID, clock) {
+    return Buffer.concat([writeProtobufVarint(1, replicaID), writeProtobufVarint(2, clock)]);
+  }
+  const sentinel = Buffer.concat([
+    writeProtobufField(1, charID(0, 0)),
+    // charID
+    writeProtobufVarint(2, 0),
+    // length = 0
+    writeProtobufField(3, charID(0, 0)),
+    // timestamp
+    writeProtobufVarint(5, 1)
+    // child[0] = 1
+  ]);
+  let content = null;
+  if (textLen > 0) {
+    content = Buffer.concat([
+      writeProtobufField(1, charID(1, 0)),
+      writeProtobufVarint(2, textLen),
+      writeProtobufField(3, charID(1, 0)),
+      writeProtobufVarint(5, 2)
+      // child[0] = 2
+    ]);
+  }
+  const terminal = Buffer.concat([
+    writeProtobufField(1, charID(0, CLOCK_MAX)),
+    writeProtobufVarint(2, 0),
+    writeProtobufField(3, charID(0, CLOCK_MAX))
+  ]);
+  const replicaClock1 = writeProtobufVarint(1, textLen);
+  const replicaClock2 = writeProtobufVarint(1, 1);
+  const clockMsg = Buffer.concat([
+    writeProtobufField(1, REPLICA_UUID),
+    // replicaUUID (bytes)
+    writeProtobufField(2, replicaClock1),
+    // replicaClock[0]
+    writeProtobufField(2, replicaClock2)
+    // replicaClock[1]
+  ]);
+  const vectorTimestamp = writeProtobufField(1, clockMsg);
+  const textBuf = Buffer.from(text, "utf-8");
+  const stringParts = [
+    writeProtobufField(2, textBuf),
+    // string (field 2)
+    writeProtobufField(3, sentinel)
+    // substring[0]
+  ];
+  if (content) {
+    stringParts.push(writeProtobufField(3, content));
+  }
+  stringParts.push(writeProtobufField(3, terminal));
+  stringParts.push(writeProtobufField(4, vectorTimestamp));
+  if (textLen > 0) {
+    const attrRun = writeProtobufVarint(1, textLen);
+    stringParts.push(writeProtobufField(5, attrRun));
+  }
+  const stringMsg = Buffer.concat(stringParts);
+  const versionMsg = Buffer.concat([
+    writeProtobufVarint(1, 0),
+    // serializationVersion
+    writeProtobufVarint(2, 0),
+    // minimumSupportedVersion
+    writeProtobufField(3, stringMsg)
+    // data
+  ]);
+  const documentMsg = Buffer.concat([
+    writeProtobufVarint(1, 0),
+    // serializationVersion
+    writeProtobufField(2, versionMsg)
+    // version[0]
+  ]);
+  const compressed = zlib.deflateSync(documentMsg);
+  return compressed.toString("base64");
+}
+function writeProtobufVarint(fieldNumber, value) {
+  const tag = fieldNumber << 3 | 0;
+  const parts = [];
+  let t = tag;
+  while (t > 127) {
+    parts.push(t & 127 | 128);
+    t >>>= 7;
+  }
+  parts.push(t & 127);
+  let v = value >>> 0;
+  while (v > 127) {
+    parts.push(v & 127 | 128);
+    v >>>= 7;
+  }
+  parts.push(v & 127);
+  return Buffer.from(parts);
+}
+function writeProtobufField(fieldNumber, data) {
+  const tag = fieldNumber << 3 | 2;
+  const parts = [];
+  let t = tag;
+  while (t > 127) {
+    parts.push(t & 127 | 128);
+    t >>>= 7;
+  }
+  parts.push(t & 127);
+  let len = data.length;
+  while (len > 127) {
+    parts.push(len & 127 | 128);
+    len >>>= 7;
+  }
+  parts.push(len & 127);
+  return Buffer.concat([Buffer.from(parts), data]);
+}
+function generateResolutionTokenMap(fieldsModified) {
+  const appleEpoch = Date.now() / 1e3 - 978307200;
+  const tokens = {};
+  for (const field of fieldsModified) {
+    tokens[field] = {
+      counter: 1,
+      modificationTime: appleEpoch,
+      replicaID: generateUUID()
+    };
+  }
+  return JSON.stringify({ map: tokens });
+}
+function generateUUID() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === "x" ? r : r & 3 | 8;
+    return v.toString(16);
+  }).toUpperCase();
+}
 function decodeCrdtDocument(value) {
   if (value === null || value === void 0) {
     return "";
@@ -217,13 +347,30 @@ class iCloudRemindersService {
     }
     return map;
   }
-  /** Get the current sync token (for persistence by the adapter). */
-  get syncToken() {
-    return this._syncToken;
+  /**
+   * Restore in-memory state from a persisted syncMap.
+   *
+   * @param map
+   */
+  loadSyncMap(map) {
+    this._syncToken = map.syncToken || void 0;
+    this.listsById.clear();
+    for (const [id, list] of Object.entries(map.lists)) {
+      this.listsById.set(id, list);
+    }
+    this.remindersById.clear();
+    for (const [id, rem] of Object.entries(map.reminders)) {
+      this.remindersById.set(id, rem);
+    }
   }
-  /** Set the sync token (restored from adapter state on startup). */
-  set syncToken(token) {
-    this._syncToken = token;
+  /** Export current state as a plain object for persistence. */
+  exportSyncMap() {
+    var _a;
+    return {
+      syncToken: (_a = this._syncToken) != null ? _a : "",
+      lists: Object.fromEntries(this.listsById),
+      reminders: Object.fromEntries(this.remindersById)
+    };
   }
   constructor(service, serviceUri) {
     this.service = service;
@@ -279,8 +426,7 @@ class iCloudRemindersService {
    * Reminders zone — both List and Reminder records arrive together.
    * On subsequent calls (with syncToken): fetches only the delta since last sync.
    *
-   * The sync token is updated after each successful refresh and should be
-   * persisted by the adapter so it survives restarts.
+   * @returns true if any records were ingested (data changed), false otherwise.
    */
   async refresh() {
     var _a, _b;
@@ -288,6 +434,7 @@ class iCloudRemindersService {
     const MAX_PAGES = 50;
     let page = 0;
     const isIncremental = !!this._syncToken;
+    let recordsIngested = 0;
     while (moreComing) {
       if (++page > MAX_PAGES) {
         this.service._log(1, `[reminders-ck] refresh: hit max page limit (${MAX_PAGES}), stopping`);
@@ -309,6 +456,7 @@ class iCloudRemindersService {
       for (const zone of zones) {
         for (const rec of (_b = zone.records) != null ? _b : []) {
           this.ingestRecord(rec);
+          recordsIngested++;
         }
         if (zone.syncToken) {
           this._syncToken = zone.syncToken;
@@ -318,21 +466,18 @@ class iCloudRemindersService {
         }
       }
     }
-    if (isIncremental && this.listsById.size === 0) {
-      this.service._log(0, `[reminders-ck] incremental sync returned empty maps \u2014 falling back to full resync`);
-      this._syncToken = void 0;
-      return this.refresh();
-    }
-    for (const rem of this.remindersById.values()) {
-      if (!this.listsById.has(rem.listId)) {
-        this.remindersById.delete(rem.id);
+    if (recordsIngested > 0) {
+      for (const rem of this.remindersById.values()) {
+        if (!this.listsById.has(rem.listId)) {
+          this.remindersById.delete(rem.id);
+        }
       }
     }
-    const totalReminders = this.remindersById.size;
     this.service._log(
       0,
-      `[reminders-ck] refresh: ${isIncremental ? "incremental" : "full"}, ${page} page(s), ${this.listsById.size} list(s), ${totalReminders} reminder(s)`
+      `[reminders-ck] refresh: ${isIncremental ? "incremental" : "full"}, ${page} page(s), ${recordsIngested} record(s) ingested, ${this.listsById.size} list(s), ${this.remindersById.size} reminder(s) total`
     );
+    return recordsIngested > 0;
   }
   /**
    * Route a single CloudKit record into the in-memory maps.
@@ -340,7 +485,7 @@ class iCloudRemindersService {
    * @param rec - CloudKit record to process
    */
   ingestRecord(rec) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
     if (rec.recordType === "List") {
       if (rec.deleted) {
         this.listsById.delete(rec.recordName);
@@ -386,9 +531,247 @@ class iCloudRemindersService {
         allDay: !!getFieldValue(fields, "AllDay"),
         deleted: !!getFieldValue(fields, "Deleted"),
         createdDate,
-        lastModifiedDate: modifiedDate
+        lastModifiedDate: modifiedDate,
+        recordChangeTag: (_i = rec.recordChangeTag) != null ? _i : null
       });
     }
+  }
+  // ── CRUD operations ───────────────────────────────────────────────────────
+  /**
+   * Create a new reminder in a list.
+   *
+   * Reference: timlaing/pyicloud RemindersWriteAPI.create
+   *
+   * @param options - reminder creation options
+   * @param options.listId
+   * @param options.title
+   * @param options.description
+   * @param options.completed
+   * @param options.dueDate
+   * @param options.priority
+   * @param options.flagged
+   * @param options.allDay
+   * @returns the created Reminder (after re-fetching from CloudKit)
+   */
+  async createReminder(options) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+    const reminderUuid = generateUUID();
+    const recordName = `Reminder/${reminderUuid}`;
+    const nowMs = Date.now();
+    const completed = (_a = options.completed) != null ? _a : false;
+    const titleDoc = encodeCrdtDocument(options.title);
+    const notesDoc = encodeCrdtDocument((_b = options.description) != null ? _b : "");
+    const fieldsModified = [
+      "allDay",
+      "titleDocument",
+      "notesDocument",
+      "priority",
+      "creationDate",
+      "list",
+      "flagged",
+      "completed",
+      "completionDate",
+      "lastModifiedDate"
+    ];
+    if (options.dueDate) {
+      fieldsModified.push("dueDate");
+    }
+    const recordFields = {
+      AllDay: { type: "INT64", value: options.allDay ? 1 : 0 },
+      Completed: { type: "INT64", value: completed ? 1 : 0 },
+      CompletionDate: { type: "TIMESTAMP", value: completed ? nowMs : null },
+      CreationDate: { type: "TIMESTAMP", value: nowMs },
+      Deleted: { type: "INT64", value: 0 },
+      Flagged: { type: "INT64", value: options.flagged ? 1 : 0 },
+      Imported: { type: "INT64", value: 0 },
+      LastModifiedDate: { type: "TIMESTAMP", value: nowMs },
+      List: {
+        type: "REFERENCE",
+        value: { recordName: options.listId, action: "VALIDATE" }
+      },
+      NotesDocument: { type: "STRING", value: notesDoc },
+      Priority: { type: "INT64", value: (_c = options.priority) != null ? _c : 0 },
+      ResolutionTokenMap: { type: "STRING", value: generateResolutionTokenMap(fieldsModified) },
+      TitleDocument: { type: "STRING", value: titleDoc }
+    };
+    if (options.dueDate) {
+      recordFields.DueDate = { type: "TIMESTAMP", value: options.dueDate };
+    }
+    const resp = await this.ckPost("/records/modify", {
+      operations: [
+        {
+          operationType: "create",
+          record: {
+            recordName,
+            recordType: "Reminder",
+            fields: recordFields,
+            createShortGUID: true,
+            desiredKeys: []
+          }
+        }
+      ],
+      zoneID: REMINDERS_ZONE,
+      atomic: true
+    });
+    const created = (_d = resp.records) == null ? void 0 : _d[0];
+    if (created) {
+      this.ingestRecord(created);
+    }
+    const reminder = this.remindersById.get(recordName);
+    if (!reminder) {
+      const fallback = {
+        id: recordName,
+        listId: options.listId,
+        title: options.title,
+        description: (_e = options.description) != null ? _e : "",
+        completed,
+        completedDate: completed ? nowMs : null,
+        dueDate: (_f = options.dueDate) != null ? _f : null,
+        startDate: null,
+        priority: (_g = options.priority) != null ? _g : 0,
+        flagged: (_h = options.flagged) != null ? _h : false,
+        allDay: (_i = options.allDay) != null ? _i : false,
+        deleted: false,
+        createdDate: nowMs,
+        lastModifiedDate: nowMs,
+        recordChangeTag: (_j = created == null ? void 0 : created.recordChangeTag) != null ? _j : null
+      };
+      this.remindersById.set(recordName, fallback);
+      return fallback;
+    }
+    return reminder;
+  }
+  /**
+   * Update an existing reminder.
+   *
+   * Reference: timlaing/pyicloud RemindersWriteAPI.update
+   *
+   * @param reminder - the reminder with updated fields
+   */
+  async updateReminder(reminder) {
+    var _a, _b, _c, _d;
+    if (!reminder.recordChangeTag) {
+      throw new Error(`Cannot update reminder ${reminder.id} \u2014 no recordChangeTag (sync first)`);
+    }
+    const nowMs = Date.now();
+    const titleDoc = encodeCrdtDocument(reminder.title);
+    const notesDoc = encodeCrdtDocument((_a = reminder.description) != null ? _a : "");
+    const fieldsModified = [
+      "titleDocument",
+      "notesDocument",
+      "completed",
+      "completionDate",
+      "priority",
+      "flagged",
+      "allDay",
+      "lastModifiedDate",
+      "dueDate"
+    ];
+    const completionDateMs = reminder.completed ? (_b = reminder.completedDate) != null ? _b : nowMs : null;
+    const fields = {
+      TitleDocument: { type: "STRING", value: titleDoc },
+      NotesDocument: { type: "STRING", value: notesDoc },
+      Completed: { type: "INT64", value: reminder.completed ? 1 : 0 },
+      CompletionDate: { type: "TIMESTAMP", value: completionDateMs },
+      Priority: { type: "INT64", value: reminder.priority },
+      Flagged: { type: "INT64", value: reminder.flagged ? 1 : 0 },
+      AllDay: { type: "INT64", value: reminder.allDay ? 1 : 0 },
+      LastModifiedDate: { type: "TIMESTAMP", value: nowMs },
+      DueDate: { type: "TIMESTAMP", value: (_c = reminder.dueDate) != null ? _c : null },
+      ResolutionTokenMap: { type: "STRING", value: generateResolutionTokenMap(fieldsModified) }
+    };
+    const resp = await this.ckPost("/records/modify", {
+      operations: [
+        {
+          operationType: "update",
+          record: {
+            recordName: reminder.id,
+            recordType: "Reminder",
+            recordChangeTag: reminder.recordChangeTag,
+            fields
+          }
+        }
+      ],
+      zoneID: REMINDERS_ZONE,
+      atomic: true
+    });
+    reminder.lastModifiedDate = nowMs;
+    if (reminder.completed && !reminder.completedDate) {
+      reminder.completedDate = nowMs;
+    }
+    const updated = (_d = resp.records) == null ? void 0 : _d[0];
+    if (updated == null ? void 0 : updated.recordChangeTag) {
+      reminder.recordChangeTag = updated.recordChangeTag;
+    }
+    this.remindersById.set(reminder.id, reminder);
+  }
+  /**
+   * Delete a reminder (soft-delete via Deleted=1).
+   *
+   * Reference: timlaing/pyicloud RemindersWriteAPI.delete
+   *
+   * @param reminderId - ID of the reminder to delete
+   */
+  async deleteReminder(reminderId) {
+    const reminder = this.remindersById.get(reminderId);
+    if (!reminder) {
+      throw new Error(`Reminder not found: ${reminderId}`);
+    }
+    if (!reminder.recordChangeTag) {
+      throw new Error(`Cannot delete reminder ${reminderId} \u2014 no recordChangeTag (sync first)`);
+    }
+    const nowMs = Date.now();
+    const fieldsModified = ["deleted", "lastModifiedDate"];
+    await this.ckPost("/records/modify", {
+      operations: [
+        {
+          operationType: "update",
+          record: {
+            recordName: reminder.id,
+            recordType: "Reminder",
+            recordChangeTag: reminder.recordChangeTag,
+            fields: {
+              Deleted: { type: "INT64", value: 1 },
+              LastModifiedDate: { type: "TIMESTAMP", value: nowMs },
+              ResolutionTokenMap: {
+                type: "STRING",
+                value: generateResolutionTokenMap(fieldsModified)
+              }
+            }
+          }
+        }
+      ],
+      zoneID: REMINDERS_ZONE,
+      atomic: true
+    });
+    this.remindersById.delete(reminderId);
+  }
+  /**
+   * Mark a reminder as completed or uncompleted.
+   *
+   * @param reminderId - ID of the reminder
+   * @param completed - true to mark completed, false to uncomplete
+   */
+  async completeReminder(reminderId, completed) {
+    const reminder = this.remindersById.get(reminderId);
+    if (!reminder) {
+      throw new Error(`Reminder not found: ${reminderId}`);
+    }
+    reminder.completed = completed;
+    reminder.completedDate = completed ? Date.now() : null;
+    await this.updateReminder(reminder);
+  }
+  /**
+   * Get a reminder by ID.
+   *
+   * @param reminderId
+   */
+  getReminder(reminderId) {
+    return this.remindersById.get(reminderId);
+  }
+  /** Get all reminders as an array. */
+  getAllReminders() {
+    return [...this.remindersById.values()];
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

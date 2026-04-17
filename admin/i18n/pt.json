@@ -25,5 +25,11 @@
 	"accountHeader": "Conta",
 	"accountStorageEnabled": "Obter informações de armazenamento",
 	"accountStorageInterval": "Intervalo de atualização (minutos)",
-	"accountStorageIntervalHelp": "Com que frequência o uso de armazenamento é consultado (30–1440 minutos)"
+	"accountStorageIntervalHelp": "Com que frequência o uso de armazenamento é consultado (30–1440 minutos)",
+	"remindersFilter": "Filtrar lembretes",
+	"remindersFilterHelp": "Vencidos/iniciados: apenas lembretes cuja data de início ou vencimento já passou. Todos: todos os lembretes abertos.",
+	"remindersFilterDue": "Apenas vencidos / iniciados",
+	"remindersFilterAll": "Todos os lembretes abertos",
+	"remindersShowCompleted": "Mostrar lembretes concluídos",
+	"remindersShowCompletedHelp": "Mostrar lembretes concluídos em uma subpasta 'completed' separada por lista."
 }

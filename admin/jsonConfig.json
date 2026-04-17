@@ -191,6 +191,36 @@
             "default": 60,
             "disabled": "!data.remindersEnabled"
         },
+        "remindersFilter": {
+            "type": "select",
+            "label": "remindersFilter",
+            "help": "remindersFilterHelp",
+            "newLine": true,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "options": [
+                { "value": "due", "label": "remindersFilterDue" },
+                { "value": "all", "label": "remindersFilterAll" }
+            ],
+            "default": "due",
+            "disabled": "!data.remindersEnabled"
+        },
+        "remindersShowCompleted": {
+            "type": "checkbox",
+            "label": "remindersShowCompleted",
+            "help": "remindersShowCompletedHelp",
+            "newLine": false,
+            "xs": 12,
+            "sm": 6,
+            "md": 4,
+            "lg": 3,
+            "xl": 3,
+            "default": false,
+            "disabled": "!data.remindersEnabled"
+        },
         "_accountHeader": {
             "type": "header",
             "text": "accountHeader",

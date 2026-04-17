@@ -5,6 +5,7 @@
 import * as utils from '@iobroker/adapter-core';
 import iCloudService, { LogLevel } from './lib/index';
 import type { iCloudFindMyDeviceInfo } from './lib/services/findMy';
+import type { iCloudRemindersService, Reminder, RemindersSyncMap } from './lib/services/reminders';
 
 /** Best-effort human-readable names for Apple FindMy feature flags (not officially documented). */
 const FINDMY_FEATURE_NAMES: Record<string, string> = {
@@ -152,6 +153,7 @@ const REMINDER_ITEM_STATES: Array<{
     name: string;
     type: ioBroker.CommonType;
     role: string;
+    write?: boolean;
 }> = [
     { id: 'title', name: 'Title', type: 'string', role: 'text' },
     { id: 'description', name: 'Description', type: 'string', role: 'text' },
@@ -160,7 +162,7 @@ const REMINDER_ITEM_STATES: Array<{
     { id: 'priority', name: 'Priority', type: 'number', role: 'value' },
     { id: 'flagged', name: 'Flagged', type: 'boolean', role: 'indicator' },
     { id: 'allDay', name: 'All Day', type: 'boolean', role: 'indicator' },
-    { id: 'completed', name: 'Completed', type: 'boolean', role: 'indicator' },
+    { id: 'completed', name: 'Completed', type: 'boolean', role: 'switch', write: true },
     { id: 'dueDate', name: 'Due Date', type: 'number', role: 'value.time' },
     { id: 'startDate', name: 'Start Date', type: 'number', role: 'value.time' },
     { id: 'completedDate', name: 'Completed Date', type: 'number', role: 'value.time' },
@@ -206,6 +208,7 @@ class Icloud extends utils.Adapter {
     private findMyIdMap: Map<string, string> = new Map();
     private calendarRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersRefreshTimer: ioBroker.Timeout | null | undefined = null;
+    private remindersSyncMapLoaded = false;
     private accountStorageRefreshTimer: ioBroker.Timeout | null | undefined = null;
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
@@ -374,6 +377,7 @@ class Icloud extends utils.Adapter {
         this.subscribeStates('mfa.code');
         this.subscribeStates('mfa.requestSmsCode');
         this.subscribeStates('findme.*.ping');
+        this.subscribeStates('reminders.*.*.completed');
         this.log.debug('Subscribed to mfa.code');
 
         await this.connectToiCloud();
@@ -1179,127 +1183,202 @@ class Icloud extends utils.Adapter {
         }
         try {
             const remService = this.icloud.getService('reminders');
+            const isFirstCall = !this.remindersSyncMapLoaded;
 
-            // Restore persisted sync token on first refresh (enables incremental updates after restart)
-            if (!remService.syncToken) {
-                const stored = await this.getStateAsync('reminders._syncToken');
-                if (stored?.val && typeof stored.val === 'string') {
-                    remService.syncToken = stored.val;
-                    this.log.debug(`Reminders: restored sync token from state`);
+            // On first call: restore syncMap from the reminders object's native
+            if (isFirstCall) {
+                this.remindersSyncMapLoaded = true;
+                try {
+                    const obj = await this.getObjectAsync('reminders');
+                    const syncMap = (obj?.native as { syncMap?: unknown } | undefined)?.syncMap;
+                    if (syncMap && typeof syncMap === 'object' && (syncMap as { syncToken?: string }).syncToken) {
+                        remService.loadSyncMap(syncMap as RemindersSyncMap);
+                        this.log.debug(
+                            `Reminders: restored syncMap (${remService.lists.length} list(s), syncToken present)`,
+                        );
+                    }
+                } catch {
+                    // Object doesn't exist yet — fresh install, full sync will follow
                 }
             }
 
-            await remService.refresh();
+            const changed = await remService.refresh();
 
-            // Persist sync token for next restart
-            if (remService.syncToken) {
-                await this.extendObject('reminders._syncToken', {
-                    type: 'state',
-                    common: {
-                        name: 'CloudKit Sync Token',
-                        type: 'string',
-                        role: 'text',
-                        read: true,
-                        write: false,
-                        expert: true,
-                    },
-                    native: {},
-                });
-                await this.setState('reminders._syncToken', remService.syncToken, true);
-            }
-
-            const maxCount = Math.max(1, Math.floor(this.config.remindersItemCount ?? 10));
-
-            await this.extendObject('reminders', {
-                type: 'folder',
-                common: { name: 'Reminders' },
-                native: {},
-            });
-
-            const activeListIds = new Set<string>();
-            for (const list of remService.lists) {
-                const listId = this.sanitizeCalendarId(list.title);
-                activeListIds.add(listId);
-
-                await this.extendObject(`reminders.${listId}`, {
+            // Persist syncMap only when data actually changed
+            if (changed) {
+                await this.extendObject('reminders', {
                     type: 'folder',
-                    common: { name: list.title },
-                    native: {},
+                    common: { name: 'Reminders' },
+                    native: { syncMap: remService.exportSyncMap() },
                 });
-
-                // Collection-level states
-                for (const s of REMINDER_COLLECTION_STATES) {
-                    await this.extendObject(`reminders.${listId}.${s.id}`, {
-                        type: 'state',
-                        common: { name: s.name, type: s.type, role: s.role, read: true, write: false },
-                        native: {},
-                    });
-                }
-                await this.setState(`reminders.${listId}.id`, list.id ?? '', true);
-                await this.setState(`reminders.${listId}.color`, list.color ?? '', true);
-                await this.setState(`reminders.${listId}.count`, list.count ?? 0, true);
-
-                // Reminders for this list — not completed, sorted by due date
-                const items = (remService.remindersByList.get(list.id) ?? [])
-                    .filter(r => !r.completed && !r.deleted)
-                    .sort((a, b) => {
-                        const ta = a.dueDate ?? Infinity;
-                        const tb = b.dueDate ?? Infinity;
-                        return ta - tb;
-                    });
-
-                for (let i = 1; i <= maxCount; i++) {
-                    const slotId = String(i).padStart(6, '0');
-                    const basePath = `reminders.${listId}.${slotId}`;
-                    const rem = items[i - 1];
-
-                    await this.extendObject(basePath, {
-                        type: 'folder',
-                        common: { name: rem?.title ?? `Reminder ${slotId}` },
-                        native: {},
-                    });
-
-                    for (const s of REMINDER_ITEM_STATES) {
-                        await this.extendObject(`${basePath}.${s.id}`, {
-                            type: 'state',
-                            common: { name: s.name, type: s.type, role: s.role, read: true, write: false },
-                            native: {},
-                        });
-                    }
-
-                    if (rem) {
-                        await this.setState(`${basePath}.title`, rem.title ?? '', true);
-                        await this.setState(`${basePath}.description`, rem.description ?? '', true);
-                        await this.setState(`${basePath}.id`, rem.id ?? '', true);
-                        await this.setState(`${basePath}.listId`, rem.listId ?? '', true);
-                        await this.setState(`${basePath}.priority`, rem.priority ?? 0, true);
-                        await this.setState(`${basePath}.flagged`, rem.flagged ?? false, true);
-                        await this.setState(`${basePath}.allDay`, rem.allDay ?? false, true);
-                        await this.setState(`${basePath}.completed`, rem.completed ?? false, true);
-                        await this.setState(`${basePath}.dueDate`, rem.dueDate ?? null, true);
-                        await this.setState(`${basePath}.startDate`, rem.startDate ?? null, true);
-                        await this.setState(`${basePath}.completedDate`, rem.completedDate ?? null, true);
-                        await this.setState(`${basePath}.createdDate`, rem.createdDate ?? null, true);
-                        await this.setState(`${basePath}.lastModifiedDate`, rem.lastModifiedDate ?? null, true);
-                    } else {
-                        for (const s of REMINDER_ITEM_STATES) {
-                            await this.setState(`${basePath}.${s.id}`, null, true);
-                        }
-                    }
-                }
             }
 
-            await this.cleanupRemindersObjects(activeListIds, maxCount);
-            this.log.debug(
-                `Reminders refresh done — ${remService.lists.length} list(s), ${[...remService.remindersByList.values()].reduce((s, l) => s + l.length, 0)} reminder(s)`,
-            );
+            // First call: always write states (data comes from restored syncMap even if delta was empty)
+            // Subsequent calls: skip state updates when nothing changed
+            if (!changed && !isFirstCall) {
+                this.log.debug('Reminders refresh: no changes, skipping state updates');
+                return;
+            }
+
+            await this.writeReminderStates(remService);
         } catch (err) {
             const msg = (err as Error)?.message ?? String(err);
             this.log.warn(`Reminders refresh failed: ${msg}`);
         }
     }
 
-    private async cleanupRemindersObjects(activeListIds: Set<string>, maxCount: number): Promise<void> {
+    private async persistRemindersSyncMap(): Promise<void> {
+        if (!this.icloud || !this.remindersSyncMapLoaded) {
+            return;
+        }
+        try {
+            const remService = this.icloud.getService('reminders');
+            await this.extendObject('reminders', {
+                type: 'folder',
+                common: { name: 'Reminders' },
+                native: { syncMap: remService.exportSyncMap() },
+            });
+        } catch {
+            // Best effort on shutdown
+        }
+    }
+
+    private async writeReminderStates(remService: iCloudRemindersService): Promise<void> {
+        const maxCount = Math.max(1, Math.floor(this.config.remindersItemCount ?? 10));
+        const filterMode = this.config.remindersFilter ?? 'due';
+        const showCompleted = this.config.remindersShowCompleted ?? false;
+        const now = Date.now();
+
+        await this.extendObject('reminders', {
+            type: 'folder',
+            common: { name: 'Reminders' },
+            native: {},
+        });
+
+        const activeListIds = new Set<string>();
+        for (const list of remService.lists) {
+            const listId = this.sanitizeCalendarId(list.title);
+            activeListIds.add(listId);
+
+            await this.extendObject(`reminders.${listId}`, {
+                type: 'folder',
+                common: { name: list.title },
+                native: {},
+            });
+
+            for (const s of REMINDER_COLLECTION_STATES) {
+                await this.extendObject(`reminders.${listId}.${s.id}`, {
+                    type: 'state',
+                    common: { name: s.name, type: s.type, role: s.role, read: true, write: false },
+                    native: {},
+                });
+            }
+            await this.setState(`reminders.${listId}.id`, list.id ?? '', true);
+            await this.setState(`reminders.${listId}.color`, list.color ?? '', true);
+            await this.setState(`reminders.${listId}.count`, list.count ?? 0, true);
+
+            // ── Open reminders ────────────────────────────────────────────
+            const allOpen = (remService.remindersByList.get(list.id) ?? []).filter(r => !r.completed && !r.deleted);
+
+            let items: typeof allOpen;
+            if (filterMode === 'due') {
+                // Only reminders whose start or due date is in the past (or right now)
+                items = allOpen.filter(r => {
+                    const earliest = Math.min(r.startDate ?? Infinity, r.dueDate ?? Infinity);
+                    return earliest <= now;
+                });
+            } else {
+                items = allOpen;
+            }
+            items.sort((a, b) => {
+                const ta = a.dueDate ?? Infinity;
+                const tb = b.dueDate ?? Infinity;
+                return ta - tb;
+            });
+
+            await this.writeReminderSlots(`reminders.${listId}`, items, maxCount);
+
+            // ── Completed reminders (optional subfolder) ──────────────────
+            if (showCompleted) {
+                const completedItems = (remService.remindersByList.get(list.id) ?? [])
+                    .filter(r => r.completed && !r.deleted)
+                    .sort((a, b) => {
+                        // Newest completed first
+                        const ta = a.completedDate ?? a.lastModifiedDate ?? 0;
+                        const tb = b.completedDate ?? b.lastModifiedDate ?? 0;
+                        return tb - ta;
+                    });
+
+                await this.extendObject(`reminders.${listId}.completed`, {
+                    type: 'folder',
+                    common: { name: 'Completed' },
+                    native: {},
+                });
+
+                await this.writeReminderSlots(`reminders.${listId}.completed`, completedItems, maxCount);
+            }
+        }
+
+        await this.cleanupRemindersObjects(activeListIds, maxCount, showCompleted);
+        this.log.debug(
+            `Reminders refresh done — ${remService.lists.length} list(s), ` +
+                `${[...remService.remindersByList.values()].reduce((s, l) => s + l.length, 0)} reminder(s)`,
+        );
+    }
+
+    private async writeReminderSlots(basePath: string, items: Reminder[], maxCount: number): Promise<void> {
+        for (let i = 1; i <= maxCount; i++) {
+            const slotId = String(i).padStart(6, '0');
+            const slotPath = `${basePath}.${slotId}`;
+            const rem = items[i - 1];
+
+            await this.extendObject(slotPath, {
+                type: 'folder',
+                common: { name: rem?.title ?? `Reminder ${slotId}` },
+                native: {},
+            });
+
+            for (const s of REMINDER_ITEM_STATES) {
+                await this.extendObject(`${slotPath}.${s.id}`, {
+                    type: 'state',
+                    common: {
+                        name: s.name,
+                        type: s.type,
+                        role: s.role,
+                        read: true,
+                        write: s.write ?? false,
+                    },
+                    native: {},
+                });
+            }
+
+            if (rem) {
+                await this.setState(`${slotPath}.title`, rem.title ?? '', true);
+                await this.setState(`${slotPath}.description`, rem.description ?? '', true);
+                await this.setState(`${slotPath}.id`, rem.id ?? '', true);
+                await this.setState(`${slotPath}.listId`, rem.listId ?? '', true);
+                await this.setState(`${slotPath}.priority`, rem.priority ?? 0, true);
+                await this.setState(`${slotPath}.flagged`, rem.flagged ?? false, true);
+                await this.setState(`${slotPath}.allDay`, rem.allDay ?? false, true);
+                await this.setState(`${slotPath}.completed`, rem.completed ?? false, true);
+                await this.setState(`${slotPath}.dueDate`, rem.dueDate ?? null, true);
+                await this.setState(`${slotPath}.startDate`, rem.startDate ?? null, true);
+                await this.setState(`${slotPath}.completedDate`, rem.completedDate ?? null, true);
+                await this.setState(`${slotPath}.createdDate`, rem.createdDate ?? null, true);
+                await this.setState(`${slotPath}.lastModifiedDate`, rem.lastModifiedDate ?? null, true);
+            } else {
+                for (const s of REMINDER_ITEM_STATES) {
+                    await this.setState(`${slotPath}.${s.id}`, null, true);
+                }
+            }
+        }
+    }
+
+    private async cleanupRemindersObjects(
+        activeListIds: Set<string>,
+        maxCount: number,
+        showCompleted: boolean,
+    ): Promise<void> {
         const prefix = `${this.namespace}.reminders.`;
         const existing = await this.getObjectViewAsync('system', 'folder', {
             startkey: prefix,
@@ -1314,9 +1393,27 @@ class Icloud extends utils.Adapter {
                     await this.delObjectAsync(row.id, { recursive: true });
                 }
             } else if (parts.length === 2) {
-                const slotNum = parseInt(parts[1], 10);
+                // Could be a slot (000001) or the "completed" subfolder
+                if (parts[1] === 'completed') {
+                    // Remove the completed folder if the option was disabled
+                    if (!showCompleted && activeListIds.has(parts[0])) {
+                        this.log.info(`Reminders cleanup: removing completed folder in list "${parts[0]}"`);
+                        await this.delObjectAsync(row.id, { recursive: true });
+                    }
+                } else {
+                    const slotNum = parseInt(parts[1], 10);
+                    if (activeListIds.has(parts[0]) && !isNaN(slotNum) && slotNum > maxCount) {
+                        this.log.info(`Reminders cleanup: removing excess slot ${parts[1]} in list "${parts[0]}"`);
+                        await this.delObjectAsync(row.id, { recursive: true });
+                    }
+                }
+            } else if (parts.length === 3 && parts[1] === 'completed') {
+                // Slot inside the completed subfolder — clean up excess
+                const slotNum = parseInt(parts[2], 10);
                 if (activeListIds.has(parts[0]) && !isNaN(slotNum) && slotNum > maxCount) {
-                    this.log.info(`Reminders cleanup: removing excess slot ${parts[1]} in list "${parts[0]}"`);
+                    this.log.info(
+                        `Reminders cleanup: removing excess completed slot ${parts[2]} in list "${parts[0]}"`,
+                    );
                     await this.delObjectAsync(row.id, { recursive: true });
                 }
             }
@@ -1490,31 +1587,42 @@ class Icloud extends utils.Adapter {
      * @param callback - Callback function
      */
     private onUnload(callback: () => void): void {
-        try {
-            if (this.findMyRefreshTimer) {
-                this.clearTimeout(this.findMyRefreshTimer);
-                this.findMyRefreshTimer = null;
-            }
-            if (this.calendarRefreshTimer) {
-                this.clearTimeout(this.calendarRefreshTimer);
-                this.calendarRefreshTimer = null;
-            }
-            if (this.remindersRefreshTimer) {
-                this.clearTimeout(this.remindersRefreshTimer);
-                this.remindersRefreshTimer = null;
-            }
-            if (this.accountStorageRefreshTimer) {
-                this.clearTimeout(this.accountStorageRefreshTimer);
-                this.accountStorageRefreshTimer = null;
-            }
-            if (this.icloud) {
-                this.icloud.removeAllListeners();
-                this.icloud = null;
-            }
-            callback();
-        } catch {
-            callback();
-        }
+        const persistAndCleanup = async (): Promise<void> => {
+            // Persist reminders syncMap on shutdown
+            await this.persistRemindersSyncMap();
+        };
+
+        persistAndCleanup()
+            .catch(() => {
+                // Best effort
+            })
+            .finally(() => {
+                try {
+                    if (this.findMyRefreshTimer) {
+                        this.clearTimeout(this.findMyRefreshTimer);
+                        this.findMyRefreshTimer = null;
+                    }
+                    if (this.calendarRefreshTimer) {
+                        this.clearTimeout(this.calendarRefreshTimer);
+                        this.calendarRefreshTimer = null;
+                    }
+                    if (this.remindersRefreshTimer) {
+                        this.clearTimeout(this.remindersRefreshTimer);
+                        this.remindersRefreshTimer = null;
+                    }
+                    if (this.accountStorageRefreshTimer) {
+                        this.clearTimeout(this.accountStorageRefreshTimer);
+                        this.accountStorageRefreshTimer = null;
+                    }
+                    if (this.icloud) {
+                        this.icloud.removeAllListeners();
+                        this.icloud = null;
+                    }
+                } catch {
+                    // ignore
+                }
+                callback();
+            });
     }
 
     /**
@@ -1529,7 +1637,7 @@ class Icloud extends utils.Adapter {
             return;
         }
         if (state.ack) {
-            this.log.debug(`State update (ack=true, ignoring): ${id} = ${state.val}`);
+            //this.log.debug(`State update (ack=true, ignoring): ${id} = ${state.val}`);
             return;
         }
 
@@ -1617,6 +1725,40 @@ class Icloud extends utils.Adapter {
                     this.log.error(`Ping failed for ${numericId}: ${(err as Error)?.message ?? String(err)}`);
                 });
         }
+
+        // reminders.*.XXXXXX.completed — toggle completed state
+        const reminderCompletedMatch = id.match(/^[^.]+\.[^.]+\.reminders\.([^.]+)\.(\d{6})\.completed$/);
+        if (reminderCompletedMatch) {
+            if (!this.icloud) {
+                this.log.warn('Reminder completed toggle received but iCloud is not initialized');
+                return;
+            }
+            const listFolder = reminderCompletedMatch[1];
+            const slotId = reminderCompletedMatch[2];
+            const completed = !!state.val;
+
+            // Resolve reminder ID from the slot's id state
+            this.getStateAsync(`reminders.${listFolder}.${slotId}.id`)
+                .then(async idState => {
+                    const reminderId = idState?.val as string | undefined;
+                    if (!reminderId) {
+                        this.log.warn(`Reminder completed: no reminder ID in slot ${listFolder}.${slotId}`);
+                        return;
+                    }
+                    try {
+                        const remService = this.icloud!.getService('reminders');
+                        await remService.completeReminder(reminderId, completed);
+                        this.log.info(`Reminder ${reminderId} marked as ${completed ? 'completed' : 'uncompleted'}`);
+                        // Resync to update states
+                        await this.refreshReminders();
+                    } catch (err) {
+                        this.log.error(`Failed to set reminder completed: ${(err as Error)?.message ?? String(err)}`);
+                    }
+                })
+                .catch((err: unknown) => {
+                    this.log.error(`Failed to resolve reminder ID: ${(err as Error)?.message ?? String(err)}`);
+                });
+        }
     }
 
     /**
@@ -1655,6 +1797,215 @@ class Icloud extends utils.Adapter {
                     this.sendTo(obj.from, obj.command, { success: false, error: 'Invalid code' }, obj.callback);
                 }
             }
+        } else if (obj.command === 'createReminder') {
+            this.handleCreateReminder(obj);
+        } else if (obj.command === 'completeReminder') {
+            this.handleCompleteReminder(obj);
+        } else if (obj.command === 'updateReminder') {
+            this.handleUpdateReminder(obj);
+        } else if (obj.command === 'deleteReminder') {
+            this.handleDeleteReminder(obj);
+        } else if (obj.command === 'getReminders') {
+            this.handleGetReminders(obj);
+        } else if (obj.command === 'getReminderLists') {
+            this.handleGetReminderLists(obj);
+        }
+    }
+
+    // ── onMessage Reminder handlers ───────────────────────────────────────────
+
+    private handleCreateReminder(obj: ioBroker.Message): void {
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const listId = msg.listId as string | undefined;
+        const title = msg.title as string | undefined;
+        if (!listId || !title) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Required fields missing: "listId" and "title" are mandatory',
+            });
+            return;
+        }
+        if (!this.icloud) {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+        const remService = this.icloud.getService('reminders');
+        remService
+            .createReminder({
+                listId,
+                title,
+                description: (msg.description as string) ?? undefined,
+                completed: (msg.completed as boolean) ?? undefined,
+                dueDate: (msg.dueDate as number) ?? undefined,
+                priority: (msg.priority as number) ?? undefined,
+                flagged: (msg.flagged as boolean) ?? undefined,
+                allDay: (msg.allDay as boolean) ?? undefined,
+            })
+            .then(async reminder => {
+                await this.refreshReminders();
+                this.sendCallback(obj, { success: true, reminder });
+            })
+            .catch((err: unknown) => {
+                this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+            });
+    }
+
+    private handleCompleteReminder(obj: ioBroker.Message): void {
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const reminderId = msg.reminderId as string | undefined;
+        if (!reminderId) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Required field missing: "reminderId" is mandatory',
+            });
+            return;
+        }
+        if (!this.icloud) {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+        const completed = msg.completed !== false; // default true
+        const remService = this.icloud.getService('reminders');
+        remService
+            .completeReminder(reminderId, completed)
+            .then(async () => {
+                await this.refreshReminders();
+                this.sendCallback(obj, { success: true });
+            })
+            .catch((err: unknown) => {
+                this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+            });
+    }
+
+    private handleUpdateReminder(obj: ioBroker.Message): void {
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const reminderId = msg.reminderId as string | undefined;
+        if (!reminderId) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Required field missing: "reminderId" is mandatory',
+            });
+            return;
+        }
+        if (!this.icloud) {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+        const remService = this.icloud.getService('reminders');
+        const reminder = remService.getReminder(reminderId);
+        if (!reminder) {
+            this.sendCallback(obj, { success: false, error: `Reminder not found: ${reminderId}` });
+            return;
+        }
+
+        // Apply provided fields
+        if (msg.title !== undefined) {
+            reminder.title = `${msg.title as string}`;
+        }
+        if (msg.description !== undefined) {
+            reminder.description = `${msg.description as string}`;
+        }
+        if (msg.completed !== undefined) {
+            reminder.completed = !!msg.completed;
+            reminder.completedDate = reminder.completed ? Date.now() : null;
+        }
+        if (msg.dueDate !== undefined) {
+            reminder.dueDate = msg.dueDate as number | null;
+        }
+        if (msg.priority !== undefined) {
+            reminder.priority = Number(msg.priority) || 0;
+        }
+        if (msg.flagged !== undefined) {
+            reminder.flagged = !!msg.flagged;
+        }
+        if (msg.allDay !== undefined) {
+            reminder.allDay = !!msg.allDay;
+        }
+
+        remService
+            .updateReminder(reminder)
+            .then(async () => {
+                await this.refreshReminders();
+                this.sendCallback(obj, { success: true, reminder });
+            })
+            .catch((err: unknown) => {
+                this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+            });
+    }
+
+    private handleDeleteReminder(obj: ioBroker.Message): void {
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const reminderId = msg.reminderId as string | undefined;
+        if (!reminderId) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Required field missing: "reminderId" is mandatory',
+            });
+            return;
+        }
+        if (!this.icloud) {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+        const remService = this.icloud.getService('reminders');
+        remService
+            .deleteReminder(reminderId)
+            .then(async () => {
+                await this.refreshReminders();
+                this.sendCallback(obj, { success: true });
+            })
+            .catch((err: unknown) => {
+                this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+            });
+    }
+
+    private handleGetReminders(obj: ioBroker.Message): void {
+        if (!this.icloud) {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+        const msg = obj.message as Record<string, unknown> | undefined;
+        const listId = (msg && typeof msg === 'object' ? msg.listId : undefined) as string | undefined;
+        const remService = this.icloud.getService('reminders');
+        let reminders: Reminder[];
+        if (listId) {
+            reminders = remService.remindersByList.get(listId) ?? [];
+        } else {
+            reminders = remService.getAllReminders();
+        }
+        this.sendCallback(obj, { success: true, reminders });
+    }
+
+    private handleGetReminderLists(obj: ioBroker.Message): void {
+        if (!this.icloud) {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+        const remService = this.icloud.getService('reminders');
+        // Expose `listId` as the canonical key (mirrors the `listId` parameter used everywhere else)
+        const lists = remService.lists.map(l => ({ listId: l.id, title: l.title, color: l.color, count: l.count }));
+        this.sendCallback(obj, { success: true, lists });
+    }
+
+    private sendCallback(obj: ioBroker.Message, response: Record<string, unknown>): void {
+        if (obj.callback) {
+            this.sendTo(obj.from, obj.command, response, obj.callback);
         }
     }
 }

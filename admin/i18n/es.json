@@ -25,5 +25,11 @@
 	"accountHeader": "Cuenta",
 	"accountStorageEnabled": "Obtener información de almacenamiento",
 	"accountStorageInterval": "Intervalo de actualización (minutos)",
-	"accountStorageIntervalHelp": "Con qué frecuencia se consulta el uso del almacenamiento (30–1440 minutos)"
+	"accountStorageIntervalHelp": "Con qué frecuencia se consulta el uso del almacenamiento (30–1440 minutos)",
+	"remindersFilter": "Filtrar recordatorios",
+	"remindersFilterHelp": "Vencidos/iniciados: solo recordatorios cuya fecha de inicio o vencimiento ya pasó. Todos: todos los recordatorios abiertos.",
+	"remindersFilterDue": "Solo vencidos / iniciados",
+	"remindersFilterAll": "Todos los recordatorios abiertos",
+	"remindersShowCompleted": "Mostrar recordatorios completados",
+	"remindersShowCompletedHelp": "Mostrar recordatorios completados en una subcarpeta 'completed' separada por lista."
 }

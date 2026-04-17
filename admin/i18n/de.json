@@ -27,5 +27,11 @@
 	"accountHeader": "Account",
 	"accountStorageEnabled": "Speicherinfo abrufen",
 	"accountStorageInterval": "Aktualisierungsintervall (Minuten)",
-	"accountStorageIntervalHelp": "Wie oft die Speicherbelegung abgefragt wird (30–1440 Minuten)"
+	"accountStorageIntervalHelp": "Wie oft die Speicherbelegung abgefragt wird (30–1440 Minuten)",
+	"remindersFilter": "Erinnerungen filtern",
+	"remindersFilterHelp": "Fällig/begonnen: nur Erinnerungen, deren Start- oder Fälligkeitsdatum in der Vergangenheit liegt. Alle: alle offenen Erinnerungen.",
+	"remindersFilterDue": "Nur fällige / begonnene",
+	"remindersFilterAll": "Alle offenen Erinnerungen",
+	"remindersShowCompleted": "Erledigte Erinnerungen anzeigen",
+	"remindersShowCompletedHelp": "Erledigte Erinnerungen in einem separaten Unterordner 'completed' pro Liste anzeigen."
 }

@@ -25,5 +25,11 @@
 	"accountHeader": "Konto",
 	"accountStorageEnabled": "Pobierz informacje o magazynie",
 	"accountStorageInterval": "Interwał odświeżania (minuty)",
-	"accountStorageIntervalHelp": "Jak często sprawdzane jest zużycie miejsca (30–1440 minut)"
+	"accountStorageIntervalHelp": "Jak często sprawdzane jest zużycie miejsca (30–1440 minut)",
+	"remindersFilter": "Filtruj przypomnienia",
+	"remindersFilterHelp": "Zaległe/rozpoczęte: tylko przypomnienia, których data rozpoczęcia lub terminu już minęła. Wszystkie: wszystkie otwarte przypomnienia.",
+	"remindersFilterDue": "Tylko zaległe / rozpoczęte",
+	"remindersFilterAll": "Wszystkie otwarte przypomnienia",
+	"remindersShowCompleted": "Pokaż ukończone przypomnienia",
+	"remindersShowCompletedHelp": "Pokaż ukończone przypomnienia w osobnym podfolderze 'completed' na liście."
 }

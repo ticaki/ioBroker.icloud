@@ -15,6 +15,10 @@ npm run lint
 Alle während einer Sitzung eingeführten Lint-Fehler und -Warnungen **müssen vor Ende der Sitzung behoben sein** — die Anzahl der Fehler und Warnungen darf nie größer werden als zu Beginn.
 Bereits vorher existierende Fehler und Warnungen **müssen ebenfalls behoben werden**, sofern sie im Rahmen der aktuellen Änderungen berührt werden oder ohne großen Aufwand behebbar sind.
 
+## README language
+
+The `README.md` must be written **entirely in English**. Do not use any other language in the README, including comments inside code examples.
+
 ## Project structure
 
 - `src/main.ts` — ioBroker adapter entry point (all adapter logic lives here)

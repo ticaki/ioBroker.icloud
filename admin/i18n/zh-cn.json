@@ -25,5 +25,11 @@
 	"accountHeader": "账户",
 	"accountStorageEnabled": "获取存储信息",
 	"accountStorageInterval": "刷新间隔（分钟）",
-	"accountStorageIntervalHelp": "查询存储使用情况的频率（30–1440 分钟）"
+	"accountStorageIntervalHelp": "查询存储使用情况的频率（30–1440 分钟）",
+	"remindersFilter": "筛选提醒",
+	"remindersFilterHelp": "到期/已开始：仅显示开始或截止日期已过的提醒。全部：显示所有未完成的提醒。",
+	"remindersFilterDue": "仅到期 / 已开始",
+	"remindersFilterAll": "所有未完成的提醒",
+	"remindersShowCompleted": "显示已完成的提醒",
+	"remindersShowCompletedHelp": "在每个列表下的单独 'completed' 子文件夹中显示已完成的提醒。"
 }

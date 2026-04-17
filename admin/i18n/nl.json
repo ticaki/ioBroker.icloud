@@ -25,5 +25,11 @@
 	"accountHeader": "Account",
 	"accountStorageEnabled": "Opslaginformatie ophalen",
 	"accountStorageInterval": "Verversingsinterval (minuten)",
-	"accountStorageIntervalHelp": "Hoe vaak het opslaggebruik wordt opgehaald (30–1440 minuten)"
+	"accountStorageIntervalHelp": "Hoe vaak het opslaggebruik wordt opgehaald (30–1440 minuten)",
+	"remindersFilter": "Herinneringen filteren",
+	"remindersFilterHelp": "Verlopen/gestart: alleen herinneringen waarvan de start- of vervaldatum in het verleden ligt. Alle: alle open herinneringen.",
+	"remindersFilterDue": "Alleen verlopen / gestart",
+	"remindersFilterAll": "Alle open herinneringen",
+	"remindersShowCompleted": "Voltooide herinneringen tonen",
+	"remindersShowCompletedHelp": "Voltooide herinneringen tonen in een aparte submap 'completed' per lijst."
 }

@@ -63,6 +63,13 @@ export interface Reminder {
     deleted: boolean;
     createdDate: number | null;
     lastModifiedDate: number | null;
+    recordChangeTag: string | null;
+}
+
+export interface RemindersSyncMap {
+    syncToken: string;
+    lists: Record<string, RemindersList>;
+    reminders: Record<string, Reminder>;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -243,6 +250,188 @@ function parseDocumentProto(buf: Buffer): string {
  *
  * @param value - base64-encoded string, Uint8Array, or plain string
  */
+/**
+ * Encode a plain string into a CRDT document for CloudKit.
+ *
+ * Builds the full Apple versioned topotext CRDT structure:
+ *   Document → Version → topotext.String (with Substrings, VectorTimestamp, AttributeRun)
+ * then zlib-compresses and base64-encodes the result.
+ *
+ * Reference: timlaing/pyicloud `_encode_crdt_document`.
+ *
+ * @param text - plain text to encode
+ */
+function encodeCrdtDocument(text: string): string {
+    const textLen = text.length; // UTF-16 code units (matches proto spec)
+    const CLOCK_MAX = 0xff_ff_ff_ff;
+    // Fixed replica UUID used by pyiCloud
+    const REPLICA_UUID = Buffer.from('d46bcae41b8766c18d75efe35c9145c3', 'hex');
+
+    /**
+     * Build a CharID sub-message { replicaID, clock }.
+     *
+     * @param replicaID
+     * @param clock
+     */
+    function charID(replicaID: number, clock: number): Buffer {
+        return Buffer.concat([writeProtobufVarint(1, replicaID), writeProtobufVarint(2, clock)]);
+    }
+
+    // ── Substrings (field 3 of topotext.String, repeated) ─────────────────
+
+    // Sentinel substring: charID(0,0), length=0, timestamp(0,0), child=[1]
+    const sentinel = Buffer.concat([
+        writeProtobufField(1, charID(0, 0)), // charID
+        writeProtobufVarint(2, 0), // length = 0
+        writeProtobufField(3, charID(0, 0)), // timestamp
+        writeProtobufVarint(5, 1), // child[0] = 1
+    ]);
+
+    // Content substring (only if text is non-empty): charID(1,0), length=textLen, timestamp(1,0), child=[2]
+    let content: Buffer | null = null;
+    if (textLen > 0) {
+        content = Buffer.concat([
+            writeProtobufField(1, charID(1, 0)),
+            writeProtobufVarint(2, textLen),
+            writeProtobufField(3, charID(1, 0)),
+            writeProtobufVarint(5, 2), // child[0] = 2
+        ]);
+    }
+
+    // Terminal substring: charID(0, MAX), length=0, timestamp(0, MAX)
+    const terminal = Buffer.concat([
+        writeProtobufField(1, charID(0, CLOCK_MAX)),
+        writeProtobufVarint(2, 0),
+        writeProtobufField(3, charID(0, CLOCK_MAX)),
+    ]);
+
+    // ── VectorTimestamp (field 4 of topotext.String) ──────────────────────
+    // Clock { replicaUUID, replicaClock: [{ clock: textLen }, { clock: 1 }] }
+    const replicaClock1 = writeProtobufVarint(1, textLen); // ReplicaClock { clock: textLen }
+    const replicaClock2 = writeProtobufVarint(1, 1); // ReplicaClock { clock: 1 }
+    const clockMsg = Buffer.concat([
+        writeProtobufField(1, REPLICA_UUID), // replicaUUID (bytes)
+        writeProtobufField(2, replicaClock1), // replicaClock[0]
+        writeProtobufField(2, replicaClock2), // replicaClock[1]
+    ]);
+    const vectorTimestamp = writeProtobufField(1, clockMsg); // VectorTimestamp { clock[0] }
+
+    // ── Assemble topotext.String ─────────────────────────────────────────
+    const textBuf = Buffer.from(text, 'utf-8');
+    const stringParts: Buffer[] = [
+        writeProtobufField(2, textBuf), // string (field 2)
+        writeProtobufField(3, sentinel), // substring[0]
+    ];
+    if (content) {
+        stringParts.push(writeProtobufField(3, content)); // substring[1]
+    }
+    stringParts.push(writeProtobufField(3, terminal)); // substring[last]
+    stringParts.push(writeProtobufField(4, vectorTimestamp)); // timestamp (field 4)
+    if (textLen > 0) {
+        const attrRun = writeProtobufVarint(1, textLen); // AttributeRun { length: textLen }
+        stringParts.push(writeProtobufField(5, attrRun)); // attributeRun[0] (field 5)
+    }
+    const stringMsg = Buffer.concat(stringParts);
+
+    // ── Version ──────────────────────────────────────────────────────────
+    const versionMsg = Buffer.concat([
+        writeProtobufVarint(1, 0), // serializationVersion
+        writeProtobufVarint(2, 0), // minimumSupportedVersion
+        writeProtobufField(3, stringMsg), // data
+    ]);
+
+    // ── Document ─────────────────────────────────────────────────────────
+    const documentMsg = Buffer.concat([
+        writeProtobufVarint(1, 0), // serializationVersion
+        writeProtobufField(2, versionMsg), // version[0]
+    ]);
+
+    const compressed = zlib.deflateSync(documentMsg);
+    return compressed.toString('base64');
+}
+
+/**
+ * Encode a varint protobuf field (wire type 0).
+ *
+ * @param fieldNumber
+ * @param value
+ */
+function writeProtobufVarint(fieldNumber: number, value: number): Buffer {
+    const tag = (fieldNumber << 3) | 0;
+    const parts: number[] = [];
+    // encode tag
+    let t = tag;
+    while (t > 0x7f) {
+        parts.push((t & 0x7f) | 0x80);
+        t >>>= 7;
+    }
+    parts.push(t & 0x7f);
+    // encode value
+    let v = value >>> 0;
+    while (v > 0x7f) {
+        parts.push((v & 0x7f) | 0x80);
+        v >>>= 7;
+    }
+    parts.push(v & 0x7f);
+    return Buffer.from(parts);
+}
+
+/**
+ * Encode a length-delimited protobuf field (wire type 2).
+ *
+ * @param fieldNumber
+ * @param data
+ */
+function writeProtobufField(fieldNumber: number, data: Buffer): Buffer {
+    const tag = (fieldNumber << 3) | 2;
+    const parts: number[] = [];
+    let t = tag;
+    while (t > 0x7f) {
+        parts.push((t & 0x7f) | 0x80);
+        t >>>= 7;
+    }
+    parts.push(t & 0x7f);
+    // encode length
+    let len = data.length;
+    while (len > 0x7f) {
+        parts.push((len & 0x7f) | 0x80);
+        len >>>= 7;
+    }
+    parts.push(len & 0x7f);
+    return Buffer.concat([Buffer.from(parts), data]);
+}
+
+/**
+ * Generate a ResolutionTokenMap JSON string for CloudKit modify operations.
+ *
+ * Reference: timlaing/pyicloud `_generate_resolution_token_map`.
+ *
+ * @param fieldsModified - list of camelCase field names that are being modified
+ */
+function generateResolutionTokenMap(fieldsModified: string[]): string {
+    const appleEpoch = Date.now() / 1000 - 978_307_200;
+    const tokens: Record<string, object> = {};
+    for (const field of fieldsModified) {
+        tokens[field] = {
+            counter: 1,
+            modificationTime: appleEpoch,
+            replicaID: generateUUID(),
+        };
+    }
+    return JSON.stringify({ map: tokens });
+}
+
+/** Generate an uppercase UUID. */
+function generateUUID(): string {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+        .replace(/[xy]/g, c => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+        })
+        .toUpperCase();
+}
+
 function decodeCrdtDocument(value: unknown): string {
     if (value === null || value === undefined) {
         return '';
@@ -322,14 +511,30 @@ export class iCloudRemindersService {
         return map;
     }
 
-    /** Get the current sync token (for persistence by the adapter). */
-    get syncToken(): string | undefined {
-        return this._syncToken;
+    /**
+     * Restore in-memory state from a persisted syncMap.
+     *
+     * @param map
+     */
+    loadSyncMap(map: RemindersSyncMap): void {
+        this._syncToken = map.syncToken || undefined;
+        this.listsById.clear();
+        for (const [id, list] of Object.entries(map.lists)) {
+            this.listsById.set(id, list);
+        }
+        this.remindersById.clear();
+        for (const [id, rem] of Object.entries(map.reminders)) {
+            this.remindersById.set(id, rem);
+        }
     }
 
-    /** Set the sync token (restored from adapter state on startup). */
-    set syncToken(token: string | undefined) {
-        this._syncToken = token;
+    /** Export current state as a plain object for persistence. */
+    exportSyncMap(): RemindersSyncMap {
+        return {
+            syncToken: this._syncToken ?? '',
+            lists: Object.fromEntries(this.listsById),
+            reminders: Object.fromEntries(this.remindersById),
+        };
     }
 
     constructor(service: iCloudService, serviceUri: string) {
@@ -391,14 +596,14 @@ export class iCloudRemindersService {
      * Reminders zone — both List and Reminder records arrive together.
      * On subsequent calls (with syncToken): fetches only the delta since last sync.
      *
-     * The sync token is updated after each successful refresh and should be
-     * persisted by the adapter so it survives restarts.
+     * @returns true if any records were ingested (data changed), false otherwise.
      */
-    async refresh(): Promise<void> {
+    async refresh(): Promise<boolean> {
         let moreComing = true;
         const MAX_PAGES = 50;
         let page = 0;
         const isIncremental = !!this._syncToken;
+        let recordsIngested = 0;
 
         while (moreComing) {
             if (++page > MAX_PAGES) {
@@ -424,6 +629,7 @@ export class iCloudRemindersService {
             for (const zone of zones) {
                 for (const rec of zone.records ?? []) {
                     this.ingestRecord(rec);
+                    recordsIngested++;
                 }
                 if (zone.syncToken) {
                     this._syncToken = zone.syncToken;
@@ -434,28 +640,23 @@ export class iCloudRemindersService {
             }
         }
 
-        // After an incremental sync the in-memory maps may still be empty
-        // because the delta contained no records (nothing changed since last token).
-        // In that case fall back to a full resync so the maps are populated.
-        if (isIncremental && this.listsById.size === 0) {
-            this.service._log(0, `[reminders-ck] incremental sync returned empty maps — falling back to full resync`);
-            this._syncToken = undefined;
-            return this.refresh();
-        }
-
         // Remove reminders whose list no longer exists
-        for (const rem of this.remindersById.values()) {
-            if (!this.listsById.has(rem.listId)) {
-                this.remindersById.delete(rem.id);
+        if (recordsIngested > 0) {
+            for (const rem of this.remindersById.values()) {
+                if (!this.listsById.has(rem.listId)) {
+                    this.remindersById.delete(rem.id);
+                }
             }
         }
 
-        const totalReminders = this.remindersById.size;
         this.service._log(
             0,
             `[reminders-ck] refresh: ${isIncremental ? 'incremental' : 'full'}, ` +
-                `${page} page(s), ${this.listsById.size} list(s), ${totalReminders} reminder(s)`,
+                `${page} page(s), ${recordsIngested} record(s) ingested, ` +
+                `${this.listsById.size} list(s), ${this.remindersById.size} reminder(s) total`,
         );
+
+        return recordsIngested > 0;
     }
 
     /**
@@ -513,8 +714,288 @@ export class iCloudRemindersService {
                 deleted: !!getFieldValue<number>(fields, 'Deleted'),
                 createdDate,
                 lastModifiedDate: modifiedDate,
+                recordChangeTag: rec.recordChangeTag ?? null,
             });
         }
         // Other record types (Alarm, Hashtag, etc.) are ignored — we don't need them.
+    }
+
+    // ── CRUD operations ───────────────────────────────────────────────────────
+
+    /**
+     * Create a new reminder in a list.
+     *
+     * Reference: timlaing/pyicloud RemindersWriteAPI.create
+     *
+     * @param options - reminder creation options
+     * @param options.listId
+     * @param options.title
+     * @param options.description
+     * @param options.completed
+     * @param options.dueDate
+     * @param options.priority
+     * @param options.flagged
+     * @param options.allDay
+     * @returns the created Reminder (after re-fetching from CloudKit)
+     */
+    async createReminder(options: {
+        listId: string;
+        title: string;
+        description?: string;
+        completed?: boolean;
+        dueDate?: number | null;
+        priority?: number;
+        flagged?: boolean;
+        allDay?: boolean;
+    }): Promise<Reminder> {
+        const reminderUuid = generateUUID();
+        const recordName = `Reminder/${reminderUuid}`;
+        const nowMs = Date.now();
+        const completed = options.completed ?? false;
+
+        const titleDoc = encodeCrdtDocument(options.title);
+        const notesDoc = encodeCrdtDocument(options.description ?? '');
+
+        const fieldsModified = [
+            'allDay',
+            'titleDocument',
+            'notesDocument',
+            'priority',
+            'creationDate',
+            'list',
+            'flagged',
+            'completed',
+            'completionDate',
+            'lastModifiedDate',
+        ];
+        if (options.dueDate) {
+            fieldsModified.push('dueDate');
+        }
+
+        const recordFields: Record<string, object> = {
+            AllDay: { type: 'INT64', value: options.allDay ? 1 : 0 },
+            Completed: { type: 'INT64', value: completed ? 1 : 0 },
+            CompletionDate: { type: 'TIMESTAMP', value: completed ? nowMs : null },
+            CreationDate: { type: 'TIMESTAMP', value: nowMs },
+            Deleted: { type: 'INT64', value: 0 },
+            Flagged: { type: 'INT64', value: options.flagged ? 1 : 0 },
+            Imported: { type: 'INT64', value: 0 },
+            LastModifiedDate: { type: 'TIMESTAMP', value: nowMs },
+            List: {
+                type: 'REFERENCE',
+                value: { recordName: options.listId, action: 'VALIDATE' },
+            },
+            NotesDocument: { type: 'STRING', value: notesDoc },
+            Priority: { type: 'INT64', value: options.priority ?? 0 },
+            ResolutionTokenMap: { type: 'STRING', value: generateResolutionTokenMap(fieldsModified) },
+            TitleDocument: { type: 'STRING', value: titleDoc },
+        };
+
+        if (options.dueDate) {
+            recordFields.DueDate = { type: 'TIMESTAMP', value: options.dueDate };
+        }
+
+        interface CKModifyResponse {
+            records?: CKRecord[];
+        }
+
+        const resp = await this.ckPost<CKModifyResponse>('/records/modify', {
+            operations: [
+                {
+                    operationType: 'create',
+                    record: {
+                        recordName,
+                        recordType: 'Reminder',
+                        fields: recordFields,
+                        createShortGUID: true,
+                        desiredKeys: [],
+                    },
+                },
+            ],
+            zoneID: REMINDERS_ZONE,
+            atomic: true,
+        });
+
+        // Ingest the created record if returned
+        const created = resp.records?.[0];
+        if (created) {
+            this.ingestRecord(created);
+        }
+
+        const reminder = this.remindersById.get(recordName);
+        if (!reminder) {
+            // Fallback: build a minimal Reminder from input
+            const fallback: Reminder = {
+                id: recordName,
+                listId: options.listId,
+                title: options.title,
+                description: options.description ?? '',
+                completed,
+                completedDate: completed ? nowMs : null,
+                dueDate: options.dueDate ?? null,
+                startDate: null,
+                priority: options.priority ?? 0,
+                flagged: options.flagged ?? false,
+                allDay: options.allDay ?? false,
+                deleted: false,
+                createdDate: nowMs,
+                lastModifiedDate: nowMs,
+                recordChangeTag: created?.recordChangeTag ?? null,
+            };
+            this.remindersById.set(recordName, fallback);
+            return fallback;
+        }
+        return reminder;
+    }
+
+    /**
+     * Update an existing reminder.
+     *
+     * Reference: timlaing/pyicloud RemindersWriteAPI.update
+     *
+     * @param reminder - the reminder with updated fields
+     */
+    async updateReminder(reminder: Reminder): Promise<void> {
+        if (!reminder.recordChangeTag) {
+            throw new Error(`Cannot update reminder ${reminder.id} — no recordChangeTag (sync first)`);
+        }
+
+        const nowMs = Date.now();
+        const titleDoc = encodeCrdtDocument(reminder.title);
+        const notesDoc = encodeCrdtDocument(reminder.description ?? '');
+
+        const fieldsModified = [
+            'titleDocument',
+            'notesDocument',
+            'completed',
+            'completionDate',
+            'priority',
+            'flagged',
+            'allDay',
+            'lastModifiedDate',
+            'dueDate',
+        ];
+
+        const completionDateMs = reminder.completed ? (reminder.completedDate ?? nowMs) : null;
+
+        const fields: Record<string, object> = {
+            TitleDocument: { type: 'STRING', value: titleDoc },
+            NotesDocument: { type: 'STRING', value: notesDoc },
+            Completed: { type: 'INT64', value: reminder.completed ? 1 : 0 },
+            CompletionDate: { type: 'TIMESTAMP', value: completionDateMs },
+            Priority: { type: 'INT64', value: reminder.priority },
+            Flagged: { type: 'INT64', value: reminder.flagged ? 1 : 0 },
+            AllDay: { type: 'INT64', value: reminder.allDay ? 1 : 0 },
+            LastModifiedDate: { type: 'TIMESTAMP', value: nowMs },
+            DueDate: { type: 'TIMESTAMP', value: reminder.dueDate ?? null },
+            ResolutionTokenMap: { type: 'STRING', value: generateResolutionTokenMap(fieldsModified) },
+        };
+
+        interface CKModifyResponse {
+            records?: CKRecord[];
+        }
+
+        const resp = await this.ckPost<CKModifyResponse>('/records/modify', {
+            operations: [
+                {
+                    operationType: 'update',
+                    record: {
+                        recordName: reminder.id,
+                        recordType: 'Reminder',
+                        recordChangeTag: reminder.recordChangeTag,
+                        fields,
+                    },
+                },
+            ],
+            zoneID: REMINDERS_ZONE,
+            atomic: true,
+        });
+
+        // Update local state
+        reminder.lastModifiedDate = nowMs;
+        if (reminder.completed && !reminder.completedDate) {
+            reminder.completedDate = nowMs;
+        }
+        const updated = resp.records?.[0];
+        if (updated?.recordChangeTag) {
+            reminder.recordChangeTag = updated.recordChangeTag;
+        }
+        this.remindersById.set(reminder.id, reminder);
+    }
+
+    /**
+     * Delete a reminder (soft-delete via Deleted=1).
+     *
+     * Reference: timlaing/pyicloud RemindersWriteAPI.delete
+     *
+     * @param reminderId - ID of the reminder to delete
+     */
+    async deleteReminder(reminderId: string): Promise<void> {
+        const reminder = this.remindersById.get(reminderId);
+        if (!reminder) {
+            throw new Error(`Reminder not found: ${reminderId}`);
+        }
+        if (!reminder.recordChangeTag) {
+            throw new Error(`Cannot delete reminder ${reminderId} — no recordChangeTag (sync first)`);
+        }
+
+        const nowMs = Date.now();
+        const fieldsModified = ['deleted', 'lastModifiedDate'];
+
+        await this.ckPost('/records/modify', {
+            operations: [
+                {
+                    operationType: 'update',
+                    record: {
+                        recordName: reminder.id,
+                        recordType: 'Reminder',
+                        recordChangeTag: reminder.recordChangeTag,
+                        fields: {
+                            Deleted: { type: 'INT64', value: 1 },
+                            LastModifiedDate: { type: 'TIMESTAMP', value: nowMs },
+                            ResolutionTokenMap: {
+                                type: 'STRING',
+                                value: generateResolutionTokenMap(fieldsModified),
+                            },
+                        },
+                    },
+                },
+            ],
+            zoneID: REMINDERS_ZONE,
+            atomic: true,
+        });
+
+        // Remove from local state
+        this.remindersById.delete(reminderId);
+    }
+
+    /**
+     * Mark a reminder as completed or uncompleted.
+     *
+     * @param reminderId - ID of the reminder
+     * @param completed - true to mark completed, false to uncomplete
+     */
+    async completeReminder(reminderId: string, completed: boolean): Promise<void> {
+        const reminder = this.remindersById.get(reminderId);
+        if (!reminder) {
+            throw new Error(`Reminder not found: ${reminderId}`);
+        }
+        reminder.completed = completed;
+        reminder.completedDate = completed ? Date.now() : null;
+        await this.updateReminder(reminder);
+    }
+
+    /**
+     * Get a reminder by ID.
+     *
+     * @param reminderId
+     */
+    getReminder(reminderId: string): Reminder | undefined {
+        return this.remindersById.get(reminderId);
+    }
+
+    /** Get all reminders as an array. */
+    getAllReminders(): Reminder[] {
+        return [...this.remindersById.values()];
     }
 }

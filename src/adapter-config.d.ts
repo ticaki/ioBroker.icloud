@@ -21,6 +21,8 @@ declare global {
 			remindersEnabled: boolean;
 			remindersItemCount: number;
 			remindersInterval: number;
+			remindersFilter: 'due' | 'all';
+			remindersShowCompleted: boolean;
 			accountStorageEnabled: boolean;
 			accountStorageInterval: number;
 		}

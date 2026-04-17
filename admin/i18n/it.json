@@ -25,5 +25,11 @@
 	"accountHeader": "Account",
 	"accountStorageEnabled": "Recupera informazioni di archiviazione",
 	"accountStorageInterval": "Intervallo di aggiornamento (minuti)",
-	"accountStorageIntervalHelp": "Frequenza di recupero dell'utilizzo dello spazio (30–1440 minuti)"
+	"accountStorageIntervalHelp": "Frequenza di recupero dell'utilizzo dello spazio (30–1440 minuti)",
+	"remindersFilter": "Filtra promemoria",
+	"remindersFilterHelp": "Scaduti/iniziati: solo promemoria con data di inizio o scadenza passata. Tutti: tutti i promemoria aperti.",
+	"remindersFilterDue": "Solo scaduti / iniziati",
+	"remindersFilterAll": "Tutti i promemoria aperti",
+	"remindersShowCompleted": "Mostra promemoria completati",
+	"remindersShowCompletedHelp": "Mostra i promemoria completati in una sottocartella 'completed' separata per lista."
 }
