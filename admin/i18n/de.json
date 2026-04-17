@@ -12,6 +12,8 @@
 	"findMyEnabled": "FindMy aktivieren",
 	"findMyInterval": "Aktualisierungsintervall (Minuten)",
 	"findMyIntervalHelp": "Wie oft FindMy-Geräte abgefragt werden (1–120 Minuten)",
+	"findMyGeoEnabled": "Gemeinde anzeigen (nur Deutschland)",
+	"findMyGeoEnabledHelp": "Ermittelt für jede Geräteposition die deutsche Gemeinde und schreibt sie als State 'locationName'. Nutzt einen lokalen GeoJSON-Index (~74 MB, wird einmalig beim Start geladen).",
 	"calendarHeader": "Kalender",
 	"calendarEnabled": "Kalender aktivieren",
 	"calendarEventCount": "Anzahl zukünftiger Ereignisse",

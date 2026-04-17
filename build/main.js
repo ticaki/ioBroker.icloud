@@ -21,8 +21,10 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var path = __toESM(require("node:path"));
 var utils = __toESM(require("@iobroker/adapter-core"));
 var import_lib = __toESM(require("./lib/index"));
+var import_geo = require("./lib/geo");
 const FINDMY_FEATURE_NAMES = {
   BTR: "Battery Reporting",
   LLC: "Low-power Location Capability",
@@ -85,7 +87,8 @@ const FINDMY_DEVICE_STATES = [
   { id: "locationTimestamp", name: "Location Timestamp", type: "number", role: "value.time" },
   { id: "isOld", name: "Location is Old", type: "boolean", role: "indicator" },
   { id: "isInaccurate", name: "Location is Inaccurate", type: "boolean", role: "indicator" },
-  { id: "distanceKm", name: "Distance from Home", type: "number", role: "value.distance" }
+  { id: "distanceKm", name: "Distance from Home", type: "number", role: "value.distance" },
+  { id: "locationName", name: "Location (Municipality)", type: "string", role: "text" }
 ];
 const CALENDAR_EVENT_STATES = [
   { id: "title", name: "Title", type: "string", role: "text" },
@@ -176,6 +179,7 @@ class Icloud extends utils.Adapter {
   remindersRefreshTimer = null;
   remindersSyncMapLoaded = false;
   accountStorageRefreshTimer = null;
+  geoLookup = new import_geo.GeoLookup();
   constructor(options = {}) {
     super({
       ...options,
@@ -463,6 +467,10 @@ class Icloud extends utils.Adapter {
     }
     const locationPoints = await this.resolveLocationPoints();
     if (activeServices.includes("findme") && this.config.findMyEnabled) {
+      if (this.config.findMyGeoEnabled) {
+        const adapterRoot = path.join(__dirname, "..");
+        this.geoLookup.load(adapterRoot, (msg) => this.log.info(msg));
+      }
       await this.loadFindMyIdMap();
       await this.refreshFindMyDevices(locationPoints);
       this.scheduleFindMyRefresh(locationPoints);
@@ -561,6 +569,8 @@ class Icloud extends utils.Adapter {
         common: { name: "FindMy" },
         native: {}
       });
+      let _geoTotalMs = 0;
+      let _geoCount = 0;
       for (const d of allDevices) {
         const apiId = (_a = d.id) != null ? _a : "";
         if (!apiId) {
@@ -623,6 +633,9 @@ class Icloud extends utils.Adapter {
         }
         const loc = d.location;
         const distKm = loc && locationPoints.length > 0 ? haversineKm(locationPoints[0].lat, locationPoints[0].lon, loc.latitude, loc.longitude) : null;
+        const _geoT0 = process.hrtime.bigint();
+        const _geoResult = loc ? this.geoLookup.resolve(loc.latitude, loc.longitude) : "unknown";
+        const _geoElapsed = loc ? Number(process.hrtime.bigint() - _geoT0) : 0;
         const vals = {
           name: (_g = d.name) != null ? _g : "",
           deviceClass: d.deviceClass,
@@ -647,8 +660,13 @@ class Icloud extends utils.Adapter {
           locationTimestamp: (_m = loc == null ? void 0 : loc.timeStamp) != null ? _m : null,
           isOld: (_n = loc == null ? void 0 : loc.isOld) != null ? _n : null,
           isInaccurate: (_o = loc == null ? void 0 : loc.isInaccurate) != null ? _o : null,
-          distanceKm: distKm !== null ? Math.round(distKm * 1e3) / 1e3 : null
+          distanceKm: distKm !== null ? Math.round(distKm * 1e3) / 1e3 : null,
+          locationName: _geoResult
         };
+        if (loc) {
+          _geoTotalMs += _geoElapsed;
+          _geoCount++;
+        }
         for (const [key, val] of Object.entries(vals)) {
           if (val !== null) {
             await this.setState(`${safeId}.${key}`, val, true);
@@ -678,6 +696,9 @@ class Icloud extends utils.Adapter {
           }
         }
       }
+      this.log.debug(
+        `FindMy GEO timing: ${_geoCount}/${allDevices.length} device(s) with location, total ${(_geoTotalMs / 1e6).toFixed(3)} ms, avg ${(_geoCount ? _geoTotalMs / _geoCount / 1e6 : 0).toFixed(3)} ms/device`
+      );
       this.log.debug(`FindMy: refresh done \u2014 ${allDevices.length} device(s) written`);
     } catch (err) {
       this.log.warn(`FindMy refresh failed: ${(_p = err == null ? void 0 : err.message) != null ? _p : String(err)}`);

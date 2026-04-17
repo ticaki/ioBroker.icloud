@@ -15,6 +15,7 @@ declare global {
 			locationPoints: LocationPoint[];
 			findMyEnabled: boolean;
 			findMyInterval: number;
+			findMyGeoEnabled: boolean;
 			calendarEnabled: boolean;
 			calendarEventCount: number;
 			calendarInterval: number;

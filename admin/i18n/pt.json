@@ -10,6 +10,8 @@
 	"findMyEnabled": "Enable FindMy",
 	"findMyInterval": "Refresh interval (minutes)",
 	"findMyIntervalHelp": "How often FindMy devices are polled (1–120 minutes)",
+	"findMyGeoEnabled": "Mostrar município (apenas Alemanha)",
+	"findMyGeoEnabledHelp": "Determina o município alemão para cada posição do dispositivo e o escreve como estado 'locationName'. Usa um índice GeoJSON local (~74 MB, carregado uma vez na inicialização).",
 	"calendarHeader": "Calendar",
 	"calendarEnabled": "Enable Calendar",
 	"calendarEventCount": "Number of upcoming events",

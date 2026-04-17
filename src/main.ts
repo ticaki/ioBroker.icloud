@@ -2,10 +2,12 @@
  * Created with @iobroker/create-adapter v3.1.2
  */
 
+import * as path from 'node:path';
 import * as utils from '@iobroker/adapter-core';
 import iCloudService, { LogLevel } from './lib/index';
 import type { iCloudFindMyDeviceInfo } from './lib/services/findMy';
 import type { iCloudRemindersService, Reminder, RemindersSyncMap } from './lib/services/reminders';
+import { GeoLookup } from './lib/geo';
 
 /** Best-effort human-readable names for Apple FindMy feature flags (not officially documented). */
 const FINDMY_FEATURE_NAMES: Record<string, string> = {
@@ -78,6 +80,7 @@ const FINDMY_DEVICE_STATES: Array<{
     { id: 'isOld', name: 'Location is Old', type: 'boolean', role: 'indicator' },
     { id: 'isInaccurate', name: 'Location is Inaccurate', type: 'boolean', role: 'indicator' },
     { id: 'distanceKm', name: 'Distance from Home', type: 'number', role: 'value.distance' },
+    { id: 'locationName', name: 'Location (Municipality)', type: 'string', role: 'text' },
 ];
 
 /** State definitions for a Calendar event slot. */
@@ -210,6 +213,7 @@ class Icloud extends utils.Adapter {
     private remindersRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersSyncMapLoaded = false;
     private accountStorageRefreshTimer: ioBroker.Timeout | null | undefined = null;
+    private geoLookup: GeoLookup = new GeoLookup();
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({
@@ -540,6 +544,12 @@ class Icloud extends utils.Adapter {
 
         // ── FindMy devices ────────────────────────────────────────────────────
         if (activeServices.includes('findme') && this.config.findMyEnabled) {
+            // Load GeoJSON spatial index for municipality lookup (optional feature)
+            if (this.config.findMyGeoEnabled) {
+                // __dirname = build/ → adapter root is one level up
+                const adapterRoot = path.join(__dirname, '..');
+                this.geoLookup.load(adapterRoot, msg => this.log.info(msg));
+            }
             await this.loadFindMyIdMap();
             await this.refreshFindMyDevices(locationPoints);
             this.scheduleFindMyRefresh(locationPoints);
@@ -648,6 +658,10 @@ class Icloud extends utils.Adapter {
                 common: { name: 'FindMy' },
                 native: {},
             });
+            // DEBUG:GEO_TIMING
+            let _geoTotalMs = 0;
+            let _geoCount = 0;
+            // END:DEBUG:GEO_TIMING
             for (const d of allDevices) {
                 const apiId = d.id ?? '';
                 if (!apiId) {
@@ -716,6 +730,11 @@ class Icloud extends utils.Adapter {
                     loc && locationPoints.length > 0
                         ? haversineKm(locationPoints[0].lat, locationPoints[0].lon, loc.latitude, loc.longitude)
                         : null;
+                // DEBUG:GEO_TIMING
+                const _geoT0 = process.hrtime.bigint();
+                const _geoResult = loc ? this.geoLookup.resolve(loc.latitude, loc.longitude) : 'unknown';
+                const _geoElapsed = loc ? Number(process.hrtime.bigint() - _geoT0) : 0; // ns, only if loc present
+                // END:DEBUG:GEO_TIMING
                 const vals: Record<string, ioBroker.StateValue> = {
                     name: d.name ?? '',
                     deviceClass: d.deviceClass,
@@ -741,7 +760,14 @@ class Icloud extends utils.Adapter {
                     isOld: loc?.isOld ?? null,
                     isInaccurate: loc?.isInaccurate ?? null,
                     distanceKm: distKm !== null ? Math.round(distKm * 1000) / 1000 : null,
+                    locationName: _geoResult,
                 };
+                // DEBUG:GEO_TIMING
+                if (loc) {
+                    _geoTotalMs += _geoElapsed;
+                    _geoCount++;
+                }
+                // END:DEBUG:GEO_TIMING
                 for (const [key, val] of Object.entries(vals)) {
                     if (val !== null) {
                         await this.setState(`${safeId}.${key}`, val, true);
@@ -772,6 +798,11 @@ class Icloud extends utils.Adapter {
                     }
                 }
             }
+            // DEBUG:GEO_TIMING
+            this.log.debug(
+                `FindMy GEO timing: ${_geoCount}/${allDevices.length} device(s) with location, total ${(_geoTotalMs / 1e6).toFixed(3)} ms, avg ${(_geoCount ? _geoTotalMs / _geoCount / 1e6 : 0).toFixed(3)} ms/device`,
+            );
+            // END:DEBUG:GEO_TIMING
             this.log.debug(`FindMy: refresh done — ${allDevices.length} device(s) written`);
         } catch (err) {
             this.log.warn(`FindMy refresh failed: ${(err as Error)?.message ?? String(err)}`);

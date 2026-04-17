@@ -70,8 +70,3 @@ https://github.com/timlaing/pyicloud/tree/main/pyicloud/services/reminders
 the next 15-minute tick only starts **after** the previous refresh completes,
 preventing overlapping API calls.
 
-## Coordinates
-
-Config fields: `latitude` (number), `longitude` (number), `useSystemCoordinates` (boolean).
-Use `resolveHomeCoords()` to get the effective home position (config → system.config fallback).
-Distance is calculated with the Haversine formula in `haversineKm()`.
