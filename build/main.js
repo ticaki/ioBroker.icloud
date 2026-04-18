@@ -88,7 +88,6 @@ const FINDMY_DEVICE_STATES = [
   { id: "isOld", name: "Location is Old", type: "boolean", role: "indicator" },
   { id: "isInaccurate", name: "Location is Inaccurate", type: "boolean", role: "indicator" },
   { id: "distanceKm", name: "Distance from Home", type: "number", role: "value.distance" },
-  { id: "locationName", name: "Location (Municipality)", type: "string", role: "text" },
   { id: "ownerAppleId", name: "Owner Apple ID", type: "string", role: "text" },
   { id: "ownerName", name: "Owner Name", type: "string", role: "text" }
 ];
@@ -579,6 +578,9 @@ class Icloud extends utils.Adapter {
       const allDevices = [...regularDevices, ...accessories, ...familyDevices];
       if (!this.findMyCleanupDone) {
         await this.cleanupFindMyObjects(allDevices);
+        if (!this.config.findMyGeoEnabled) {
+          await this.cleanupFindMyGeoStates();
+        }
         this.findMyCleanupDone = true;
       }
       await this.extendObject("findme", {
@@ -608,6 +610,19 @@ class Icloud extends utils.Adapter {
               name: def.name,
               type: def.type,
               role: def.role,
+              read: true,
+              write: false
+            },
+            native: {}
+          });
+        }
+        if (this.config.findMyGeoEnabled) {
+          await this.extendObject(`${safeId}.locationName`, {
+            type: "state",
+            common: {
+              name: "Location (Municipality)",
+              type: "string",
+              role: "text",
               read: true,
               write: false
             },
@@ -678,7 +693,7 @@ class Icloud extends utils.Adapter {
           isOld: (_n = loc == null ? void 0 : loc.isOld) != null ? _n : null,
           isInaccurate: (_o = loc == null ? void 0 : loc.isInaccurate) != null ? _o : null,
           distanceKm: distKm !== null ? Math.round(distKm * 1e3) / 1e3 : null,
-          locationName: _geoResult,
+          ...this.config.findMyGeoEnabled ? { locationName: _geoResult } : {},
           ownerAppleId: d.prsId ? (_q = (_p = membersInfo[d.prsId]) == null ? void 0 : _p.appleId) != null ? _q : null : null,
           ownerName: d.prsId ? [(_r = membersInfo[d.prsId]) == null ? void 0 : _r.firstName, (_s = membersInfo[d.prsId]) == null ? void 0 : _s.lastName].filter(Boolean).join(" ") || null : null
         };
@@ -787,6 +802,18 @@ class Icloud extends utils.Adapter {
       if (!currentIds.has(row.id)) {
         this.log.info(`FindMy cleanup: removing stale device ${row.id}`);
         await this.delObjectAsync(row.id, { recursive: true });
+      }
+    }
+  }
+  async cleanupFindMyGeoStates() {
+    const existing = await this.getObjectViewAsync("system", "state", {
+      startkey: `${this.namespace}.findme.`,
+      endkey: `${this.namespace}.findme.\u9999`
+    });
+    for (const row of existing.rows) {
+      if (row.id.endsWith(".locationName")) {
+        this.log.info(`FindMy GEO cleanup: removing ${row.id}`);
+        await this.delObjectAsync(row.id);
       }
     }
   }
