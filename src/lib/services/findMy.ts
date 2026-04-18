@@ -227,6 +227,18 @@ export class iCloudFindMyService {
         void this.refresh();
     }
     devices: Map<string, iCloudFindMyDevice> = new Map();
+    membersInfo: Record<
+        string,
+        {
+            accountFormatter: number;
+            firstName: string;
+            lastName: string;
+            deviceFetchStatus: string;
+            useAuthWidget: boolean;
+            isHSA: boolean;
+            appleId: string;
+        }
+    > = {};
     async refresh(selectedDevice = 'all'): Promise<iCloudFindMyResponse> {
         const doRequest = async (): Promise<unknown> => {
             const request = await this.service.fetch(`${this.serviceUri}/fmipservice/client/web/refreshClient`, {
@@ -283,6 +295,7 @@ export class iCloudFindMyService {
         }
 
         this.devices = newDevices;
+        this.membersInfo = json.userInfo?.membersInfo ?? {};
         return json;
     }
 

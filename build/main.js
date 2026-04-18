@@ -88,7 +88,9 @@ const FINDMY_DEVICE_STATES = [
   { id: "isOld", name: "Location is Old", type: "boolean", role: "indicator" },
   { id: "isInaccurate", name: "Location is Inaccurate", type: "boolean", role: "indicator" },
   { id: "distanceKm", name: "Distance from Home", type: "number", role: "value.distance" },
-  { id: "locationName", name: "Location (Municipality)", type: "string", role: "text" }
+  { id: "locationName", name: "Location (Municipality)", type: "string", role: "text" },
+  { id: "ownerAppleId", name: "Owner Apple ID", type: "string", role: "text" },
+  { id: "ownerName", name: "Owner Name", type: "string", role: "text" }
 ];
 const CALENDAR_EVENT_STATES = [
   { id: "title", name: "Title", type: "string", role: "text" },
@@ -550,7 +552,7 @@ class Icloud extends utils.Adapter {
    * @param locationPoints - configured location points for distance calculation
    */
   async refreshFindMyDevices(locationPoints) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
     if (!this.icloud) {
       return;
     }
@@ -558,6 +560,7 @@ class Icloud extends utils.Adapter {
       const findMe = this.icloud.getService("findme");
       this.log.debug("FindMy: calling API refresh...");
       await findMe.refresh();
+      const membersInfo = findMe.membersInfo;
       const devices = findMe.devices;
       this.log.debug(`FindMy: API returned ${devices.size} device(s)`);
       const regularDevices = [];
@@ -675,7 +678,9 @@ class Icloud extends utils.Adapter {
           isOld: (_n = loc == null ? void 0 : loc.isOld) != null ? _n : null,
           isInaccurate: (_o = loc == null ? void 0 : loc.isInaccurate) != null ? _o : null,
           distanceKm: distKm !== null ? Math.round(distKm * 1e3) / 1e3 : null,
-          locationName: _geoResult
+          locationName: _geoResult,
+          ownerAppleId: d.prsId ? (_q = (_p = membersInfo[d.prsId]) == null ? void 0 : _p.appleId) != null ? _q : null : null,
+          ownerName: d.prsId ? [(_r = membersInfo[d.prsId]) == null ? void 0 : _r.firstName, (_s = membersInfo[d.prsId]) == null ? void 0 : _s.lastName].filter(Boolean).join(" ") || null : null
         };
         if (loc) {
           _geoTotalMs += _geoElapsed;
@@ -715,7 +720,7 @@ class Icloud extends utils.Adapter {
       );
       this.log.debug(`FindMy: refresh done \u2014 ${allDevices.length} device(s) written`);
     } catch (err) {
-      this.log.warn(`FindMy refresh failed: ${(_p = err == null ? void 0 : err.message) != null ? _p : String(err)}`);
+      this.log.warn(`FindMy refresh failed: ${(_t = err == null ? void 0 : err.message) != null ? _t : String(err)}`);
     }
   }
   /**
@@ -745,16 +750,17 @@ class Icloud extends utils.Adapter {
     if (this.findMyIdMap.has(apiId)) {
       return this.findMyIdMap.get(apiId);
     }
-    let max = 0;
+    const used = /* @__PURE__ */ new Set();
     for (const v of this.findMyIdMap.values()) {
-      const n = parseInt(v, 10);
-      if (n > max) {
-        max = n;
-      }
+      used.add(parseInt(v, 10));
     }
-    const next = String(max + 1).padStart(6, "0");
-    this.findMyIdMap.set(apiId, next);
-    return next;
+    let next = 1;
+    while (used.has(next)) {
+      next++;
+    }
+    const nextStr = String(next).padStart(6, "0");
+    this.findMyIdMap.set(apiId, nextStr);
+    return nextStr;
   }
   /**
    * Remove findme device objects (and their children) that are no longer returned by the API.

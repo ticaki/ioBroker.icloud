@@ -82,6 +82,8 @@ const FINDMY_DEVICE_STATES: Array<{
     { id: 'isInaccurate', name: 'Location is Inaccurate', type: 'boolean', role: 'indicator' },
     { id: 'distanceKm', name: 'Distance from Home', type: 'number', role: 'value.distance' },
     { id: 'locationName', name: 'Location (Municipality)', type: 'string', role: 'text' },
+    { id: 'ownerAppleId', name: 'Owner Apple ID', type: 'string', role: 'text' },
+    { id: 'ownerName', name: 'Owner Name', type: 'string', role: 'text' },
 ];
 
 /** State definitions for a Calendar event slot. */
@@ -653,6 +655,7 @@ class Icloud extends utils.Adapter {
             const findMe = this.icloud.getService('findme');
             this.log.debug('FindMy: calling API refresh...');
             await findMe.refresh();
+            const membersInfo = findMe.membersInfo;
             const devices = findMe.devices;
             this.log.debug(`FindMy: API returned ${devices.size} device(s)`);
 
@@ -785,6 +788,11 @@ class Icloud extends utils.Adapter {
                     isInaccurate: loc?.isInaccurate ?? null,
                     distanceKm: distKm !== null ? Math.round(distKm * 1000) / 1000 : null,
                     locationName: _geoResult,
+                    ownerAppleId: d.prsId ? (membersInfo[d.prsId]?.appleId ?? null) : null,
+                    ownerName: d.prsId
+                        ? [membersInfo[d.prsId]?.firstName, membersInfo[d.prsId]?.lastName].filter(Boolean).join(' ') ||
+                          null
+                        : null,
                 };
                 // DEBUG:GEO_TIMING
                 if (loc) {
@@ -860,16 +868,19 @@ class Icloud extends utils.Adapter {
         if (this.findMyIdMap.has(apiId)) {
             return this.findMyIdMap.get(apiId)!;
         }
-        let max = 0;
+        // Collect all currently used numeric IDs as integers
+        const used = new Set<number>();
         for (const v of this.findMyIdMap.values()) {
-            const n = parseInt(v, 10);
-            if (n > max) {
-                max = n;
-            }
+            used.add(parseInt(v, 10));
         }
-        const next = String(max + 1).padStart(6, '0');
-        this.findMyIdMap.set(apiId, next);
-        return next;
+        // Find the lowest positive integer not yet in use (gap-filling)
+        let next = 1;
+        while (used.has(next)) {
+            next++;
+        }
+        const nextStr = String(next).padStart(6, '0');
+        this.findMyIdMap.set(apiId, nextStr);
+        return nextStr;
     }
 
     /**

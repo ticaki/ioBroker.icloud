@@ -46,8 +46,9 @@ class iCloudFindMyService {
     void this.refresh();
   }
   devices = /* @__PURE__ */ new Map();
+  membersInfo = {};
   async refresh(selectedDevice = "all") {
-    var _a;
+    var _a, _b, _c;
     const doRequest = async () => {
       const request = await this.service.fetch(`${this.serviceUri}/fmipservice/client/web/refreshClient`, {
         headers: this.service.authStore.getHeaders(),
@@ -97,6 +98,7 @@ class iCloudFindMyService {
       newDevices.set(device.id, (this.devices.get(device.id) || new iCloudFindMyDevice(this)).apply(device));
     }
     this.devices = newDevices;
+    this.membersInfo = (_c = (_b = json.userInfo) == null ? void 0 : _b.membersInfo) != null ? _c : {};
     return json;
   }
   async playSound(deviceId, subject = "Find My iPhone Alert") {
