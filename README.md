@@ -408,6 +408,26 @@ sendTo('icloud.0', 'driveRenameItem', {
 > **Tip:** Use `driveListFolder` to discover file/folder IDs and etags. The `drivewsid` and `etag` are returned for each item.
 
 
+## Credits
+
+This adapter would not have been possible without the following open-source projects:
+
+- **[icloud.js](https://github.com/foxt/icloud.js)** by foxt — the original JavaScript iCloud client library that this adapter is derived from and builds upon.
+- **[pyicloud](https://github.com/picklepete/pyicloud)** by picklepete — the Python reference implementation for Apple's iCloud APIs that guided many of the service integrations.
+- **[pyicloud (timlaing fork)](https://github.com/timlaing/pyicloud)** by timlaing — an actively maintained fork of pyicloud that served as the reference implementation for modern Reminders (CloudKit v2) and other up-to-date API details.
+
+A big thank you to all contributors of these projects!
+
+
+## Disclaimer
+
+This adapter is an independent, community-developed open-source project. It is **not affiliated with, endorsed by, or in any way officially connected to Apple Inc.**
+
+*iCloud*, *Find My*, *Apple ID*, *iCloud Drive*, and all other Apple trademarks are the property of Apple Inc. All product names, logos, and brands are property of their respective owners. The use of these names is for identification purposes only.
+
+The adapter accesses Apple's iCloud services using the same APIs that are used by Apple's own clients. Use of those APIs is subject to Apple's Terms of Service. By using this adapter, you agree to comply with all applicable Apple terms and conditions. The author accepts no liability for any misuse of the adapter or any violations of Apple's Terms of Service.
+
+
 ## Changelog
 <!--
 	Placeholder for the next version (at the beginning of the line):
