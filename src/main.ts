@@ -583,13 +583,27 @@ class Icloud extends utils.Adapter {
 
         // ── Reminders ─────────────────────────────────────────────────────────
         if (activeServices.includes('reminders') && this.config.remindersEnabled) {
-            await this.refreshReminders();
-            this.scheduleRemindersRefresh();
+            if (info.webservices?.ckdatabasews?.pcsRequired) {
+                this.log.warn(
+                    'Reminders: Advanced Data Protection (ADP) is active (pcsRequired=true). ' +
+                        'CloudKit web access is not supported with ADP. Reminders will be skipped.',
+                );
+            } else {
+                await this.refreshReminders();
+                this.scheduleRemindersRefresh();
+            }
         }
 
         // ── iCloud Drive ──────────────────────────────────────────────────────
         if (activeServices.includes('drivews') && this.config.driveEnabled) {
-            await this.refreshDrive();
+            if (info.webservices?.drivews?.pcsRequired) {
+                this.log.warn(
+                    'iCloud Drive: Advanced Data Protection (ADP) is active (pcsRequired=true). ' +
+                        'Web API access is not supported for Drive with ADP. Drive will be skipped.',
+                );
+            } else {
+                await this.refreshDrive();
+            }
         }
 
         // ── Account Storage ───────────────────────────────────────────────────

@@ -429,7 +429,7 @@ class iCloudRemindersService {
    * @returns true if any records were ingested (data changed), false otherwise.
    */
   async refresh() {
-    var _a, _b;
+    var _a, _b, _c;
     let moreComing = true;
     const MAX_PAGES = 50;
     let page = 0;
@@ -454,7 +454,17 @@ class iCloudRemindersService {
       }
       moreComing = false;
       for (const zone of zones) {
-        for (const rec of (_b = zone.records) != null ? _b : []) {
+        if (zone.error) {
+          const e = zone.error;
+          const code = (_b = e.serverErrorCode) != null ? _b : "";
+          if (code === "GONE_ZONE" && this._syncToken) {
+            this.service._log(1, "[reminders-ck] GONE_ZONE \u2014 syncToken expired, resetting to full sync");
+            this._syncToken = void 0;
+            return this.refresh();
+          }
+          throw new Error(`CloudKit zone error: ${code || e.reason || JSON.stringify(e)}`);
+        }
+        for (const rec of (_c = zone.records) != null ? _c : []) {
           this.ingestRecord(rec);
           recordsIngested++;
         }

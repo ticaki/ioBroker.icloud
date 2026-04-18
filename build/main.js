@@ -432,7 +432,7 @@ class Icloud extends utils.Adapter {
    * after account info, available services and FindMy devices have been collected.
    */
   async onICloudReady() {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
     const info = this.icloud.accountInfo;
     if (!(info == null ? void 0 : info.dsInfo)) {
       this.log.warn("iCloud Ready but accountInfo/dsInfo is unavailable");
@@ -492,11 +492,23 @@ class Icloud extends utils.Adapter {
       this.scheduleCalendarRefresh();
     }
     if (activeServices.includes("reminders") && this.config.remindersEnabled) {
-      await this.refreshReminders();
-      this.scheduleRemindersRefresh();
+      if ((_h = (_g = info.webservices) == null ? void 0 : _g.ckdatabasews) == null ? void 0 : _h.pcsRequired) {
+        this.log.warn(
+          "Reminders: Advanced Data Protection (ADP) is active (pcsRequired=true). CloudKit web access is not supported with ADP. Reminders will be skipped."
+        );
+      } else {
+        await this.refreshReminders();
+        this.scheduleRemindersRefresh();
+      }
     }
     if (activeServices.includes("drivews") && this.config.driveEnabled) {
-      await this.refreshDrive();
+      if ((_j = (_i = info.webservices) == null ? void 0 : _i.drivews) == null ? void 0 : _j.pcsRequired) {
+        this.log.warn(
+          "iCloud Drive: Advanced Data Protection (ADP) is active (pcsRequired=true). Web API access is not supported for Drive with ADP. Drive will be skipped."
+        );
+      } else {
+        await this.refreshDrive();
+      }
     }
     if (this.config.accountStorageEnabled) {
       await this.refreshAccountStorage();

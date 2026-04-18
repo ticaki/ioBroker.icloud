@@ -433,6 +433,9 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (ticaki) Fixed Drive and Reminders silently failing when iCloud Advanced Data Protection (ADP) is enabled; expired CloudKit sync tokens are now automatically reset
+
 ### 0.2.0 (2026-04-17)
 * (ticaki) iCloud Drive integration: browse folders, upload/download files, create folders, delete and rename items via sendTo()
 * (ticaki) Added Blockly blocks for uploading and downloading iCloud Drive files

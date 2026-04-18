@@ -33,6 +33,7 @@ interface CKZoneChangesZone {
     records: CKRecord[];
     syncToken?: string;
     moreComing?: boolean;
+    error?: { serverErrorCode?: string; reason?: string; errorCode?: number };
 }
 
 interface CKZoneChangesResponse {
@@ -627,6 +628,17 @@ export class iCloudRemindersService {
 
             moreComing = false;
             for (const zone of zones) {
+                if (zone.error) {
+                    const e = zone.error;
+                    const code = e.serverErrorCode ?? '';
+                    if (code === 'GONE_ZONE' && this._syncToken) {
+                        // Expired syncToken — reset and retry as full sync
+                        this.service._log(1, '[reminders-ck] GONE_ZONE — syncToken expired, resetting to full sync');
+                        this._syncToken = undefined;
+                        return this.refresh();
+                    }
+                    throw new Error(`CloudKit zone error: ${code || e.reason || JSON.stringify(e)}`);
+                }
                 for (const rec of zone.records ?? []) {
                     this.ingestRecord(rec);
                     recordsIngested++;
