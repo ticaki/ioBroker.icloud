@@ -282,7 +282,8 @@ function generateUUID() {
     return v.toString(16);
   }).toUpperCase();
 }
-function decodeCrdtDocument(value) {
+function decodeCrdtDocument(value, debugLog) {
+  var _a, _b;
   if (value === null || value === void 0) {
     return "";
   }
@@ -295,7 +296,8 @@ function decodeCrdtDocument(value) {
     }
     try {
       data = Buffer.from(b64, "base64");
-    } catch {
+    } catch (e) {
+      debugLog == null ? void 0 : debugLog(`base64 decode failed: ${e.message} \u2014 raw(32): ${String(value).slice(0, 32)}`);
       return "";
     }
   } else if (value instanceof Uint8Array || Buffer.isBuffer(value)) {
@@ -306,17 +308,32 @@ function decodeCrdtDocument(value) {
     }
     return `${value}`;
   }
+  let decompressed = false;
   try {
     data = zlib.inflateSync(data);
+    decompressed = true;
   } catch {
     try {
       data = zlib.gunzipSync(data);
+      decompressed = true;
     } catch {
     }
   }
+  if (!decompressed) {
+    debugLog == null ? void 0 : debugLog(
+      `decompression skipped (not zlib/gzip) \u2014 treating as raw proto, byte(0): 0x${(_b = (_a = data[0]) == null ? void 0 : _a.toString(16)) != null ? _b : "??"}`
+    );
+  }
   try {
-    return parseDocumentProto(data);
-  } catch {
+    const text = parseDocumentProto(data);
+    if (!text) {
+      debugLog == null ? void 0 : debugLog(`proto parse returned empty string \u2014 bytes(hex, 16): ${data.subarray(0, 16).toString("hex")}`);
+    }
+    return text;
+  } catch (e) {
+    debugLog == null ? void 0 : debugLog(
+      `proto parse threw: ${e.message} \u2014 bytes(hex, 16): ${data.subarray(0, 16).toString("hex")}`
+    );
     return "";
   }
 }
@@ -505,6 +522,12 @@ class iCloudRemindersService {
       const name = getFieldValue(fields, "Name");
       const color = getFieldValue(fields, "Color");
       const count = (_b = getFieldValue(fields, "Count")) != null ? _b : 0;
+      if (!name) {
+        this.service._log(
+          0,
+          `[reminders-ck] List ${rec.recordName}: Name field missing \u2014 available fields: ${Object.keys(fields).join(", ")}`
+        );
+      }
       this.listsById.set(rec.recordName, {
         id: rec.recordName,
         title: name != null ? name : "Untitled",
@@ -517,10 +540,23 @@ class iCloudRemindersService {
         return;
       }
       const fields = (_c = rec.fields) != null ? _c : {};
+      const makeDebugLog = (field) => (msg) => this.service._log(0, `[reminders-ck] ${rec.recordName} ${field}: ${msg}`);
       const titleDoc = getFieldValue(fields, "TitleDocument");
       const notesDoc = getFieldValue(fields, "NotesDocument");
-      const title = titleDoc ? decodeCrdtDocument(titleDoc) : "";
-      const desc = notesDoc ? decodeCrdtDocument(notesDoc) : "";
+      if (!titleDoc) {
+        this.service._log(
+          0,
+          `[reminders-ck] Reminder ${rec.recordName}: TitleDocument missing \u2014 available fields: ${Object.keys(fields).join(", ")}`
+        );
+      }
+      const title = titleDoc ? decodeCrdtDocument(titleDoc, makeDebugLog("TitleDocument")) : "";
+      const desc = notesDoc ? decodeCrdtDocument(notesDoc, makeDebugLog("NotesDocument")) : "";
+      if (!title && titleDoc) {
+        this.service._log(
+          0,
+          `[reminders-ck] Reminder ${rec.recordName}: TitleDocument decoded to empty \u2014 falling back to "Untitled"`
+        );
+      }
       const dueDate = tsToMs(getFieldValue(fields, "DueDate"));
       const startDate = tsToMs(getFieldValue(fields, "StartDate"));
       const completedDate = tsToMs(getFieldValue(fields, "CompletionDate"));

@@ -238,6 +238,8 @@ class Icloud extends utils.Adapter {
     private driveFirstLoad = true;
     private accountStorageFirstLoad = true;
     private geoLookup: GeoLookup = new GeoLookup();
+    /** In-memory cache of last written state values — used to skip unchanged writes after adapter start. */
+    private stateCache: Map<string, ioBroker.StateValue> = new Map();
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({
@@ -248,6 +250,21 @@ class Icloud extends utils.Adapter {
         this.on('stateChange', this.onStateChange.bind(this));
         this.on('message', this.onMessage.bind(this));
         this.on('unload', this.onUnload.bind(this));
+    }
+
+    /**
+     * Writes a state only if its value has changed compared to the in-memory cache.
+     * On first adapter start the cache is empty, so every state is written once unconditionally.
+     *
+     * @param id - State ID (without namespace prefix)
+     * @param val - New value
+     */
+    private async setStateIfChanged(id: string, val: ioBroker.StateValue): Promise<void> {
+        if (this.stateCache.has(id) && this.stateCache.get(id) === val) {
+            return;
+        }
+        this.stateCache.set(id, val);
+        await this.setState(id, val, true);
     }
 
     private async createObjects(): Promise<void> {
@@ -401,6 +418,21 @@ class Icloud extends utils.Adapter {
 
         await this.createObjects();
         this.log.debug('Objects created/verified');
+
+        // Pre-populate stateCache from persisted states so setStateIfChanged skips unchanged writes on first refresh
+        try {
+            const existing = await this.getStatesAsync(`${this.namespace}.*`);
+            for (const [id, state] of Object.entries(existing)) {
+                if (state != null) {
+                    const shortId = id.slice(this.namespace.length + 1);
+                    this.stateCache.set(shortId, state.val);
+                }
+            }
+            this.log.debug(`State cache pre-populated with ${this.stateCache.size} entries`);
+        } catch {
+            // Non-critical — cache stays empty, first refresh writes all states as before
+            this.log.debug('State cache pre-population failed, starting with empty cache');
+        }
 
         this.subscribeStates('mfa.code');
         this.subscribeStates('mfa.requestSmsCode');
@@ -696,6 +728,17 @@ class Icloud extends utils.Adapter {
                 common: { name: 'FindMy' },
                 native: {},
             });
+            await this.extendObject('findme.lastSync', {
+                type: 'state',
+                common: {
+                    name: 'Last Sync',
+                    type: 'number',
+                    role: 'value.time',
+                    read: true,
+                    write: false,
+                },
+                native: {},
+            });
             // DEBUG:GEO_TIMING
             let _geoTotalMs = 0;
             let _geoCount = 0;
@@ -772,7 +815,7 @@ class Icloud extends utils.Adapter {
                             },
                             native: {},
                         });
-                        await this.setState(`${safeId}.features.${feat}`, val, true);
+                        await this.setStateIfChanged(`${safeId}.features.${feat}`, val);
                     }
                 }
                 // Write values
@@ -826,7 +869,7 @@ class Icloud extends utils.Adapter {
                 // END:DEBUG:GEO_TIMING
                 for (const [key, val] of Object.entries(vals)) {
                     if (val !== null) {
-                        await this.setState(`${safeId}.${key}`, val, true);
+                        await this.setStateIfChanged(`${safeId}.${key}`, val);
                     }
                 }
                 // distances channel
@@ -850,7 +893,7 @@ class Icloud extends utils.Adapter {
                             },
                             native: {},
                         });
-                        await this.setState(`${safeId}.distances.${pt.index}`, distM, true);
+                        await this.setStateIfChanged(`${safeId}.distances.${pt.index}`, distM);
                     }
                 }
             }
@@ -859,6 +902,7 @@ class Icloud extends utils.Adapter {
                 `FindMy GEO timing: ${_geoCount}/${allDevices.length} device(s) with location, total ${(_geoTotalMs / 1e6).toFixed(3)} ms, avg ${(_geoCount ? _geoTotalMs / _geoCount / 1e6 : 0).toFixed(3)} ms/device`,
             );
             // END:DEBUG:GEO_TIMING
+            await this.setState('findme.lastSync', Date.now(), true);
             const locatedCount = allDevices.filter(d => d.location).length;
             if (this.findMyFirstLoad) {
                 this.findMyFirstLoad = false;
@@ -1061,6 +1105,17 @@ class Icloud extends utils.Adapter {
                 common: { name: 'Calendar' },
                 native: {},
             });
+            await this.extendObject('calendar.lastSync', {
+                type: 'state',
+                common: {
+                    name: 'Last Sync',
+                    type: 'number',
+                    role: 'value.time',
+                    read: true,
+                    write: false,
+                },
+                native: {},
+            });
 
             const activeCalendarIds = new Set<string>();
             for (const col of collections) {
@@ -1081,42 +1136,38 @@ class Icloud extends utils.Adapter {
                         native: {},
                     });
                 }
-                await this.setState(`calendar.${calId}.guid`, col.guid ?? '', true);
-                await this.setState(`calendar.${calId}.ctag`, col.ctag ?? '', true);
-                await this.setState(`calendar.${calId}.etag`, col.etag ?? '', true);
-                await this.setState(`calendar.${calId}.color`, col.color ?? '', true);
-                await this.setState(`calendar.${calId}.symbolicColor`, col.symbolicColor ?? '', true);
-                await this.setState(`calendar.${calId}.order`, col.order ?? 0, true);
-                await this.setState(`calendar.${calId}.enabled`, col.enabled ?? false, true);
-                await this.setState(`calendar.${calId}.visible`, col.visible ?? false, true);
-                await this.setState(`calendar.${calId}.readOnly`, col.readOnly ?? false, true);
-                await this.setState(`calendar.${calId}.isDefault`, col.isDefault ?? false, true);
-                await this.setState(`calendar.${calId}.isFamily`, col.isFamily ?? false, true);
-                await this.setState(`calendar.${calId}.isPublished`, col.isPublished ?? false, true);
-                await this.setState(`calendar.${calId}.isPrivatelyShared`, col.isPrivatelyShared ?? false, true);
-                await this.setState(
+                await this.setStateIfChanged(`calendar.${calId}.guid`, col.guid ?? '');
+                await this.setStateIfChanged(`calendar.${calId}.ctag`, col.ctag ?? '');
+                await this.setStateIfChanged(`calendar.${calId}.etag`, col.etag ?? '');
+                await this.setStateIfChanged(`calendar.${calId}.color`, col.color ?? '');
+                await this.setStateIfChanged(`calendar.${calId}.symbolicColor`, col.symbolicColor ?? '');
+                await this.setStateIfChanged(`calendar.${calId}.order`, col.order ?? 0);
+                await this.setStateIfChanged(`calendar.${calId}.enabled`, col.enabled ?? false);
+                await this.setStateIfChanged(`calendar.${calId}.visible`, col.visible ?? false);
+                await this.setStateIfChanged(`calendar.${calId}.readOnly`, col.readOnly ?? false);
+                await this.setStateIfChanged(`calendar.${calId}.isDefault`, col.isDefault ?? false);
+                await this.setStateIfChanged(`calendar.${calId}.isFamily`, col.isFamily ?? false);
+                await this.setStateIfChanged(`calendar.${calId}.isPublished`, col.isPublished ?? false);
+                await this.setStateIfChanged(`calendar.${calId}.isPrivatelyShared`, col.isPrivatelyShared ?? false);
+                await this.setStateIfChanged(
                     `calendar.${calId}.extendedDetailsAreIncluded`,
                     col.extendedDetailsAreIncluded ?? false,
-                    true,
                 );
-                await this.setState(
+                await this.setStateIfChanged(
                     `calendar.${calId}.shouldShowJunkUIWhenAppropriate`,
                     col.shouldShowJunkUIWhenAppropriate ?? false,
-                    true,
                 );
-                await this.setState(`calendar.${calId}.shareTitle`, col.shareTitle ?? '', true);
-                await this.setState(`calendar.${calId}.prePublishedUrl`, col.prePublishedUrl ?? '', true);
-                await this.setState(`calendar.${calId}.supportedType`, col.supportedType ?? '', true);
-                await this.setState(`calendar.${calId}.objectType`, col.objectType ?? '', true);
-                await this.setState(
+                await this.setStateIfChanged(`calendar.${calId}.shareTitle`, col.shareTitle ?? '');
+                await this.setStateIfChanged(`calendar.${calId}.prePublishedUrl`, col.prePublishedUrl ?? '');
+                await this.setStateIfChanged(`calendar.${calId}.supportedType`, col.supportedType ?? '');
+                await this.setStateIfChanged(`calendar.${calId}.objectType`, col.objectType ?? '');
+                await this.setStateIfChanged(
                     `calendar.${calId}.createdDate`,
                     this.localDateArrayToTimestamp(col.createdDate) ?? null,
-                    true,
                 );
-                await this.setState(
+                await this.setStateIfChanged(
                     `calendar.${calId}.lastModifiedDate`,
                     this.localDateArrayToTimestamp(col.lastModifiedDate) ?? null,
-                    true,
                 );
 
                 const calEvents = eventsByCalendar.get(col.guid) ?? [];
@@ -1148,82 +1199,76 @@ class Icloud extends utils.Adapter {
                     }
 
                     if (ev) {
-                        await this.setState(`${basePath}.title`, ev.title ?? '', true);
-                        await this.setState(`${basePath}.guid`, ev.guid ?? '', true);
-                        await this.setState(`${basePath}.etag`, ev.etag ?? '', true);
-                        await this.setState(`${basePath}.pGuid`, ev.pGuid ?? '', true);
-                        await this.setState(
+                        await this.setStateIfChanged(`${basePath}.title`, ev.title ?? '');
+                        await this.setStateIfChanged(`${basePath}.guid`, ev.guid ?? '');
+                        await this.setStateIfChanged(`${basePath}.etag`, ev.etag ?? '');
+                        await this.setStateIfChanged(`${basePath}.pGuid`, ev.pGuid ?? '');
+                        await this.setStateIfChanged(
                             `${basePath}.startDate`,
                             this.localDateArrayToTimestamp(ev.localStartDate) ?? null,
-                            true,
                         );
-                        await this.setState(
+                        await this.setStateIfChanged(
                             `${basePath}.endDate`,
                             this.localDateArrayToTimestamp(ev.localEndDate) ?? null,
-                            true,
                         );
-                        await this.setState(
+                        await this.setStateIfChanged(
                             `${basePath}.masterStartDate`,
                             this.localDateArrayToTimestamp(ev.masterStartDate) ?? null,
-                            true,
                         );
-                        await this.setState(
+                        await this.setStateIfChanged(
                             `${basePath}.masterEndDate`,
                             this.localDateArrayToTimestamp(ev.masterEndDate) ?? null,
-                            true,
                         );
-                        await this.setState(
+                        await this.setStateIfChanged(
                             `${basePath}.createdDate`,
                             this.localDateArrayToTimestamp(ev.createdDate) ?? null,
-                            true,
                         );
-                        await this.setState(
+                        await this.setStateIfChanged(
                             `${basePath}.lastModifiedDate`,
                             this.localDateArrayToTimestamp(ev.lastModifiedDate) ?? null,
-                            true,
                         );
-                        await this.setState(`${basePath}.allDay`, ev.allDay ?? false, true);
-                        await this.setState(`${basePath}.duration`, ev.duration ?? null, true);
-                        await this.setState(`${basePath}.url`, ev.url ?? '', true);
-                        await this.setState(`${basePath}.tz`, ev.tz ?? '', true);
-                        await this.setState(`${basePath}.tzname`, ev.tzname ?? '', true);
-                        await this.setState(`${basePath}.startDateTZOffset`, ev.startDateTZOffset ?? '', true);
-                        await this.setState(`${basePath}.icon`, ev.icon ?? 0, true);
-                        await this.setState(`${basePath}.readOnly`, ev.readOnly ?? false, true);
-                        await this.setState(`${basePath}.transparent`, ev.transparent ?? false, true);
-                        await this.setState(`${basePath}.hasAttachments`, ev.hasAttachments ?? false, true);
-                        await this.setState(`${basePath}.recurrenceException`, ev.recurrenceException ?? false, true);
-                        await this.setState(`${basePath}.recurrenceMaster`, ev.recurrenceMaster ?? false, true);
-                        await this.setState(
+                        await this.setStateIfChanged(`${basePath}.allDay`, ev.allDay ?? false);
+                        await this.setStateIfChanged(`${basePath}.duration`, ev.duration ?? null);
+                        await this.setStateIfChanged(`${basePath}.url`, ev.url ?? '');
+                        await this.setStateIfChanged(`${basePath}.tz`, ev.tz ?? '');
+                        await this.setStateIfChanged(`${basePath}.tzname`, ev.tzname ?? '');
+                        await this.setStateIfChanged(`${basePath}.startDateTZOffset`, ev.startDateTZOffset ?? '');
+                        await this.setStateIfChanged(`${basePath}.icon`, ev.icon ?? 0);
+                        await this.setStateIfChanged(`${basePath}.readOnly`, ev.readOnly ?? false);
+                        await this.setStateIfChanged(`${basePath}.transparent`, ev.transparent ?? false);
+                        await this.setStateIfChanged(`${basePath}.hasAttachments`, ev.hasAttachments ?? false);
+                        await this.setStateIfChanged(
+                            `${basePath}.recurrenceException`,
+                            ev.recurrenceException ?? false,
+                        );
+                        await this.setStateIfChanged(`${basePath}.recurrenceMaster`, ev.recurrenceMaster ?? false);
+                        await this.setStateIfChanged(
                             `${basePath}.birthdayIsYearlessBday`,
                             ev.birthdayIsYearlessBday ?? false,
-                            true,
                         );
-                        await this.setState(
+                        await this.setStateIfChanged(
                             `${basePath}.birthdayShowAsCompany`,
                             ev.birthdayShowAsCompany ?? false,
-                            true,
                         );
-                        await this.setState(
+                        await this.setStateIfChanged(
                             `${basePath}.extendedDetailsAreIncluded`,
                             ev.extendedDetailsAreIncluded ?? false,
-                            true,
                         );
-                        await this.setState(
+                        await this.setStateIfChanged(
                             `${basePath}.shouldShowJunkUIWhenAppropriate`,
                             ev.shouldShowJunkUIWhenAppropriate ?? false,
-                            true,
                         );
-                        await this.setState(`${basePath}.alarms`, JSON.stringify(ev.alarms ?? []), true);
+                        await this.setStateIfChanged(`${basePath}.alarms`, JSON.stringify(ev.alarms ?? []));
                     } else {
                         for (const s of CALENDAR_EVENT_STATES) {
-                            await this.setState(`${basePath}.${s.id}`, null, true);
+                            await this.setStateIfChanged(`${basePath}.${s.id}`, null);
                         }
                     }
                 }
             }
 
             await this.cleanupCalendarObjects(activeCalendarIds, maxCount);
+            await this.setState('calendar.lastSync', Date.now(), true);
             if (this.calendarFirstLoad) {
                 this.calendarFirstLoad = false;
                 const upcomingCount = [...eventsByCalendar.values()].reduce((s, l) => s + l.length, 0);
@@ -1384,6 +1429,17 @@ class Icloud extends utils.Adapter {
             common: { name: 'Reminders' },
             native: {},
         });
+        await this.extendObject('reminders.lastSync', {
+            type: 'state',
+            common: {
+                name: 'Last Sync',
+                type: 'number',
+                role: 'value.time',
+                read: true,
+                write: false,
+            },
+            native: {},
+        });
 
         const activeListIds = new Set<string>();
         for (const list of remService.lists) {
@@ -1403,9 +1459,9 @@ class Icloud extends utils.Adapter {
                     native: {},
                 });
             }
-            await this.setState(`reminders.${listId}.id`, list.id ?? '', true);
-            await this.setState(`reminders.${listId}.color`, list.color ?? '', true);
-            await this.setState(`reminders.${listId}.count`, list.count ?? 0, true);
+            await this.setStateIfChanged(`reminders.${listId}.id`, list.id ?? '');
+            await this.setStateIfChanged(`reminders.${listId}.color`, list.color ?? '');
+            await this.setStateIfChanged(`reminders.${listId}.count`, list.count ?? 0);
 
             // ── Open reminders ────────────────────────────────────────────
             const allOpen = (remService.remindersByList.get(list.id) ?? []).filter(r => !r.completed && !r.deleted);
@@ -1450,6 +1506,7 @@ class Icloud extends utils.Adapter {
         }
 
         await this.cleanupRemindersObjects(activeListIds, maxCount, showCompleted);
+        await this.setState('reminders.lastSync', Date.now(), true);
         this.log.debug(
             `Reminders refresh done — ${remService.lists.length} list(s), ` +
                 `${[...remService.remindersByList.values()].reduce((s, l) => s + l.length, 0)} reminder(s)`,
@@ -1483,22 +1540,22 @@ class Icloud extends utils.Adapter {
             }
 
             if (rem) {
-                await this.setState(`${slotPath}.title`, rem.title ?? '', true);
-                await this.setState(`${slotPath}.description`, rem.description ?? '', true);
-                await this.setState(`${slotPath}.id`, rem.id ?? '', true);
-                await this.setState(`${slotPath}.listId`, rem.listId ?? '', true);
-                await this.setState(`${slotPath}.priority`, rem.priority ?? 0, true);
-                await this.setState(`${slotPath}.flagged`, rem.flagged ?? false, true);
-                await this.setState(`${slotPath}.allDay`, rem.allDay ?? false, true);
-                await this.setState(`${slotPath}.completed`, rem.completed ?? false, true);
-                await this.setState(`${slotPath}.dueDate`, rem.dueDate ?? null, true);
-                await this.setState(`${slotPath}.startDate`, rem.startDate ?? null, true);
-                await this.setState(`${slotPath}.completedDate`, rem.completedDate ?? null, true);
-                await this.setState(`${slotPath}.createdDate`, rem.createdDate ?? null, true);
-                await this.setState(`${slotPath}.lastModifiedDate`, rem.lastModifiedDate ?? null, true);
+                await this.setStateIfChanged(`${slotPath}.title`, rem.title ?? '');
+                await this.setStateIfChanged(`${slotPath}.description`, rem.description ?? '');
+                await this.setStateIfChanged(`${slotPath}.id`, rem.id ?? '');
+                await this.setStateIfChanged(`${slotPath}.listId`, rem.listId ?? '');
+                await this.setStateIfChanged(`${slotPath}.priority`, rem.priority ?? 0);
+                await this.setStateIfChanged(`${slotPath}.flagged`, rem.flagged ?? false);
+                await this.setStateIfChanged(`${slotPath}.allDay`, rem.allDay ?? false);
+                await this.setStateIfChanged(`${slotPath}.completed`, rem.completed ?? false);
+                await this.setStateIfChanged(`${slotPath}.dueDate`, rem.dueDate ?? null);
+                await this.setStateIfChanged(`${slotPath}.startDate`, rem.startDate ?? null);
+                await this.setStateIfChanged(`${slotPath}.completedDate`, rem.completedDate ?? null);
+                await this.setStateIfChanged(`${slotPath}.createdDate`, rem.createdDate ?? null);
+                await this.setStateIfChanged(`${slotPath}.lastModifiedDate`, rem.lastModifiedDate ?? null);
             } else {
                 for (const s of REMINDER_ITEM_STATES) {
-                    await this.setState(`${slotPath}.${s.id}`, null, true);
+                    await this.setStateIfChanged(`${slotPath}.${s.id}`, null);
                 }
             }
         }
@@ -1609,6 +1666,17 @@ class Icloud extends utils.Adapter {
             common: { name: 'iCloud Drive' },
             native: {},
         });
+        await this.extendObject('drive.lastSync', {
+            type: 'state',
+            common: {
+                name: 'Last Sync',
+                type: 'number',
+                role: 'value.time',
+                read: true,
+                write: false,
+            },
+            native: {},
+        });
 
         const vals: Record<string, ioBroker.StateValue> = {
             name: root.name ?? 'root',
@@ -1629,7 +1697,7 @@ class Icloud extends utils.Adapter {
             });
             const v = vals[s.id];
             if (v !== undefined) {
-                await this.setState(`drive.${s.id}`, v, true);
+                await this.setStateIfChanged(`drive.${s.id}`, v);
             }
         }
 
@@ -1648,7 +1716,8 @@ class Icloud extends utils.Adapter {
             dateModified: item.dateModified ? new Date(item.dateModified as unknown as string).getTime() : null,
             etag: item.etag,
         }));
-        await this.setState('drive.rootItems', JSON.stringify(items), true);
+        await this.setStateIfChanged('drive.rootItems', JSON.stringify(items));
+        await this.setState('drive.lastSync', Date.now(), true);
     }
 
     private getDriveService(): iCloudDriveService {
@@ -1676,13 +1745,24 @@ class Icloud extends utils.Adapter {
 
             const toMB = (bytes: number): number => Math.round(bytes / 1024 / 1024);
 
-            await this.setState('account.storage.usedMB', toMB(used), true);
-            await this.setState('account.storage.totalMB', toMB(total), true);
-            await this.setState('account.storage.availableMB', toMB(available), true);
-            await this.setState('account.storage.usedPercent', usedPercent, true);
-            await this.setState('account.storage.overQuota', quota.overQuota ?? false, true);
-            await this.setState('account.storage.almostFull', quota['almost-full'] ?? false, true);
-            await this.setState('account.storage.paidQuota', quota.paidQuota ?? false, true);
+            await this.extendObject('account.storage.lastSync', {
+                type: 'state',
+                common: {
+                    name: 'Last Sync',
+                    type: 'number',
+                    role: 'value.time',
+                    read: true,
+                    write: false,
+                },
+                native: {},
+            });
+            await this.setStateIfChanged('account.storage.usedMB', toMB(used));
+            await this.setStateIfChanged('account.storage.totalMB', toMB(total));
+            await this.setStateIfChanged('account.storage.availableMB', toMB(available));
+            await this.setStateIfChanged('account.storage.usedPercent', usedPercent);
+            await this.setStateIfChanged('account.storage.overQuota', quota.overQuota ?? false);
+            await this.setStateIfChanged('account.storage.almostFull', quota['almost-full'] ?? false);
+            await this.setStateIfChanged('account.storage.paidQuota', quota.paidQuota ?? false);
 
             for (const media of storage.storageUsageByMedia ?? []) {
                 const rawKey = media.mediaKey ?? '';
@@ -1702,10 +1782,9 @@ class Icloud extends utils.Adapter {
                     },
                     native: {},
                 });
-                await this.setState(
+                await this.setStateIfChanged(
                     `account.storage.byMedia.${mediaStateId}`,
                     media.usageInBytes != null ? toMB(media.usageInBytes) : null,
-                    true,
                 );
             }
 
@@ -1724,7 +1803,7 @@ class Icloud extends utils.Adapter {
                     },
                     native: {},
                 });
-                await this.setState('account.storage.family.totalMB', toMB(fam.usageInBytes ?? 0), true);
+                await this.setStateIfChanged('account.storage.family.totalMB', toMB(fam.usageInBytes ?? 0));
 
                 for (const member of fam.familyMembers ?? []) {
                     const memberId = (member.id ?? member.dsid?.toString() ?? '').replace(/[^a-z0-9]/gi, '_');
@@ -1743,14 +1822,14 @@ class Icloud extends utils.Adapter {
                         },
                         native: {},
                     });
-                    await this.setState(
+                    await this.setStateIfChanged(
                         `account.storage.family.${memberId}`,
                         member.usageInBytes != null ? toMB(member.usageInBytes) : null,
-                        true,
                     );
                 }
             }
 
+            await this.setState('account.storage.lastSync', Date.now(), true);
             if (this.accountStorageFirstLoad) {
                 this.accountStorageFirstLoad = false;
                 const quotaNote = quota.overQuota ? ' — OVER QUOTA' : quota['almost-full'] ? ' — almost full' : '';

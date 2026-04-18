@@ -433,7 +433,17 @@ function generateUUID(): string {
         .toUpperCase();
 }
 
-function decodeCrdtDocument(value: unknown): string {
+/**
+ * Decode a CRDT document (TitleDocument / NotesDocument) and return the plain text.
+ *
+ * Returns an empty string on any failure. Failures are reported via the optional
+ * `debugLog` callback at debug level — never as warnings or errors — so that
+ * callers can provide context (field name, record ID) without alarming users.
+ *
+ * @param value - base64-encoded string, Uint8Array, or plain string
+ * @param debugLog - optional callback invoked with a diagnostic message on failure
+ */
+function decodeCrdtDocument(value: unknown, debugLog?: (msg: string) => void): string {
     if (value === null || value === undefined) {
         return '';
     }
@@ -448,7 +458,8 @@ function decodeCrdtDocument(value: unknown): string {
         }
         try {
             data = Buffer.from(b64, 'base64');
-        } catch {
+        } catch (e) {
+            debugLog?.(`base64 decode failed: ${(e as Error).message} — raw(32): ${String(value).slice(0, 32)}`);
             return '';
         }
     } else if (value instanceof Uint8Array || Buffer.isBuffer(value)) {
@@ -460,21 +471,37 @@ function decodeCrdtDocument(value: unknown): string {
         return `${value as string | number | boolean}`;
     }
 
+    let decompressed = false;
     // Decompress — Apple zlib-compresses CRDT documents
     try {
         data = zlib.inflateSync(data);
+        decompressed = true;
     } catch {
         try {
             data = zlib.gunzipSync(data);
+            decompressed = true;
         } catch {
             // Data may not be compressed — continue with raw bytes
         }
     }
 
+    if (!decompressed) {
+        debugLog?.(
+            `decompression skipped (not zlib/gzip) — treating as raw proto, byte(0): 0x${data[0]?.toString(16) ?? '??'}`,
+        );
+    }
+
     // Parse protobuf structure
     try {
-        return parseDocumentProto(data);
-    } catch {
+        const text = parseDocumentProto(data);
+        if (!text) {
+            debugLog?.(`proto parse returned empty string — bytes(hex, 16): ${data.subarray(0, 16).toString('hex')}`);
+        }
+        return text;
+    } catch (e) {
+        debugLog?.(
+            `proto parse threw: ${(e as Error).message} — bytes(hex, 16): ${data.subarray(0, 16).toString('hex')}`,
+        );
         return '';
     }
 }
@@ -686,6 +713,12 @@ export class iCloudRemindersService {
             const name = getFieldValue<string>(fields, 'Name');
             const color = getFieldValue<string>(fields, 'Color');
             const count = getFieldValue<number>(fields, 'Count') ?? 0;
+            if (!name) {
+                this.service._log(
+                    0,
+                    `[reminders-ck] List ${rec.recordName}: Name field missing — available fields: ${Object.keys(fields).join(', ')}`,
+                );
+            }
             this.listsById.set(rec.recordName, {
                 id: rec.recordName,
                 title: name ?? 'Untitled',
@@ -699,10 +732,30 @@ export class iCloudRemindersService {
             }
             const fields = rec.fields ?? {};
 
+            const makeDebugLog =
+                (field: string): ((msg: string) => void) =>
+                (msg: string) =>
+                    this.service._log(0, `[reminders-ck] ${rec.recordName} ${field}: ${msg}`);
+
             const titleDoc = getFieldValue<string>(fields, 'TitleDocument');
             const notesDoc = getFieldValue<string>(fields, 'NotesDocument');
-            const title = titleDoc ? decodeCrdtDocument(titleDoc) : '';
-            const desc = notesDoc ? decodeCrdtDocument(notesDoc) : '';
+
+            if (!titleDoc) {
+                this.service._log(
+                    0,
+                    `[reminders-ck] Reminder ${rec.recordName}: TitleDocument missing — available fields: ${Object.keys(fields).join(', ')}`,
+                );
+            }
+
+            const title = titleDoc ? decodeCrdtDocument(titleDoc, makeDebugLog('TitleDocument')) : '';
+            const desc = notesDoc ? decodeCrdtDocument(notesDoc, makeDebugLog('NotesDocument')) : '';
+
+            if (!title && titleDoc) {
+                this.service._log(
+                    0,
+                    `[reminders-ck] Reminder ${rec.recordName}: TitleDocument decoded to empty — falling back to "Untitled"`,
+                );
+            }
 
             const dueDate = tsToMs(getFieldValue(fields, 'DueDate'));
             const startDate = tsToMs(getFieldValue(fields, 'StartDate'));
