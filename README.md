@@ -433,8 +433,9 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.2.1 (2026-04-18)
 * (ticaki) Fixed Drive and Reminders silently failing when iCloud Advanced Data Protection (ADP) is enabled; expired CloudKit sync tokens are now automatically reset
+* (ticaki) Added PCS cookie handling for iCloud Drive with ADP-enabled accounts (mirrors pyicloud `_request_pcs_for_service`)
 
 ### 0.2.0 (2026-04-17)
 * (ticaki) iCloud Drive integration: browse folders, upload/download files, create folders, delete and rename items via sendTo()
@@ -444,7 +445,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 ### 0.2.0-alpha.0 (2026-04-17)
 * (ticaki) iCloud Reminders are read and provided as data points (lists & reminders with due date, priority, and status)
 * (ticaki) Added Blockly sendTo blocks for creating, updating, completing, deleting, and querying iCloud Reminders
-
 
 ## License
 MIT License

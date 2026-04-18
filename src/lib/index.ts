@@ -793,59 +793,69 @@ export default class iCloudService extends EventEmitter {
     /**
      * Requests PCS access to a specific service. Required to call before accessing any PCS protected services when iCloud Advanced Data Protection is enabled.
      *
-     * Note: Should only be called when iCloudService.ICDRSDisabled is `false`, however this function will check for you, and immediately return as it's not required.
+     * Mirrors timlaing/pyicloud `_request_pcs_for_service`.
      *
-     * @param appName The service name to request access to.
+     * @param appName The service name to request access to (e.g. 'iclouddrive', 'photos').
      */
-    async requestServiceAccess(appName: 'iclouddrive'): Promise<boolean> {
+    async requestServiceAccess(appName: string): Promise<boolean> {
+        const PCS_SLEEP_MS = 5000;
+        const PCS_MAX_RETRIES = 10;
+
         await this.checkPCS();
         if (!this.ICDRSDisabled) {
-            this._log(LogLevel.Warning, 'requestServiceAccess: ICRS is not disabled.');
+            this._log(LogLevel.Debug, `requestServiceAccess("${appName}"): ICDRS not disabled, PCS not required`);
             return true;
         }
+        this._log(LogLevel.Info, `ADP detected (ICDRSDisabled=true) — requesting PCS cookies for "${appName}"`);
+
         if (!this.pcsAccess) {
+            this._log(LogLevel.Debug, 'Requesting PCS consent from device');
             const requestPcs = await this.fetch('https://setup.icloud.com/setup/ws/1/enableDeviceConsentForPCS', {
                 headers: this.authStore.getHeaders(),
                 method: 'POST',
             });
             const requestPcsJson = (await requestPcs.json()) as any;
             if (!requestPcsJson.isDeviceConsentNotificationSent) {
-                throw new Error('Unable to request PCS access!');
+                throw new Error('Unable to request PCS access — consent notification not sent');
             }
         }
-        while (!this.pcsAccess) {
-            await sleep(5000);
+
+        // Wait for device consent
+        for (let i = 0; i < PCS_MAX_RETRIES && !this.pcsAccess; i++) {
+            this._log(LogLevel.Debug, `Waiting for PCS consent (${i + 1}/${PCS_MAX_RETRIES})...`);
+            await sleep(PCS_SLEEP_MS);
             await this.checkPCS();
         }
-        let pcsRequest = await this.fetch('https://setup.icloud.com/setup/ws/1/requestPCS', {
-            headers: this.authStore.getHeaders(),
-            method: 'POST',
-            body: JSON.stringify({ appName, derivedFromUserAction: true }),
-        });
-        let pcsJson = (await pcsRequest.json()) as any;
-        while (true) {
-            if (pcsJson.status == 'success') {
-                break;
+        if (!this.pcsAccess) {
+            throw new Error('PCS consent not granted within timeout — ensure an Apple device is online and unlocked');
+        }
+
+        // Request PCS cookies
+        for (let attempt = 0; attempt < PCS_MAX_RETRIES; attempt++) {
+            const pcsRequest = await this.fetch('https://setup.icloud.com/setup/ws/1/requestPCS', {
+                headers: this.authStore.getHeaders(),
+                method: 'POST',
+                body: JSON.stringify({ appName, derivedFromUserAction: attempt === 0 }),
+            });
+            const pcsJson = (await pcsRequest.json()) as any;
+
+            if (pcsJson.status === 'success') {
+                this._log(LogLevel.Info, `PCS access granted for "${appName}"`);
+                return true;
+            }
+
+            if (
+                pcsJson.message === 'Requested the device to upload cookies.' ||
+                pcsJson.message === 'Cookies not available yet on server.'
+            ) {
+                this._log(LogLevel.Debug, `PCS: ${pcsJson.message} (${attempt + 1}/${PCS_MAX_RETRIES})`);
+                await sleep(PCS_SLEEP_MS);
             } else {
-                switch (pcsJson.message) {
-                    case 'Requested the device to upload cookies.':
-                    case 'Cookies not available yet on server.':
-                        await sleep(5000);
-                        break;
-                    default:
-                        this._log(LogLevel.Error, 'unknown PCS request state', pcsJson);
-                }
-                pcsRequest = await this.fetch('https://setup.icloud.com/setup/ws/1/requestPCS', {
-                    headers: this.authStore.getHeaders(),
-                    method: 'POST',
-                    body: JSON.stringify({ appName, derivedFromUserAction: false }),
-                });
-                pcsJson = (await pcsRequest.json()) as any;
+                throw new Error(`PCS request failed for "${appName}": ${pcsJson.message ?? JSON.stringify(pcsJson)}`);
             }
         }
-        // cookies from pcsRequest are stored automatically by fetch-cookie
 
-        return true;
+        throw new Error(`PCS cookies for "${appName}" not available after ${PCS_MAX_RETRIES} retries`);
     }
 
     private _serviceCache: { [key: string]: any } = {};

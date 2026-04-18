@@ -233,6 +233,10 @@ class Icloud extends utils.Adapter {
     private remindersSyncMapLoaded = false;
     private driveRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private accountStorageRefreshTimer: ioBroker.Timeout | null | undefined = null;
+    private findMyFirstLoad = true;
+    private calendarFirstLoad = true;
+    private driveFirstLoad = true;
+    private accountStorageFirstLoad = true;
     private geoLookup: GeoLookup = new GeoLookup();
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
@@ -583,27 +587,18 @@ class Icloud extends utils.Adapter {
 
         // ── Reminders ─────────────────────────────────────────────────────────
         if (activeServices.includes('reminders') && this.config.remindersEnabled) {
-            if (info.webservices?.ckdatabasews?.pcsRequired) {
-                this.log.warn(
-                    'Reminders: Advanced Data Protection (ADP) is active (pcsRequired=true). ' +
-                        'CloudKit web access is not supported with ADP. Reminders will be skipped.',
-                );
-            } else {
-                await this.refreshReminders();
-                this.scheduleRemindersRefresh();
-            }
+            await this.refreshReminders();
+            this.scheduleRemindersRefresh();
         }
 
         // ── iCloud Drive ──────────────────────────────────────────────────────
         if (activeServices.includes('drivews') && this.config.driveEnabled) {
-            if (info.webservices?.drivews?.pcsRequired) {
-                this.log.warn(
-                    'iCloud Drive: Advanced Data Protection (ADP) is active (pcsRequired=true). ' +
-                        'Web API access is not supported for Drive with ADP. Drive will be skipped.',
-                );
-            } else {
-                await this.refreshDrive();
+            try {
+                await this.icloud!.requestServiceAccess('iclouddrive');
+            } catch (err) {
+                this.log.warn(`Drive PCS access failed: ${(err as Error)?.message ?? String(err)}`);
             }
+            await this.refreshDrive();
         }
 
         // ── Account Storage ───────────────────────────────────────────────────
@@ -864,7 +859,17 @@ class Icloud extends utils.Adapter {
                 `FindMy GEO timing: ${_geoCount}/${allDevices.length} device(s) with location, total ${(_geoTotalMs / 1e6).toFixed(3)} ms, avg ${(_geoCount ? _geoTotalMs / _geoCount / 1e6 : 0).toFixed(3)} ms/device`,
             );
             // END:DEBUG:GEO_TIMING
-            this.log.debug(`FindMy: refresh done — ${allDevices.length} device(s) written`);
+            const locatedCount = allDevices.filter(d => d.location).length;
+            if (this.findMyFirstLoad) {
+                this.findMyFirstLoad = false;
+                this.log.info(
+                    `FindMy ready — ${allDevices.length} device(s): ${regularDevices.length} own, ` +
+                        `${familyDevices.length} family, ${accessories.length} accessories; ` +
+                        `${locatedCount}/${allDevices.length} with location`,
+                );
+            } else {
+                this.log.debug(`FindMy: refresh done — ${allDevices.length} device(s) written`);
+            }
         } catch (err) {
             this.log.warn(`FindMy refresh failed: ${(err as Error)?.message ?? String(err)}`);
         }
@@ -1219,7 +1224,15 @@ class Icloud extends utils.Adapter {
             }
 
             await this.cleanupCalendarObjects(activeCalendarIds, maxCount);
-            this.log.debug(`Calendar refresh done — ${collections.length} calendar(s), ${events.length} event(s)`);
+            if (this.calendarFirstLoad) {
+                this.calendarFirstLoad = false;
+                const upcomingCount = [...eventsByCalendar.values()].reduce((s, l) => s + l.length, 0);
+                this.log.info(
+                    `Calendar ready — ${collections.length} calendar(s), ${upcomingCount} upcoming event(s) this month`,
+                );
+            } else {
+                this.log.debug(`Calendar refresh done — ${collections.length} calendar(s), ${events.length} event(s)`);
+            }
         } catch (err) {
             const msg = (err as Error)?.message ?? String(err);
             this.log.warn(`Calendar refresh failed: ${msg}`);
@@ -1329,6 +1342,15 @@ class Icloud extends utils.Adapter {
             }
 
             await this.writeReminderStates(remService);
+            if (isFirstCall) {
+                const totalCount = [...remService.remindersByList.values()].reduce((s, l) => s + l.length, 0);
+                const openCount = [...remService.remindersByList.values()]
+                    .flat()
+                    .filter(r => !r.completed && !r.deleted).length;
+                this.log.info(
+                    `Reminders ready — ${remService.lists.length} list(s), ${openCount} open / ${totalCount} total`,
+                );
+            }
         } catch (err) {
             const msg = (err as Error)?.message ?? String(err);
             this.log.warn(`Reminders refresh failed: ${msg}`);
@@ -1569,6 +1591,12 @@ class Icloud extends utils.Adapter {
             const driveService = this.icloud.getService('drivews');
             const root = await driveService.getNode();
             await this.writeDriveStates(root);
+            if (this.driveFirstLoad) {
+                this.driveFirstLoad = false;
+                this.log.info(
+                    `Drive ready — ${root.directChildrenCount ?? 0} root item(s), ${root.fileCount ?? 0} file(s) total`,
+                );
+            }
         } catch (err) {
             const msg = (err as Error)?.message ?? String(err);
             this.log.warn(`Drive refresh failed: ${msg}`);
@@ -1723,7 +1751,15 @@ class Icloud extends utils.Adapter {
                 }
             }
 
-            this.log.debug(`Account storage: ${toMB(used)} / ${toMB(total)} MB (${usedPercent}%)`);
+            if (this.accountStorageFirstLoad) {
+                this.accountStorageFirstLoad = false;
+                const quotaNote = quota.overQuota ? ' — OVER QUOTA' : quota['almost-full'] ? ' — almost full' : '';
+                this.log.info(
+                    `Account storage ready — ${toMB(used)} / ${toMB(total)} MB used (${usedPercent}%)${quotaNote}`,
+                );
+            } else {
+                this.log.debug(`Account storage: ${toMB(used)} / ${toMB(total)} MB (${usedPercent}%)`);
+            }
         } catch (err) {
             this.log.warn(`Account storage refresh failed: ${(err as Error)?.message ?? String(err)}`);
         }

@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "news": {
+      "0.2.1": {
+        "en": "Fixed Drive and Reminders silently failing when iCloud Advanced Data Protection (ADP) is enabled; expired CloudKit sync tokens are now automatically reset\nAdded PCS cookie handling for iCloud Drive with ADP-enabled accounts (mirrors pyicloud `_request_pcs_for_service`)",
+        "de": "Fixed Drive and Reminders stumm scheitern, wenn iCloud Advanced Data Protection (ADP) aktiviert ist; abgelaufene CloudKit Sync-Token werden nun automatisch zurückgesetzt\nPCS-Cookie-Handling für iCloud Drive mit ADP-fähigen Konten (mirrors pyicloud ` request pcs for service`) hinzugefügt",
+        "ru": "Fixed Drive and Reminders in silently failing when iCloud Advanced Data Protection (ADP) is enabled; просроченные токены синхронизации CloudKit теперь автоматически сбрасываются\nДобавлена обработка файлов cookie PCS для iCloud Drive с помощью учетных записей с поддержкой ADP (зеркала pyicloud ' request pcs for service')",
+        "pt": "A unidade fixa e os lembretes silenciosamente falham quando o iCloud Advanced Data Protection (ADP) estiver ativado; os tokens de sincronização do CloudKit expirados são agora reiniciados automaticamente\nAdicionado manuseio de cookies PCS para iCloud Drive com contas habilitadas para ADP (mirrors pyicloud ` request pcs for service`)",
+        "nl": "Vaste schijf en herinneringen stil falen wanneer iCloud Advanced Data Protection (ADP) is ingeschakeld; verlopen CloudKit sync tokens worden nu automatisch gereset\nToegevoegd PCS cookie behandeling voor iCloud Drive met ADP-enabled accounts (mirrors pyicloud ",
+        "fr": "Le lecteur et les rappels fixes échouent silencieusement lorsque iCloud Advanced Data Protection (ADP) est activé; les jetons de synchronisation CloudKit expirés sont maintenant automatiquement réinitialisés\nAjout de la gestion des cookies PCS pour iCloud Drive avec des comptes compatibles ADP (mirors pyicloud ` request pcs for service`)",
+        "it": "Fixed Drive and Reminders silenziosamente in mancanza quando iCloud Advanced Data Protection (ADP) è abilitato; i token di sincronizzazione CloudKit scaduti vengono ripristinati automaticamente\nGestione dei cookie PCS per iCloud Drive con account abilitati ADP (mirrors pyicloud ` request pcs for service`)",
+        "es": "Control fijo y recordatorios silenciosamente fallando cuando iCloud Advanced Data Protection (ADP) está habilitado; las fichas de sincronización CloudKit vencidas ahora se reinician automáticamente\nAñadido PCS cookie handling for iCloud Drive with ADP-enabled accounts (mirrors pyicloud ` request pcs for service`)",
+        "pl": "Fixed Drive and Reminders po cichu zawodzi, gdy włączona jest zaawansowana ochrona danych iCloud (ADP); wygasające żetony synchronizacji CloudKit są automatycznie resetowane\nDodano obsługę plików cookie PCS dla iCloud Drive z kontami ADP (lusterka Pyicloud '_ request _ pcs _ for _ service \")",
+        "uk": "Виправлений привід і відмінники безшумно не вдається при включенні iCloud Advanced Data Protection (ADP); відхилені відмітки CloudKit тепер автоматично скидаються\nДодана обробка файлів cookie ПКС для iCloud Drive з обліковими записами ADP (mirrors pyicloud ` request pcs for service`)",
+        "zh-cn": "启用 iCloud 高级数据保护( ADP) 时, 固定驱动器和提醒器会静悄悄的失败; 过期的 CloudKit 同步令牌现在自动重置\n用 ADP 启用的账户添加了 iCloud Drive 的 PCS cookie 处理( Mirrors pyicloud 请求 pcs  for  service )"
+      },
       "0.2.0": {
         "en": "iCloud Drive integration: browse folders, upload/download files, create folders, delete and rename items via sendTo()\nAdded Blockly blocks for uploading and downloading iCloud Drive files\nDrive root metadata exposed as states (drive.name, drive.fileCount, drive.rootItems, etc.)",
         "de": "iCloud Drive-Integration: Ordner durchsuchen, Dateien hochladen/herunterladen, Ordner erstellen, Elemente löschen und umbenennen via sendTo()\nBlockly-Blöcke zum Hochladen und Herunterladen von iCloud Drive-Dateien hinzugefügt\nDrive-Root-Metadaten als Datenpunkte verfügbar (drive.name, drive.fileCount, drive.rootItems, etc.)",
