@@ -17,9 +17,10 @@ This adapter connects ioBroker to your Apple iCloud account. It reads the locati
 ## This adapter supports
 
 - [Find My](#find-my) — device locations, battery level, home distance and sound alerts
-- [Reminders](#reminders--sendto-api) — read, create, edit, complete and delete iCloud Reminders via `sendTo()`
+- [Reminders](#reminders--sendto-api) — read, create, edit, complete and delete iCloud Reminders via `sendTo()`; lists and individual reminders are also written as ioBroker states under `reminders.*`
 - [iCloud Drive](#icloud-drive--sendto-api) — browse, upload, download, create, delete and rename files via `sendTo()`
-- [Contacts](#contacts--sendto-api) — read contacts and contact groups via `sendTo()`
+- [Contacts](#contacts--sendto-api) — read contacts and contact groups via `sendTo()`; optionally also writes individual contact fields as ioBroker states under `contacts.*`
+- [Notes](#notes--states) — iCloud Notes as ioBroker states (`notes.list`, `notes.textList`)
 - [Calendar](#configuration) — upcoming calendar events as ioBroker states
 - [Two-factor authentication (2FA)](#two-factor-authentication-2fa)
 
@@ -541,6 +542,57 @@ sendTo('icloud.0', 'getContacts', { groupName: 'Family' }, (result) => {
 
 ---
 
+## Notes — States
+
+iCloud Notes are read-only and provided as JSON states for use in visualizations.
+
+> **Note:** Enable **Notes** in the adapter settings first.
+
+### States
+
+| State | Type | Description |
+|-------|------|-------------|
+| `notes.count` | `number` | Total number of (non-deleted) notes. |
+| `notes.folderCount` | `number` | Number of folders. |
+| `notes.lastSync` | `number` | Timestamp (ms) of the last successful sync. |
+| `notes.list` | `string` | JSON array of all notes with metadata and text (see below). |
+| `notes.textList` | `string` | JSON array of plain note texts (`string[]`) — non-locked notes only, sorted newest first. |
+
+### `notes.list` format
+
+```json
+[
+    {
+        "id": "RecordName-...",
+        "title": "Shopping List",
+        "snippet": "Milk, Eggs, Bread...",
+        "folderId": "FolderRecordName-...",
+        "folderName": "Personal",
+        "modifiedDate": 1745000000000,
+        "isLocked": false,
+        "text": "Milk\nEggs\nBread\nButter"
+    }
+]
+```
+
+Notes are sorted by modification date (newest first). Password-protected notes have `isLocked: true` and `text: null`.
+
+### `notes.textList` format
+
+```json
+[
+    "Milk\nEggs\nBread\nButter",
+    "772*16 *20",
+    "300x200"
+]
+```
+
+A flat array of plain text strings — one entry per note. Contains only non-locked notes with readable text, sorted newest first.
+
+> **Limitation:** Notes are read-only. Apple's Notes API does not support creating or editing notes via the web service.
+
+---
+
 ## Credits
 
 This adapter would not have been possible without the following open-source projects:
@@ -567,6 +619,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	### **WORK IN PROGRESS**
 -->
 ### 0.3.0 (2026-04-18)
+* (ticaki) Added iCloud Notes integration: read-only notes and folders via CloudKit, provided as JSON states
 * (ticaki) Added iCloud Contacts integration: read contacts and groups via sendTo()
 * (ticaki) Improved iCloud Drive connection stability
 * (ticaki) Added device filter for Find My in the admin UI to hide unwanted devices

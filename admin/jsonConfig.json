@@ -276,8 +276,12 @@
                     "icon": "refresh",
                     "variant": "outlined",
                     "disabled": "!data.remindersEnabled",
-                    "copyToClipboard": false,
-                    "showAckCheckbox": false
+                    "confirm": {
+                        "title": "remindersResync",
+                        "text": "remindersResyncHelp",
+                        "ok": "OK",
+                        "cancel": "Cancel"
+                    }
                 },
                 "_contactsHeader": {
                     "type": "header",
@@ -324,6 +328,39 @@
                     "xl": 3,
                     "default": false,
                     "disabled": "!data.contactsEnabled"
+                },
+                "_notesHeader": {
+                    "type": "header",
+                    "text": "notesHeader",
+                    "size": 5,
+                    "newLine": true
+                },
+                "notesEnabled": {
+                    "type": "checkbox",
+                    "label": "notesEnabled",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false
+                },
+                "notesInterval": {
+                    "type": "number",
+                    "label": "notesInterval",
+                    "help": "notesIntervalHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 15,
+                    "max": 1440,
+                    "step": 1,
+                    "default": 60,
+                    "disabled": "!data.notesEnabled"
                 },
                 "_driveHeader": {
                     "type": "header",

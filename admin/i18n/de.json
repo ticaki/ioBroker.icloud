@@ -49,5 +49,9 @@
 	"findMyTab": "FindMy",
 	"settingsTab": "Einstellungen",
 	"findMyDevicesHeader": "Geräteverwaltung",
-	"generalTab": "Allgemein"
+	"generalTab": "Allgemein",
+	"notesHeader": "Notizen",
+	"notesEnabled": "Notizen aktivieren",
+	"notesInterval": "Aktualisierungsintervall (Minuten)",
+	"notesIntervalHelp": "Wie oft Notizen abgefragt werden (15–1440 Minuten)"
 }

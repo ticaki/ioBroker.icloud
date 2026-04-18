@@ -15,6 +15,7 @@ import { iCloudFindMyService } from './services/findMy';
 import { iCloudPhotosService } from './services/photos';
 import { iCloudRemindersService } from './services/reminders';
 import { iCloudContactsService } from './services/contacts';
+import { iCloudNotesService } from './services/notes';
 import { iCloudUbiquityService } from './services/ubiquity';
 import type { AccountInfo } from './types';
 
@@ -877,6 +878,7 @@ export default class iCloudService extends EventEmitter {
         photos: iCloudPhotosService,
         reminders: iCloudRemindersService,
         contacts: iCloudContactsService,
+        notes: iCloudNotesService,
     };
 
     // Returns an instance of the 'account' (Account Details) service.
@@ -899,6 +901,8 @@ export default class iCloudService extends EventEmitter {
     getService(service: 'reminders'): iCloudRemindersService;
     // Returns an instance of the 'contacts' (iCloud Contacts) service.
     getService(service: 'contacts'): iCloudContactsService;
+    // Returns an instance of the 'notes' (iCloud Notes) service.
+    getService(service: 'notes'): iCloudNotesService;
     /**
      * Returns an instance of the specified service. Results are cached, so subsequent calls will return the same instance.
      *
@@ -916,7 +920,7 @@ export default class iCloudService extends EventEmitter {
             const webservices = this.accountInfo?.webservices ?? ({} as AccountInfo['webservices']);
             const ws = webservices as unknown as Record<string, { url?: string } | undefined>;
             let serviceUrl: string | undefined;
-            if (service === 'photos' || service === 'reminders') {
+            if (service === 'photos' || service === 'reminders' || service === 'notes') {
                 // Photos & Reminders use the CloudKit (ckdatabasews) endpoint
                 serviceUrl = (webservices as { ckdatabasews?: { url?: string } }).ckdatabasews?.url;
             } else {

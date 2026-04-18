@@ -211,6 +211,8 @@ class Icloud extends utils.Adapter {
   remindersSyncMapLoaded = false;
   contactsRefreshTimer = null;
   contactsSyncMapLoaded = false;
+  notesRefreshTimer = null;
+  notesSyncMapLoaded = false;
   driveRefreshTimer = null;
   accountStorageRefreshTimer = null;
   findMyFirstLoad = true;
@@ -558,6 +560,13 @@ class Icloud extends utils.Adapter {
         this.log.warn(`Contacts initial refresh failed: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
       });
       this.scheduleContactsRefresh();
+    }
+    if (activeServices.includes("notes") && this.config.notesEnabled) {
+      this.refreshNotes().catch((err) => {
+        var _a2;
+        this.log.warn(`Notes initial refresh failed: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
+      });
+      this.scheduleNotesRefresh();
     }
     if (activeServices.includes("drivews") && this.config.driveEnabled) {
       try {
@@ -1704,6 +1713,159 @@ class Icloud extends utils.Adapter {
     schedule();
     this.log.debug(`Contacts refresh scheduled every ${intervalMin} min`);
   }
+  // ── Notes helpers ─────────────────────────────────────────────────────────
+  async refreshNotes() {
+    var _a, _b, _c;
+    if (!this.icloud) {
+      return;
+    }
+    try {
+      const notesService = this.icloud.getService("notes");
+      const isFirstCall = !this.notesSyncMapLoaded;
+      if (isFirstCall) {
+        this.notesSyncMapLoaded = true;
+        try {
+          const obj = await this.getObjectAsync("notes");
+          const syncMap = (_a = obj == null ? void 0 : obj.native) == null ? void 0 : _a.syncMap;
+          if (syncMap && typeof syncMap === "object" && syncMap.syncToken) {
+            notesService.loadSyncMap(syncMap);
+            this.log.debug(
+              `Notes: restored syncMap (${notesService.notes.length} note(s), syncToken present)`
+            );
+          }
+        } catch {
+        }
+      }
+      const changed = await notesService.refresh();
+      if (changed) {
+        const notesObj = await this.getObjectAsync("notes");
+        await this.setObject("notes", {
+          ...notesObj != null ? notesObj : {},
+          type: "folder",
+          common: { ...(_b = notesObj == null ? void 0 : notesObj.common) != null ? _b : {}, name: "Notes" },
+          native: { syncMap: notesService.exportSyncMap() }
+        });
+      }
+      if (!changed && !isFirstCall) {
+        this.log.debug("Notes refresh: no changes, skipping state updates");
+        return;
+      }
+      await this.writeNotesStates(notesService);
+      if (isFirstCall) {
+        this.log.info(
+          `Notes ready \u2014 ${notesService.notes.length} note(s), ${notesService.folders.length} folder(s)`
+        );
+      }
+    } catch (err) {
+      const msg = (_c = err == null ? void 0 : err.message) != null ? _c : String(err);
+      this.log.warn(`Notes refresh failed: ${msg}`);
+    }
+  }
+  async persistNotesSyncMap() {
+    var _a;
+    if (!this.icloud || !this.notesSyncMapLoaded) {
+      return;
+    }
+    try {
+      const notesService = this.icloud.getService("notes");
+      const notesObj = await this.getObjectAsync("notes");
+      await this.setObject("notes", {
+        ...notesObj != null ? notesObj : {},
+        type: "folder",
+        common: { ...(_a = notesObj == null ? void 0 : notesObj.common) != null ? _a : {}, name: "Notes" },
+        native: { syncMap: notesService.exportSyncMap() }
+      });
+    } catch {
+    }
+  }
+  async writeNotesStates(notesService) {
+    const notes = notesService.notes;
+    await this.extendObject("notes", {
+      type: "folder",
+      common: { name: "Notes" },
+      native: {}
+    });
+    await this.extendObject("notes.count", {
+      type: "state",
+      common: { name: "Note count", type: "number", role: "value", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("notes.folderCount", {
+      type: "state",
+      common: { name: "Folder count", type: "number", role: "value", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("notes.lastSync", {
+      type: "state",
+      common: { name: "Last Sync", type: "number", role: "value.time", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("notes.list", {
+      type: "state",
+      common: { name: "Notes (JSON)", type: "string", role: "json", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("notes.textList", {
+      type: "state",
+      common: { name: "Notes text (string array JSON)", type: "string", role: "json", read: true, write: false },
+      native: {}
+    });
+    const notesList = notes.map((n) => ({
+      id: n.id,
+      title: n.title,
+      snippet: n.snippet,
+      folderId: n.folderId,
+      folderName: n.folderName,
+      modifiedDate: n.modifiedDate,
+      isLocked: n.isLocked,
+      text: n.text
+    }));
+    notesList.sort((a, b) => {
+      var _a, _b;
+      return ((_a = b.modifiedDate) != null ? _a : 0) - ((_b = a.modifiedDate) != null ? _b : 0);
+    });
+    const textList = notes.filter((n) => n.text && !n.isLocked).sort((a, b) => {
+      var _a, _b;
+      return ((_a = b.modifiedDate) != null ? _a : 0) - ((_b = a.modifiedDate) != null ? _b : 0);
+    }).map((n) => n.text);
+    await this.setStateIfChanged("notes.count", notes.length);
+    await this.setStateIfChanged("notes.folderCount", notesService.folders.length);
+    await this.setStateIfChanged("notes.list", JSON.stringify(notesList));
+    await this.setStateIfChanged("notes.textList", JSON.stringify(textList));
+    await this.setState("notes.lastSync", Date.now(), true);
+    this.log.debug(`Notes refresh done \u2014 ${notes.length} note(s), ${notesService.folders.length} folder(s)`);
+  }
+  scheduleNotesRefresh() {
+    var _a;
+    if (this.notesRefreshTimer) {
+      this.clearTimeout(this.notesRefreshTimer);
+      this.notesRefreshTimer = null;
+    }
+    let intervalMin = Math.floor((_a = this.config.notesInterval) != null ? _a : 60);
+    if (!Number.isFinite(intervalMin) || intervalMin < 15) {
+      this.log.warn(
+        `Notes interval is ${this.config.notesInterval} \u2014 value below 15 minutes, falling back to 60 minutes`
+      );
+      intervalMin = 60;
+    } else if (intervalMin > 1440) {
+      this.log.warn(`Notes interval is ${intervalMin} minutes \u2014 clamping to 1440 minutes`);
+      intervalMin = 1440;
+    }
+    const INTERVAL_MS = intervalMin * 60 * 1e3;
+    const schedule = () => {
+      this.notesRefreshTimer = this.setTimeout(async () => {
+        this.notesRefreshTimer = null;
+        if (!this.icloud) {
+          return;
+        }
+        this.log.debug("Notes scheduled refresh starting...");
+        await this.refreshNotes();
+        schedule();
+      }, INTERVAL_MS);
+    };
+    schedule();
+    this.log.debug(`Notes refresh scheduled every ${intervalMin} min`);
+  }
   // ── iCloud Drive helpers ──────────────────────────────────────────────────
   async refreshDrive() {
     var _a, _b, _c;
@@ -1938,6 +2100,7 @@ class Icloud extends utils.Adapter {
     const persistAndCleanup = async () => {
       await this.persistRemindersSyncMap();
       await this.persistContactsSyncMap();
+      await this.persistNotesSyncMap();
     };
     persistAndCleanup().catch(() => {
     }).finally(() => {
@@ -1957,6 +2120,10 @@ class Icloud extends utils.Adapter {
         if (this.contactsRefreshTimer) {
           this.clearTimeout(this.contactsRefreshTimer);
           this.contactsRefreshTimer = null;
+        }
+        if (this.notesRefreshTimer) {
+          this.clearTimeout(this.notesRefreshTimer);
+          this.notesRefreshTimer = null;
         }
         if (this.driveRefreshTimer) {
           this.clearTimeout(this.driveRefreshTimer);

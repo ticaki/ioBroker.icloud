@@ -47,5 +47,9 @@
     "findMyTab": "FindMy",
     "settingsTab": "Налаштування",
     "findMyDevicesHeader": "Керування пристроями",
-    "generalTab": "General"
+    "generalTab": "General",
+    "notesHeader": "Notes",
+    "notesEnabled": "Enable Notes",
+    "notesInterval": "Refresh interval (minutes)",
+    "notesIntervalHelp": "How often notes are fetched (15–1440 minutes)"
 }

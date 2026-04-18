@@ -29,6 +29,8 @@ declare global {
 			contactsEnabled: boolean;
 			contactsInterval: number;
 			contactsWriteStates: boolean;
+			notesEnabled: boolean;
+			notesInterval: number;
 			accountStorageEnabled: boolean;
 			accountStorageInterval: number;
 		}
