@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.2.1",
+    "version": "0.3.0",
     "news": {
+      "0.3.0": {
+        "en": "Added iCloud Contacts integration: read contacts and groups via sendTo()\nImproved iCloud Drive connection stability\nAdded device filter for Find My in the admin UI to hide unwanted devices",
+        "de": "iCloud-Kontakte-Integration hinzugefügt: Kontakte und Gruppen über sendTo() lesen\nVerbesserte iCloud Drive-Verbindungsstabilität\nGerätefilter für Find My in der Admin-Oberfläche hinzugefügt, um unerwünschte Geräte auszublenden",
+        "ru": "Добавлена интеграция контактов iCloud: чтение контактов и групп через sendTo()\nУлучшена стабильность соединения iCloud Drive\nДобавлен фильтр устройств для Find My в интерфейсе администратора для скрытия ненужных устройств",
+        "pt": "Integração de contatos do iCloud adicionada: leia contatos e grupos via sendTo()\nEstabilidade de conexão do iCloud Drive melhorada\nFiltro de dispositivos adicionado para Find My na interface de administração para ocultar dispositivos indesejados",
+        "nl": "iCloud Contacten-integratie toegevoegd: lees contacten en groepen via sendTo()\nVerbeterde verbindingsstabiliteit van iCloud Drive\nApparaatfilter toegevoegd voor Find My in de beheerinterface om ongewenste apparaten te verbergen",
+        "fr": "Intégration des contacts iCloud ajoutée : lire les contacts et les groupes via sendTo()\nAmélioration de la stabilité de connexion d'iCloud Drive\nFiltre d'appareils ajouté pour Find My dans l'interface d'administration pour masquer les appareils indésirables",
+        "it": "Aggiunta integrazione iCloud Contatti: lettura di contatti e gruppi via sendTo()\nMigliorata la stabilità della connessione iCloud Drive\nAggiunto filtro dispositivi per Find My nell'interfaccia di amministrazione per nascondere i dispositivi indesiderati",
+        "es": "Integración de contactos de iCloud añadida: leer contactos y grupos via sendTo()\nMejorada la estabilidad de conexión de iCloud Drive\nFiltro de dispositivos añadido para Find My en la interfaz de administración para ocultar dispositivos no deseados",
+        "pl": "Dodano integrację kontaktów iCloud: odczytywanie kontaktów i grup przez sendTo()\nPoprawiona stabilność połączenia iCloud Drive\nDodano filtr urządzeń dla Find My w interfejsie administratora, aby ukryć niechciane urządzenia",
+        "uk": "Додано інтеграцію контактів iCloud: читання контактів та груп через sendTo()\nПокращена стабільність підключення iCloud Drive\nДодано фільтр пристроїв для Find My в інтерфейсі адміністратора для приховання небажаних пристроїв",
+        "zh-cn": "添加 iCloud 联系人集成：通过 sendTo() 读取联系人和组\n改善 iCloud Drive 连接稳定性\n在管理员界面中为 Find My 添加设备过滤器以隐藏不需要的设备"
+      },
       "0.2.1": {
         "en": "Fixed Drive and Reminders silently failing when iCloud Advanced Data Protection (ADP) is enabled; expired CloudKit sync tokens are now automatically reset\nAdded PCS cookie handling for iCloud Drive with ADP-enabled accounts (mirrors pyicloud `_request_pcs_for_service`)",
         "de": "Fixed Drive and Reminders stumm scheitern, wenn iCloud Advanced Data Protection (ADP) aktiviert ist; abgelaufene CloudKit Sync-Token werden nun automatisch zurückgesetzt\nPCS-Cookie-Handling für iCloud Drive mit ADP-fähigen Konten (mirrors pyicloud ` request pcs for service`) hinzugefügt",

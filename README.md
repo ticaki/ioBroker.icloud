@@ -566,6 +566,11 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.3.0 (2026-04-18)
+* (ticaki) Added iCloud Contacts integration: read contacts and groups via sendTo()
+* (ticaki) Improved iCloud Drive connection stability
+* (ticaki) Added device filter for Find My in the admin UI to hide unwanted devices
+
 ### 0.2.1 (2026-04-18)
 * (ticaki) Fixed Drive and Reminders silently failing when iCloud Advanced Data Protection (ADP) is enabled; expired CloudKit sync tokens are now automatically reset
 * (ticaki) Added PCS cookie handling for iCloud Drive with ADP-enabled accounts (mirrors pyicloud `_request_pcs_for_service`)
