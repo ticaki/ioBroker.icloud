@@ -9,7 +9,7 @@ const config = {
     plugins: [
         federation({
             manifest: true,
-            name: 'AdminComponentEasyAccessSet',
+            name: 'ConfigCustomIcloudSet',
             filename: 'customComponents.js',
             exposes: {
                 './Components': './src/Components.tsx',

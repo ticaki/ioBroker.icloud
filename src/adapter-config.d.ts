@@ -16,6 +16,7 @@ declare global {
 			findMyEnabled: boolean;
 			findMyInterval: number;
 			findMyGeoEnabled: boolean;
+			findMyDisabledDevices: string[];
 			calendarEnabled: boolean;
 			calendarEventCount: number;
 			calendarInterval: number;
@@ -25,6 +26,9 @@ declare global {
 			remindersFilter: 'due' | 'all';
 			remindersShowCompleted: boolean;
 			driveEnabled: boolean;
+			contactsEnabled: boolean;
+			contactsInterval: number;
+			contactsWriteStates: boolean;
 			accountStorageEnabled: boolean;
 			accountStorageInterval: number;
 		}

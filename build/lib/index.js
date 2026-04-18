@@ -49,6 +49,7 @@ var import_drive = require("./services/drive");
 var import_findMy = require("./services/findMy");
 var import_photos = require("./services/photos");
 var import_reminders = require("./services/reminders");
+var import_contacts = require("./services/contacts");
 var import_ubiquity = require("./services/ubiquity");
 const LogLevel = {
   Debug: 0,
@@ -690,7 +691,8 @@ class iCloudService extends import_node_events.default {
     drivews: import_drive.iCloudDriveService,
     calendar: import_calendar.iCloudCalendarService,
     photos: import_photos.iCloudPhotosService,
-    reminders: import_reminders.iCloudRemindersService
+    reminders: import_reminders.iCloudRemindersService,
+    contacts: import_contacts.iCloudContactsService
   };
   /**
    * Returns an instance of the specified service. Results are cached, so subsequent calls will return the same instance.
@@ -708,14 +710,16 @@ class iCloudService extends import_node_events.default {
     if (!this._serviceCache[service]) {
       const webservices = (_b = (_a = this.accountInfo) == null ? void 0 : _a.webservices) != null ? _b : {};
       const ws = webservices;
+      let serviceUrl;
       if (service === "photos" || service === "reminders") {
-        this._serviceCache[service] = new this.serviceConstructors[service](
-          this,
-          (_c = webservices.ckdatabasews) == null ? void 0 : _c.url
-        );
+        serviceUrl = (_c = webservices.ckdatabasews) == null ? void 0 : _c.url;
       } else {
-        this._serviceCache[service] = new this.serviceConstructors[service](this, (_d = ws[service]) == null ? void 0 : _d.url);
+        serviceUrl = (_d = ws[service]) == null ? void 0 : _d.url;
       }
+      if (!serviceUrl) {
+        throw new Error(`iCloud service '${service}' is not available: URL missing \u2014 not yet authenticated?`);
+      }
+      this._serviceCache[service] = new this.serviceConstructors[service](this, serviceUrl);
     }
     return this._serviceCache[service];
   }

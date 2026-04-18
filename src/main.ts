@@ -4,10 +4,11 @@
 
 import * as path from 'node:path';
 import * as utils from '@iobroker/adapter-core';
-import iCloudService, { LogLevel } from './lib/index';
+import iCloudService, { iCloudServiceStatus, LogLevel } from './lib/index';
 import type { iCloudFindMyDeviceInfo } from './lib/services/findMy';
 import type { iCloudRemindersService, Reminder, RemindersSyncMap } from './lib/services/reminders';
 import type { iCloudDriveService, iCloudDriveNode, iCloudDriveItem } from './lib/services/drive';
+import type { iCloudContactsService, Contact, ContactsSyncMap } from './lib/services/contacts';
 import { GeoLookup } from './lib/geo';
 
 /** Best-effort human-readable names for Apple FindMy feature flags (not officially documented). */
@@ -56,6 +57,7 @@ const FINDMY_DEVICE_STATES: Array<{
     name: string;
     type: ioBroker.CommonType;
     role: string;
+    unit?: string;
 }> = [
     { id: 'name', name: 'Device Name', type: 'string', role: 'text' },
     { id: 'deviceClass', name: 'Device Class', type: 'string', role: 'text' },
@@ -63,8 +65,8 @@ const FINDMY_DEVICE_STATES: Array<{
     { id: 'modelDisplayName', name: 'Model', type: 'string', role: 'text' },
     { id: 'rawDeviceModel', name: 'Raw Model', type: 'string', role: 'text' },
     { id: 'deviceStatus', name: 'Device Status', type: 'string', role: 'text' },
-    { id: 'batteryLevel', name: 'Battery Level', type: 'number', role: 'value.battery' },
-    { id: 'batteryStatus', name: 'Battery Status', type: 'string', role: 'text' },
+    { id: 'batteryLevel', name: 'Battery Level', type: 'number', role: 'value.battery', unit: '%' },
+    { id: 'batteryCharging', name: 'Battery Charging', type: 'boolean', role: 'indicator' },
     { id: 'isLocating', name: 'Is Locating', type: 'boolean', role: 'indicator' },
     { id: 'locationEnabled', name: 'Location Enabled', type: 'boolean', role: 'indicator' },
     { id: 'lostModeEnabled', name: 'Lost Mode Enabled', type: 'boolean', role: 'indicator' },
@@ -204,6 +206,31 @@ const DRIVE_ROOT_STATES: Array<{
     { id: 'lastRefresh', name: 'Last Refresh', type: 'number', role: 'value.time' },
 ];
 
+/** State definitions for a Contact item slot. */
+const CONTACT_ITEM_STATES: Array<{
+    id: string;
+    name: string;
+    type: ioBroker.CommonType;
+    role: string;
+}> = [
+    { id: 'contactId', name: 'Contact ID', type: 'string', role: 'text' },
+    { id: 'fullName', name: 'Full Name', type: 'string', role: 'text' },
+    { id: 'firstName', name: 'First Name', type: 'string', role: 'text' },
+    { id: 'lastName', name: 'Last Name', type: 'string', role: 'text' },
+    { id: 'companyName', name: 'Company', type: 'string', role: 'text' },
+    { id: 'nickname', name: 'Nickname', type: 'string', role: 'text' },
+    { id: 'birthday', name: 'Birthday', type: 'string', role: 'text' },
+    { id: 'jobTitle', name: 'Job Title', type: 'string', role: 'text' },
+    { id: 'department', name: 'Department', type: 'string', role: 'text' },
+    { id: 'city', name: 'City', type: 'string', role: 'text' },
+    { id: 'phones', name: 'Phones (JSON)', type: 'string', role: 'json' },
+    { id: 'emails', name: 'Emails (JSON)', type: 'string', role: 'json' },
+    { id: 'streetAddresses', name: 'Addresses (JSON)', type: 'string', role: 'json' },
+    { id: 'notes', name: 'Notes', type: 'string', role: 'text' },
+    { id: 'groups', name: 'Groups (JSON)', type: 'string', role: 'json' },
+    { id: 'isMe', name: 'Is Me', type: 'boolean', role: 'indicator' },
+];
+
 /**
  * Haversine distance in km between two WGS84 coordinate pairs.
  *
@@ -226,11 +253,15 @@ class Icloud extends utils.Adapter {
     private icloud: iCloudService | null = null;
     private findMyRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private findMyCleanupDone = false;
+    /** Serialized snapshot of last-seen findMyDisabledDevices — used to detect config changes at runtime */
+    private findMyLastDisabledKey = '';
     /** Maps Apple device API id → 6-digit zero-padded folder id (e.g. '000001') */
     private findMyIdMap: Map<string, string> = new Map();
     private calendarRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersSyncMapLoaded = false;
+    private contactsRefreshTimer: ioBroker.Timeout | null | undefined = null;
+    private contactsSyncMapLoaded = false;
     private driveRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private accountStorageRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private findMyFirstLoad = true;
@@ -618,9 +649,21 @@ class Icloud extends utils.Adapter {
         }
 
         // ── Reminders ─────────────────────────────────────────────────────────
+        // Intentionally not awaited: CloudKit is independent from other Apple services,
+        // so the initial sync runs in the background without blocking onICloudReady().
         if (activeServices.includes('reminders') && this.config.remindersEnabled) {
-            await this.refreshReminders();
+            this.refreshReminders().catch((err: unknown) => {
+                this.log.warn(`Reminders initial refresh failed: ${(err as Error)?.message ?? String(err)}`);
+            });
             this.scheduleRemindersRefresh();
+        }
+
+        // ── Contacts ──────────────────────────────────────────────────────────
+        if (activeServices.includes('contacts') && this.config.contactsEnabled) {
+            this.refreshContacts().catch((err: unknown) => {
+                this.log.warn(`Contacts initial refresh failed: ${(err as Error)?.message ?? String(err)}`);
+            });
+            this.scheduleContactsRefresh();
         }
 
         // ── iCloud Drive ──────────────────────────────────────────────────────
@@ -628,7 +671,11 @@ class Icloud extends utils.Adapter {
             try {
                 await this.icloud!.requestServiceAccess('iclouddrive');
             } catch (err) {
-                this.log.warn(`Drive PCS access failed: ${(err as Error)?.message ?? String(err)}`);
+                const msg = (err as Error)?.message ?? String(err);
+                // PCS failures are expected when Advanced Data Protection is enabled and the
+                // user's device cannot be reached for consent. Drive refresh continues anyway
+                // — states will show what was last cached. No warn needed; debug is sufficient.
+                this.log.debug(`Drive PCS access skipped: ${msg}`);
             }
             await this.refreshDrive();
         }
@@ -715,9 +762,18 @@ class Icloud extends utils.Adapter {
             }
 
             // ── Write states ─────────────────────────────────────────────────
-            const allDevices = [...regularDevices, ...accessories, ...familyDevices];
+            const allDevicesUnfiltered = [...regularDevices, ...accessories, ...familyDevices];
+            const disabledSet = new Set(this.config.findMyDisabledDevices ?? []);
+            const disabledKey = [...disabledSet].sort().join('\0');
+            if (disabledKey !== this.findMyLastDisabledKey) {
+                // disabled list changed (or first run) — force cleanup on this cycle
+                this.findMyLastDisabledKey = disabledKey;
+                this.findMyCleanupDone = false;
+            }
+            const allDevices = allDevicesUnfiltered.filter(d => !disabledSet.has(d.id ?? ''));
             if (!this.findMyCleanupDone) {
                 await this.cleanupFindMyObjects(allDevices);
+                await this.cleanupDisabledDevices(disabledSet);
                 if (!this.config.findMyGeoEnabled) {
                     await this.cleanupFindMyGeoStates();
                 }
@@ -751,18 +807,31 @@ class Icloud extends utils.Adapter {
                 }
                 const numericId = this.getOrAssignFindMyNumericId(apiId);
                 const safeId = `findme.${numericId}`;
-                await this.extendObject(safeId, {
-                    type: 'device',
-                    common: { name: d.name ?? d.deviceDisplayName ?? apiId },
-                    native: { id: apiId, baUUID: d.baUUID },
-                });
-                for (const def of FINDMY_DEVICE_STATES) {
+                {
+                    const existingDeviceObj = await this.getObjectAsync(safeId);
+                    await this.setObject(safeId, {
+                        ...(existingDeviceObj ?? {}),
+                        type: 'device',
+                        common: {
+                            ...((existingDeviceObj?.common ?? {}) as ioBroker.DeviceCommon),
+                            name: d.name ?? d.deviceDisplayName ?? apiId,
+                        },
+                        native: { id: apiId, baUUID: d.baUUID },
+                    } as ioBroker.DeviceObject);
+                }
+                // Battery states only for devices that report a valid battery
+                const hasBattery = d.batteryStatus != null && d.batteryStatus !== 'Unknown';
+                const batteryStateDefs = hasBattery
+                    ? FINDMY_DEVICE_STATES
+                    : FINDMY_DEVICE_STATES.filter(def => def.id !== 'batteryLevel' && def.id !== 'batteryCharging');
+                for (const def of batteryStateDefs) {
                     await this.extendObject(`${safeId}.${def.id}`, {
                         type: 'state',
                         common: {
                             name: def.name,
                             type: def.type,
                             role: def.role,
+                            ...(def.unit !== undefined ? { unit: def.unit } : {}),
                             read: true,
                             write: false,
                         },
@@ -836,8 +905,12 @@ class Icloud extends utils.Adapter {
                     modelDisplayName: d.modelDisplayName,
                     rawDeviceModel: d.rawDeviceModel,
                     deviceStatus: d.deviceStatus,
-                    batteryLevel: Math.round(d.batteryLevel * 100),
-                    batteryStatus: d.batteryStatus,
+                    ...(hasBattery
+                        ? {
+                              batteryLevel: d.batteryLevel != null ? Math.round(d.batteryLevel * 100) : -1,
+                              batteryCharging: d.batteryStatus === 'Charging',
+                          }
+                        : {}),
                     isLocating: d.isLocating,
                     locationEnabled: d.locationEnabled,
                     lostModeEnabled: d.lostModeEnabled,
@@ -986,6 +1059,29 @@ class Icloud extends utils.Adapter {
         for (const row of existing.rows) {
             if (!currentIds.has(row.id)) {
                 this.log.info(`FindMy cleanup: removing stale device ${row.id}`);
+                await this.delObjectAsync(row.id, { recursive: true });
+            }
+        }
+    }
+
+    /**
+     * Remove findme device objects whose native.id is in the disabled set.
+     * This runs independently of findMyIdMap so it works even when the map is incomplete.
+     *
+     * @param disabledIds - set of Apple API device IDs that are disabled
+     */
+    private async cleanupDisabledDevices(disabledIds: Set<string>): Promise<void> {
+        if (disabledIds.size === 0) {
+            return;
+        }
+        const existing = await this.getObjectViewAsync('system', 'device', {
+            startkey: `${this.namespace}.findme.`,
+            endkey: `${this.namespace}.findme.\u9999`,
+        });
+        for (const row of existing.rows) {
+            const nativeId = row.value?.native?.id as string | undefined;
+            if (nativeId && disabledIds.has(nativeId)) {
+                this.log.info(`FindMy: removing disabled device ${row.id}`);
                 await this.delObjectAsync(row.id, { recursive: true });
             }
         }
@@ -1372,11 +1468,13 @@ class Icloud extends utils.Adapter {
 
             // Persist syncMap only when data actually changed
             if (changed) {
-                await this.extendObject('reminders', {
+                const remObj = await this.getObjectAsync('reminders');
+                await this.setObject('reminders', {
+                    ...(remObj ?? {}),
                     type: 'folder',
-                    common: { name: 'Reminders' },
+                    common: { ...((remObj?.common ?? {}) as ioBroker.OtherCommon), name: 'Reminders' },
                     native: { syncMap: remService.exportSyncMap() },
-                });
+                } as ioBroker.FolderObject);
             }
 
             // First call: always write states (data comes from restored syncMap even if delta was empty)
@@ -1408,11 +1506,13 @@ class Icloud extends utils.Adapter {
         }
         try {
             const remService = this.icloud.getService('reminders');
-            await this.extendObject('reminders', {
+            const remObj = await this.getObjectAsync('reminders');
+            await this.setObject('reminders', {
+                ...(remObj ?? {}),
                 type: 'folder',
-                common: { name: 'Reminders' },
+                common: { ...((remObj?.common ?? {}) as ioBroker.OtherCommon), name: 'Reminders' },
                 native: { syncMap: remService.exportSyncMap() },
-            });
+            } as ioBroker.FolderObject);
         } catch {
             // Best effort on shutdown
         }
@@ -1636,6 +1736,218 @@ class Icloud extends utils.Adapter {
         };
         schedule();
         this.log.debug(`Reminders refresh scheduled every ${intervalMin} min`);
+    }
+
+    // ── Contacts helpers ──────────────────────────────────────────────────────
+
+    private async refreshContacts(): Promise<void> {
+        if (!this.icloud) {
+            return;
+        }
+        try {
+            const contactsService = this.icloud.getService('contacts');
+            const isFirstCall = !this.contactsSyncMapLoaded;
+
+            // On first call: restore syncMap from the contacts object's native
+            if (isFirstCall) {
+                this.contactsSyncMapLoaded = true;
+                try {
+                    const obj = await this.getObjectAsync('contacts');
+                    const syncMap = (obj?.native as { syncMap?: unknown } | undefined)?.syncMap;
+                    if (syncMap && typeof syncMap === 'object' && (syncMap as { syncToken?: string }).syncToken) {
+                        contactsService.loadSyncMap(syncMap as ContactsSyncMap);
+                        this.log.debug(
+                            `Contacts: restored syncMap (${contactsService.contacts.length} contact(s), syncToken present)`,
+                        );
+                    }
+                } catch {
+                    // Object doesn't exist yet — fresh install, full sync will follow
+                }
+            }
+
+            const changed = await contactsService.refresh();
+
+            // Persist syncMap only when data actually changed
+            if (changed) {
+                const contactsObj = await this.getObjectAsync('contacts');
+                await this.setObject('contacts', {
+                    ...(contactsObj ?? {}),
+                    type: 'folder',
+                    common: { ...((contactsObj?.common ?? {}) as ioBroker.OtherCommon), name: 'Contacts' },
+                    native: { syncMap: contactsService.exportSyncMap() },
+                } as ioBroker.FolderObject);
+            }
+
+            // First call: always write states (data comes from restored syncMap even if delta was empty)
+            if (!changed && !isFirstCall) {
+                this.log.debug('Contacts refresh: no changes, skipping state updates');
+                return;
+            }
+
+            // Always write metadata states (count, groupCount, lastSync)
+            await this.writeContactsMetaStates(contactsService);
+
+            // Write per-contact detail states only if enabled; clean up if disabled
+            if (this.config.contactsWriteStates) {
+                await this.writeContactStates(contactsService);
+            } else if (isFirstCall) {
+                // On first call with disabled states: remove any leftover contact objects
+                await this.cleanupContactsObjects(new Set());
+            }
+
+            if (isFirstCall) {
+                this.log.info(
+                    `Contacts ready — ${contactsService.contacts.length} contact(s), ${contactsService.groups.length} group(s)`,
+                );
+            }
+        } catch (err) {
+            const msg = (err as Error)?.message ?? String(err);
+            this.log.warn(`Contacts refresh failed: ${msg}`);
+        }
+    }
+
+    private async persistContactsSyncMap(): Promise<void> {
+        if (!this.icloud || !this.contactsSyncMapLoaded) {
+            return;
+        }
+        try {
+            const contactsService = this.icloud.getService('contacts');
+            const contactsObj = await this.getObjectAsync('contacts');
+            await this.setObject('contacts', {
+                ...(contactsObj ?? {}),
+                type: 'folder',
+                common: { ...((contactsObj?.common ?? {}) as ioBroker.OtherCommon), name: 'Contacts' },
+                native: { syncMap: contactsService.exportSyncMap() },
+            } as ioBroker.FolderObject);
+        } catch {
+            // Best effort on shutdown
+        }
+    }
+
+    private async writeContactsMetaStates(contactsService: iCloudContactsService): Promise<void> {
+        await this.extendObject('contacts', {
+            type: 'folder',
+            common: { name: 'Contacts' },
+            native: {},
+        });
+        await this.extendObject('contacts.count', {
+            type: 'state',
+            common: { name: 'Contact count', type: 'number', role: 'value', read: true, write: false },
+            native: {},
+        });
+        await this.extendObject('contacts.groupCount', {
+            type: 'state',
+            common: { name: 'Group count', type: 'number', role: 'value', read: true, write: false },
+            native: {},
+        });
+        await this.extendObject('contacts.lastSync', {
+            type: 'state',
+            common: { name: 'Last Sync', type: 'number', role: 'value.time', read: true, write: false },
+            native: {},
+        });
+        await this.setStateIfChanged('contacts.count', contactsService.contacts.length);
+        await this.setStateIfChanged('contacts.groupCount', contactsService.groups.length);
+        await this.setState('contacts.lastSync', Date.now(), true);
+    }
+
+    private async writeContactStates(contactsService: iCloudContactsService): Promise<void> {
+        const contacts = contactsService.contacts;
+
+        // Stable ID: use contactId directly (sanitized)
+        const activeContactIds = new Set<string>();
+        for (const contact of contacts) {
+            const safeId = this.sanitizeCalendarId(contact.contactId);
+            activeContactIds.add(safeId);
+
+            const displayCity = contact.city ? ` (${contact.city})` : '';
+            const displayName = `${contact.fullName || contact.companyName || contact.contactId}${displayCity}`;
+
+            await this.extendObject(`contacts.${safeId}`, {
+                type: 'folder',
+                common: { name: displayName },
+                native: { contactId: contact.contactId },
+            });
+
+            for (const s of CONTACT_ITEM_STATES) {
+                await this.extendObject(`contacts.${safeId}.${s.id}`, {
+                    type: 'state',
+                    common: { name: s.name, type: s.type, role: s.role, read: true, write: false },
+                    native: {},
+                });
+            }
+
+            await this.setStateIfChanged(`contacts.${safeId}.contactId`, contact.contactId);
+            await this.setStateIfChanged(`contacts.${safeId}.fullName`, contact.fullName);
+            await this.setStateIfChanged(`contacts.${safeId}.firstName`, contact.firstName);
+            await this.setStateIfChanged(`contacts.${safeId}.lastName`, contact.lastName);
+            await this.setStateIfChanged(`contacts.${safeId}.companyName`, contact.companyName);
+            await this.setStateIfChanged(`contacts.${safeId}.nickname`, contact.nickname);
+            await this.setStateIfChanged(`contacts.${safeId}.birthday`, contact.birthday);
+            await this.setStateIfChanged(`contacts.${safeId}.jobTitle`, contact.jobTitle);
+            await this.setStateIfChanged(`contacts.${safeId}.department`, contact.department);
+            await this.setStateIfChanged(`contacts.${safeId}.city`, contact.city);
+            await this.setStateIfChanged(`contacts.${safeId}.phones`, JSON.stringify(contact.phones));
+            await this.setStateIfChanged(`contacts.${safeId}.emails`, JSON.stringify(contact.emails));
+            await this.setStateIfChanged(`contacts.${safeId}.streetAddresses`, JSON.stringify(contact.streetAddresses));
+            await this.setStateIfChanged(`contacts.${safeId}.notes`, contact.notes);
+            await this.setStateIfChanged(`contacts.${safeId}.groups`, JSON.stringify(contact.groups));
+            await this.setStateIfChanged(`contacts.${safeId}.isMe`, contact.isMe);
+        }
+
+        // Cleanup contacts that no longer exist
+        await this.cleanupContactsObjects(activeContactIds);
+        this.log.debug(`Contacts refresh done — ${contacts.length} contact(s) written to states`);
+    }
+
+    private async cleanupContactsObjects(activeContactIds: Set<string>): Promise<void> {
+        const prefix = `${this.namespace}.contacts.`;
+        const existing = await this.getObjectViewAsync('system', 'folder', {
+            startkey: prefix,
+            endkey: `${prefix}\u9999`,
+        });
+        for (const row of existing.rows) {
+            const suffix = row.id.slice(prefix.length);
+            const parts = suffix.split('.');
+            // Skip built-in meta entries
+            const META_IDS = new Set(['lastSync', 'count', 'groupCount']);
+            if (parts.length === 1 && !META_IDS.has(parts[0])) {
+                if (!activeContactIds.has(parts[0])) {
+                    this.log.info(`Contacts cleanup: removing contact "${parts[0]}"`);
+                    await this.delObjectAsync(row.id, { recursive: true });
+                }
+            }
+        }
+    }
+
+    private scheduleContactsRefresh(): void {
+        if (this.contactsRefreshTimer) {
+            this.clearTimeout(this.contactsRefreshTimer);
+            this.contactsRefreshTimer = null;
+        }
+        let intervalMin = Math.floor(this.config.contactsInterval ?? 60);
+        if (!Number.isFinite(intervalMin) || intervalMin < 30) {
+            this.log.warn(
+                `Contacts interval is ${this.config.contactsInterval} — value below 30 minutes, falling back to 60 minutes`,
+            );
+            intervalMin = 60;
+        } else if (intervalMin > 1440) {
+            this.log.warn(`Contacts interval is ${intervalMin} minutes — clamping to 1440 minutes`);
+            intervalMin = 1440;
+        }
+        const INTERVAL_MS = intervalMin * 60 * 1000;
+        const schedule = (): void => {
+            this.contactsRefreshTimer = this.setTimeout(async () => {
+                this.contactsRefreshTimer = null;
+                if (!this.icloud) {
+                    return;
+                }
+                this.log.debug('Contacts scheduled refresh starting...');
+                await this.refreshContacts();
+                schedule();
+            }, INTERVAL_MS);
+        };
+        schedule();
+        this.log.debug(`Contacts refresh scheduled every ${intervalMin} min`);
     }
 
     // ── iCloud Drive helpers ──────────────────────────────────────────────────
@@ -1884,6 +2196,8 @@ class Icloud extends utils.Adapter {
         const persistAndCleanup = async (): Promise<void> => {
             // Persist reminders syncMap on shutdown
             await this.persistRemindersSyncMap();
+            // Persist contacts syncMap on shutdown
+            await this.persistContactsSyncMap();
         };
 
         persistAndCleanup()
@@ -1903,6 +2217,10 @@ class Icloud extends utils.Adapter {
                     if (this.remindersRefreshTimer) {
                         this.clearTimeout(this.remindersRefreshTimer);
                         this.remindersRefreshTimer = null;
+                    }
+                    if (this.contactsRefreshTimer) {
+                        this.clearTimeout(this.contactsRefreshTimer);
+                        this.contactsRefreshTimer = null;
                     }
                     if (this.driveRefreshTimer) {
                         this.clearTimeout(this.driveRefreshTimer);
@@ -2065,7 +2383,13 @@ class Icloud extends utils.Adapter {
      * @param obj - Message object
      */
     private onMessage(obj: ioBroker.Message): void {
-        if (typeof obj !== 'object' || !obj.message) {
+        if (typeof obj !== 'object') {
+            return;
+        }
+        // Some commands (e.g. getDevices) send no payload — only reject truly absent messages
+        // for commands that require one.
+        const requiresPayload = ['submitMfa', 'createReminder', 'completeReminder', 'updateReminder', 'deleteReminder'];
+        if (!obj.message && requiresPayload.includes(obj.command)) {
             return;
         }
         this.log.debug(`Message received: command="${obj.command}", message="${JSON.stringify(obj.message)}"`);
@@ -2121,10 +2445,101 @@ class Icloud extends utils.Adapter {
             this.handleDriveDeleteItem(obj);
         } else if (obj.command === 'driveRenameItem') {
             this.handleDriveRenameItem(obj);
+        } else if (obj.command === 'getContacts') {
+            this.handleGetContacts(obj);
+        } else if (obj.command === 'getContactGroups') {
+            this.handleGetContactGroups(obj);
+        } else if (obj.command === 'resetRemindersSyncMap') {
+            this.handleResetRemindersSyncMap(obj);
+        } else if (obj.command === 'getDevices') {
+            this.handleGetDevices(obj);
         }
     }
 
+    // ── onMessage FindMy handlers ────────────────────────────────────────────
+
+    /**
+     * Returns the list of all known FindMy devices (from last refresh) for the admin UI.
+     * Each device includes: id, name, model, batteryLevel, distanceKm, owner.
+     *
+     * @param obj The ioBroker message object from the message handler.
+     */
+    private handleGetDevices(obj: ioBroker.Message): void {
+        if (!this.icloud || this.icloud.status !== iCloudServiceStatus.Ready) {
+            this.sendCallback(obj, { alive: false, devices: [] });
+            return;
+        }
+        const findMe = this.icloud.getService('findme');
+        const locationPoints: Array<{ lat: number; lon: number }> = [];
+        if (Array.isArray(this.config.locationPoints)) {
+            for (const lp of this.config.locationPoints) {
+                if (lp.latitude != null && lp.longitude != null) {
+                    locationPoints.push({ lat: lp.latitude, lon: lp.longitude });
+                    break; // only first for home distance
+                }
+            }
+        }
+        const result: Array<{
+            id: string;
+            name: string;
+            model: string;
+            batteryLevel: number;
+            distanceKm: number | null;
+            owner: string | null;
+        }> = [];
+        for (const [, dev] of findMe.devices) {
+            const d = dev.deviceInfo;
+            const loc = d.location;
+            const distKm =
+                loc && locationPoints.length > 0
+                    ? Math.round(
+                          haversineKm(locationPoints[0].lat, locationPoints[0].lon, loc.latitude, loc.longitude) * 1000,
+                      ) / 1000
+                    : null;
+            let owner: string | null = null;
+            if (d.prsId != null) {
+                const memberInfo = findMe.membersInfo[d.prsId];
+                owner = memberInfo ? `${memberInfo.firstName} ${memberInfo.lastName}`.trim() : String(d.prsId);
+            }
+            result.push({
+                id: d.id ?? '',
+                name: d.name ?? d.deviceDisplayName ?? '',
+                model: d.modelDisplayName ?? d.rawDeviceModel ?? '',
+                batteryLevel: d.batteryLevel != null ? Math.round(d.batteryLevel * 100) : -1,
+                distanceKm: distKm,
+                owner,
+            });
+        }
+        this.sendCallback(obj, { alive: true, devices: result });
+    }
+
     // ── onMessage Reminder handlers ───────────────────────────────────────────
+
+    private handleResetRemindersSyncMap(obj: ioBroker.Message): void {
+        if (!this.icloud) {
+            this.sendCallback(obj, { success: false, error: 'Adapter not connected to iCloud' });
+            return;
+        }
+        const remService = this.icloud.getService('reminders');
+        remService.resetSyncMap();
+        this.remindersSyncMapLoaded = false;
+        // Persist the cleared map so the next startup also does a full sync
+        this.extendObject('reminders', {
+            type: 'folder',
+            common: { name: 'Reminders' },
+            native: { syncMap: remService.exportSyncMap() },
+        })
+            .then(() => {
+                this.log.info('Reminders sync map reset — triggering full resync');
+                return this.refreshReminders();
+            })
+            .then(() => {
+                this.sendCallback(obj, { success: true });
+            })
+            .catch((err: unknown) => {
+                this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+            });
+    }
 
     private handleCreateReminder(obj: ioBroker.Message): void {
         if (!this.config.remindersEnabled) {
@@ -2742,6 +3157,58 @@ class Icloud extends utils.Adapter {
         })().catch((err: unknown) => {
             this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
         });
+    }
+
+    // ── onMessage Contacts handlers ─────────────────────────────────────────
+
+    private handleGetContacts(obj: ioBroker.Message): void {
+        if (!this.config.contactsEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Contacts are disabled — enable them in the adapter settings first',
+            });
+            return;
+        }
+        if (!this.icloud) {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+        const msg = obj.message as Record<string, unknown> | undefined;
+        const contactId = (msg && typeof msg === 'object' ? msg.contactId : undefined) as string | undefined;
+        const groupName = (msg && typeof msg === 'object' ? msg.groupName : undefined) as string | undefined;
+        const contactsService = this.icloud.getService('contacts');
+
+        let contacts: Contact[];
+        if (contactId) {
+            const c = contactsService.getContact(contactId);
+            contacts = c ? [c] : [];
+        } else if (groupName) {
+            contacts = contactsService.getContactsByGroups([groupName]);
+        } else {
+            contacts = contactsService.contacts;
+        }
+        this.sendCallback(obj, { success: true, contacts });
+    }
+
+    private handleGetContactGroups(obj: ioBroker.Message): void {
+        if (!this.config.contactsEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Contacts are disabled — enable them in the adapter settings first',
+            });
+            return;
+        }
+        if (!this.icloud) {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+        const contactsService = this.icloud.getService('contacts');
+        const groups = contactsService.groups.map(g => ({
+            groupId: g.groupId,
+            name: g.name,
+            contactCount: g.contactIds.length,
+        }));
+        this.sendCallback(obj, { success: true, groups });
     }
 
     private sendCallback(obj: ioBroker.Message, response: Record<string, unknown>): void {

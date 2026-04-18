@@ -14,6 +14,15 @@
 
 This adapter connects ioBroker to your Apple iCloud account. It reads the location of your devices via **Find My** and exposes them as ioBroker states, including GPS coordinates, battery level, and distance to configurable home points.
 
+## This adapter supports
+
+- [Find My](#find-my) — device locations, battery level, home distance and sound alerts
+- [Reminders](#reminders--sendto-api) — read, create, edit, complete and delete iCloud Reminders via `sendTo()`
+- [iCloud Drive](#icloud-drive--sendto-api) — browse, upload, download, create, delete and rename files via `sendTo()`
+- [Contacts](#contacts--sendto-api) — read contacts and contact groups via `sendTo()`
+- [Calendar](#configuration) — upcoming calendar events as ioBroker states
+- [Two-factor authentication (2FA)](#two-factor-authentication-2fa)
+
 ## Configuration
 
 1. Open the adapter settings in the ioBroker Admin UI.
@@ -35,6 +44,44 @@ This adapter connects ioBroker to your Apple iCloud account. It reads the locati
 4. The adapter submits the code and connects. `mfa.required` is reset to `false` automatically.
 
 > **Note:** Other 2FA methods (trusted device push etc.) may be supported by the underlying API but have not been tested.
+
+---
+
+## Find My
+
+Find My locates all devices linked to your Apple ID (including family members if enabled) and writes their GPS coordinates, battery level, and distance to ioBroker states under `findme.<numericId>.*`.
+
+### Device states
+
+| State | Description |
+|-------|-------------|
+| `name` | Device name as set in Apple's settings |
+| `latitude` / `longitude` | Last known GPS coordinates |
+| `batteryLevel` | Battery level (0–100 %) |
+| `batteryStatus` | Charging state (`Charging`, `Charged`, `NotCharging`) |
+| `distanceKm` | Distance in km to the first configured home location |
+| `locationName` | Municipality name (only when **Geo lookup** is enabled) |
+| `ping` | Write `true` to play a sound on the device (only for capable devices, see below) |
+
+### Filtering devices
+
+Devices you do not want to track can be excluded in the adapter settings under **Find My → Disabled devices**. The admin UI lists all currently known devices — tick the ones to hide. Their ioBroker states are removed automatically and will not reappear until re-enabled.
+
+### Home distance
+
+Add one or more named home-location points (latitude / longitude) in the adapter settings under **Find My → Location points**. The `distanceKm` state of each device shows the straight-line distance in kilometres to the **first** location point. Additional points are written as extra states (`distanceKm_1`, `distanceKm_2`, …).
+
+### Ping — play sound
+
+Devices that support the sound feature expose a `findme.<numericId>.ping` state (type: button). Set it to `true` from a script or the ioBroker state panel to make the device play a sound — useful when you have misplaced a device nearby.
+
+```javascript
+setState('icloud.0.findme.123456.ping', true);
+```
+
+> **Note:** The `ping` state is only created for devices whose `features.SND` capability flag is `true`.
+
+---
 
 ## Reminders — sendTo() API
 
@@ -407,6 +454,92 @@ sendTo('icloud.0', 'driveRenameItem', {
 
 > **Tip:** Use `driveListFolder` to discover file/folder IDs and etags. The `drivewsid` and `etag` are returned for each item.
 
+---
+
+## Contacts — sendTo() API
+
+You can read contacts and contact groups from iCloud Contacts using `sendTo()`.
+
+> **Note:** Enable **Contacts** in the adapter settings first.
+
+### Get contact groups
+
+```javascript
+sendTo('icloud.0', 'getContactGroups', {}, (result) => {
+    if (result.success) {
+        // result.groups = [
+        //   { groupId: "...", name: "Family", contactCount: 4 },
+        //   { groupId: "...", name: "Work",   contactCount: 12 },
+        // ]
+        result.groups.forEach(g => {
+            console.log(g.name + ' (' + g.contactCount + ' contact(s))');
+        });
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Get contacts
+
+```javascript
+// All contacts:
+sendTo('icloud.0', 'getContacts', {}, (result) => {
+    if (result.success) {
+        // result.contacts = [
+        //   { contactId: "abc123-...", fullName: "Jane Doe",
+        //     firstName: "Jane", lastName: "Doe",
+        //     phones: [{ label: "mobile", field: "+49 123 456789" }],
+        //     emails: [{ label: "home",   field: "jane@example.com" }],
+        //     city: "Berlin", groups: ["Family"], isMe: false, ... }, ...
+        // ]
+        result.contacts.forEach(c => {
+            const phone = c.phones[0] ? c.phones[0].field : 'no phone';
+            console.log(c.fullName + ' — ' + phone);
+        });
+    } else {
+        console.error(result.error);
+    }
+});
+
+// Single contact by contactId:
+sendTo('icloud.0', 'getContacts', { contactId: 'abc123-...' }, (result) => {
+    if (result.success && result.contacts.length) {
+        const c = result.contacts[0];
+        console.log(c.fullName + ', ' + c.city);
+    }
+});
+
+// All contacts in a specific group (use name from getContactGroups):
+sendTo('icloud.0', 'getContacts', { groupName: 'Family' }, (result) => {
+    if (result.success) {
+        console.log(result.contacts.length + ' contact(s) in Family');
+    }
+});
+```
+
+### Contact field reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `contactId` | `string` | Stable unique identifier for the contact. |
+| `firstName` / `lastName` | `string` | First and last name. |
+| `fullName` | `string` | Assembled full name (including prefix, middle name, suffix). |
+| `companyName` | `string` | Company / organisation name. |
+| `phones` | `Array<{label, field}>` | Phone numbers with label (e.g. `"mobile"`, `"home"`). |
+| `emails` | `Array<{label, field}>` | Email addresses with label. |
+| `streetAddresses` | `Array<{label, street, city, state, postalCode, country, countryCode}>` | Postal addresses. |
+| `city` | `string` | City from the first street address. |
+| `birthday` | `string` | Birthday as an ISO date string (e.g. `"1990-01-15"`). |
+| `nickname` | `string` | Nickname. |
+| `jobTitle` | `string` | Job title. |
+| `department` | `string` | Department within the company. |
+| `notes` | `string` | Free-text notes. |
+| `groups` | `string[]` | Names of the groups this contact belongs to. |
+| `isMe` | `boolean` | `true` if this is the "Me" card (the account owner). |
+| `raw` | `object` | Full raw JSON from iCloud for advanced use. |
+
+---
 
 ## Credits
 

@@ -1,0 +1,9 @@
+{
+    "custom_findmy_not_connected": "Adapter is not connected to iCloud. Start the adapter to manage devices.",
+    "custom_findmy_no_devices": "No devices found. Make sure FindMy is enabled and the adapter is running.",
+    "custom_findmy_active": "Active",
+    "custom_findmy_device_name": "Device Name",
+    "custom_findmy_distance": "Distance",
+    "custom_findmy_owner": "Власник",
+    "custom_findmy_owner_me": "Я"
+}

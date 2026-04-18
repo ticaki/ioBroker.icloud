@@ -2,18 +2,31 @@
 
 ## Code quality — mandatory after every change
 
-After **every** code change, run both checks and fix all reported errors before finishing:
+After **every** code change, run **all applicable checks** and fix all reported errors before finishing:
 
 ```bash
-npm run build
-npm run lint
+npm run build       # always
+npm run lint        # always
+npm run build:admin # mandatory when any file under src-admin/ was changed
 ```
 
-- `npm run build` — TypeScript compilation; no output errors allowed
+- `npm run build` — TypeScript compilation of the adapter; no errors allowed
+- `npm run build:admin` — Vite + tsc build of the React admin component; **must be run and must succeed whenever src-admin/ is touched** — no exceptions
 - `npm run lint` — ESLint + Prettier; no errors allowed (warnings are acceptable)
 
 Alle während einer Sitzung eingeführten Lint-Fehler und -Warnungen **müssen vor Ende der Sitzung behoben sein** — die Anzahl der Fehler und Warnungen darf nie größer werden als zu Beginn.
 Bereits vorher existierende Fehler und Warnungen **müssen ebenfalls behoben werden**, sofern sie im Rahmen der aktuellen Änderungen berührt werden oder ohne großen Aufwand behebbar sind.
+
+## Forbidden patterns — never use these
+
+The following constructs are **strictly forbidden** and must never appear in any committed code:
+
+- `// @ts-expect-error` — fix the underlying type error instead
+- `// @ts-ignore` — fix the underlying type error instead
+- `// @ts-nocheck` — fix the underlying type errors instead
+- `// eslint-disable` — fix the underlying lint issue instead
+
+If a suppression directive is the only apparent solution, that is a signal to rethink the approach entirely.
 
 ## README language
 

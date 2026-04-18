@@ -14,6 +14,7 @@ import { iCloudDriveService } from './services/drive';
 import { iCloudFindMyService } from './services/findMy';
 import { iCloudPhotosService } from './services/photos';
 import { iCloudRemindersService } from './services/reminders';
+import { iCloudContactsService } from './services/contacts';
 import { iCloudUbiquityService } from './services/ubiquity';
 import type { AccountInfo } from './types';
 
@@ -875,6 +876,7 @@ export default class iCloudService extends EventEmitter {
         calendar: iCloudCalendarService,
         photos: iCloudPhotosService,
         reminders: iCloudRemindersService,
+        contacts: iCloudContactsService,
     };
 
     // Returns an instance of the 'account' (Account Details) service.
@@ -895,6 +897,8 @@ export default class iCloudService extends EventEmitter {
     getService(service: 'photos'): iCloudPhotosService;
     // Returns an instance of the 'reminders' (iCloud Reminders) service.
     getService(service: 'reminders'): iCloudRemindersService;
+    // Returns an instance of the 'contacts' (iCloud Contacts) service.
+    getService(service: 'contacts'): iCloudContactsService;
     /**
      * Returns an instance of the specified service. Results are cached, so subsequent calls will return the same instance.
      *
@@ -911,15 +915,17 @@ export default class iCloudService extends EventEmitter {
         if (!this._serviceCache[service]) {
             const webservices = this.accountInfo?.webservices ?? ({} as AccountInfo['webservices']);
             const ws = webservices as unknown as Record<string, { url?: string } | undefined>;
+            let serviceUrl: string | undefined;
             if (service === 'photos' || service === 'reminders') {
                 // Photos & Reminders use the CloudKit (ckdatabasews) endpoint
-                this._serviceCache[service] = new this.serviceConstructors[service](
-                    this,
-                    (webservices as { ckdatabasews?: { url?: string } }).ckdatabasews?.url,
-                );
+                serviceUrl = (webservices as { ckdatabasews?: { url?: string } }).ckdatabasews?.url;
             } else {
-                this._serviceCache[service] = new this.serviceConstructors[service](this, ws[service]?.url);
+                serviceUrl = ws[service]?.url;
             }
+            if (!serviceUrl) {
+                throw new Error(`iCloud service '${service}' is not available: URL missing — not yet authenticated?`);
+            }
+            this._serviceCache[service] = new this.serviceConstructors[service](this, serviceUrl);
         }
 
         return this._serviceCache[service];

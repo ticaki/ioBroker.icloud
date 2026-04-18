@@ -108,7 +108,7 @@ interface iCloudFindMyDeviceInfo {
         playing: boolean;
         muted: boolean;
     }>;
-    batteryStatus: string;
+    batteryStatus: string | null;
     brassStatus: string;
     pendingRemove: boolean;
     location?: {

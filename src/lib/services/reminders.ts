@@ -565,6 +565,17 @@ export class iCloudRemindersService {
         };
     }
 
+    /**
+     * Clear all in-memory state and the syncToken so the next `refresh()` performs a full sync.
+     * Callers should also persist the cleared map via `exportSyncMap()` to prevent
+     * an incremental sync on the next adapter startup.
+     */
+    resetSyncMap(): void {
+        this._syncToken = undefined;
+        this.listsById.clear();
+        this.remindersById.clear();
+    }
+
     constructor(service: iCloudService, serviceUri: string) {
         this.service = service;
         this.serviceUri = serviceUri;

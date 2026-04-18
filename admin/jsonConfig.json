@@ -1,288 +1,381 @@
 {
     "i18n": true,
-    "type": "panel",
+    "type": "tabs",
     "items": {
-        "username": {
-            "type": "text",
-            "label": "username",
-            "newLine": true,
-            "xs": 12,
-            "sm": 12,
-            "md": 6,
-            "lg": 6,
-            "xl": 6
-        },
-        "password": {
-            "type": "password",
-            "label": "password",
-            "newLine": false,
-            "xs": 12,
-            "sm": 12,
-            "md": 6,
-            "lg": 6,
-            "xl": 6
-        },
-        "_findMyHeader": {
-            "type": "header",
-            "text": "findMyHeader",
-            "size": 5,
-            "newLine": true
-        },
-        "findMyEnabled": {
-            "type": "checkbox",
-            "label": "findMyEnabled",
-            "newLine": true,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "default": true
-        },
-        "findMyInterval": {
-            "type": "number",
-            "label": "findMyInterval",
-            "help": "findMyIntervalHelp",
-            "newLine": false,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "min": 1,
-            "max": 120,
-            "step": 1,
-            "default": 5,
-            "disabled": "!data.findMyEnabled"
-        },
-        "findMyGeoEnabled": {
-            "type": "checkbox",
-            "label": "findMyGeoEnabled",
-            "help": "findMyGeoEnabledHelp",
-            "newLine": true,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "default": false,
-            "disabled": "!data.findMyEnabled"
-        },
-        "locationPoints": {
-            "type": "table",
-            "label": "locationPoints",
-            "help": "locationPointsHelp",
-            "newLine": true,
-            "xs": 12,
-            "sm": 12,
-            "md": 12,
-            "lg": 12,
-            "xl": 12,
-            "items": [
-                {
-                    "type": "number",
-                    "label": "locationPointIndex",
-                    "attr": "index",
-                    "min": 0,
-                    "max": 100000000000000,
-                    "step": 1,
-                    "validator": "const x={};for (const c of globalData.locationPoints) {if (x[c.index]==='x') return false; x[c.index]='x';}; return !isNaN(data.index);",
-                    "validatorNoSaveOnError": true
-                        
-                },
-                {
-                    "type": "coordinates",
-                    "label": "locationPointCoordinates",
-                    "longitudeName": "longitude",
-                    "latitudeName": "latitude",
-                    "attr": "coordinates"
-                },
-                {
+        "_tabGeneral": {
+            "type": "panel",
+            "label": "generalTab",
+            "items": {
+                "username": {
                     "type": "text",
-                    "label": "locationPointName",
-                    "attr": "name"
+                    "label": "username",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6
+                },
+                "password": {
+                    "type": "password",
+                    "label": "password",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6
                 }
-            ],
-            "disabled": "!data.findMyEnabled"
-
+            }
         },
-        "_calendarHeader": {
-            "type": "header",
-            "text": "calendarHeader",
-            "size": 5,
-            "newLine": true
+        "_tabFindMy": {
+            "type": "panel",
+            "label": "findMyTab",
+            "items": {
+                "findMyEnabled": {
+                    "type": "checkbox",
+                    "label": "findMyEnabled",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": true
+                },
+                "findMyInterval": {
+                    "type": "number",
+                    "label": "findMyInterval",
+                    "help": "findMyIntervalHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 1,
+                    "max": 120,
+                    "step": 1,
+                    "default": 5,
+                    "disabled": "!data.findMyEnabled"
+                },
+                "findMyGeoEnabled": {
+                    "type": "checkbox",
+                    "label": "findMyGeoEnabled",
+                    "help": "findMyGeoEnabledHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false,
+                    "disabled": "!data.findMyEnabled"
+                },
+                "locationPoints": {
+                    "type": "table",
+                    "label": "locationPoints",
+                    "help": "locationPointsHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12,
+                    "items": [
+                        {
+                            "type": "number",
+                            "label": "locationPointIndex",
+                            "attr": "index",
+                            "min": 0,
+                            "max": 100000000000000,
+                            "step": 1,
+                            "validator": "const x={};for (const c of globalData.locationPoints) {if (x[c.index]==='x') return false; x[c.index]='x';}; return !isNaN(data.index);",
+                            "validatorNoSaveOnError": true
+                        },
+                        {
+                            "type": "coordinates",
+                            "label": "locationPointCoordinates",
+                            "longitudeName": "longitude",
+                            "latitudeName": "latitude",
+                            "attr": "coordinates"
+                        },
+                        {
+                            "type": "text",
+                            "label": "locationPointName",
+                            "attr": "name"
+                        }
+                    ],
+                    "disabled": "!data.findMyEnabled"
+                },
+                "_findMyDevicesHeader": {
+                    "type": "header",
+                    "text": "findMyDevicesHeader",
+                    "size": 5,
+                    "newLine": true
+                },
+                "_findMyDevices": {
+                    "type": "custom",
+                    "name": "ConfigCustomIcloudSet/Components/FindMyDevices",
+                    "url": "custom/customComponents.js",
+                    "i18n": true,
+                    "bundlerType": "module",
+                    "attr": "findMyDisabledDevices",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12
+                }
+            }
         },
-        "calendarEnabled": {
-            "type": "checkbox",
-            "label": "calendarEnabled",
-            "newLine": true,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "default": false
-        },
-        "calendarEventCount": {
-            "type": "number",
-            "label": "calendarEventCount",
-            "help": "calendarEventCountHelp",
-            "newLine": false,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "min": 1,
-            "max": 50,
-            "step": 1,
-            "default": 10,
-            "disabled": "!data.calendarEnabled"
-        },
-        "calendarInterval": {
-            "type": "number",
-            "label": "calendarInterval",
-            "help": "calendarIntervalHelp",
-            "newLine": false,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "min": 5,
-            "max": 1440,
-            "step": 1,
-            "default": 60,
-            "disabled": "!data.calendarEnabled"
-        },
-        "_remindersHeader": {
-            "type": "header",
-            "text": "remindersHeader",
-            "size": 5,
-            "newLine": true
-        },
-        "remindersEnabled": {
-            "type": "checkbox",
-            "label": "remindersEnabled",
-            "newLine": true,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "default": false
-        },
-        "remindersItemCount": {
-            "type": "number",
-            "label": "remindersItemCount",
-            "help": "remindersItemCountHelp",
-            "newLine": false,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "min": 1,
-            "max": 50,
-            "step": 1,
-            "default": 10,
-            "disabled": "!data.remindersEnabled"
-        },
-        "remindersInterval": {
-            "type": "number",
-            "label": "remindersInterval",
-            "help": "remindersIntervalHelp",
-            "newLine": false,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "min": 5,
-            "max": 1440,
-            "step": 1,
-            "default": 60,
-            "disabled": "!data.remindersEnabled"
-        },
-        "remindersFilter": {
-            "type": "select",
-            "label": "remindersFilter",
-            "help": "remindersFilterHelp",
-            "newLine": true,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "options": [
-                { "value": "due", "label": "remindersFilterDue" },
-                { "value": "all", "label": "remindersFilterAll" }
-            ],
-            "default": "due",
-            "disabled": "!data.remindersEnabled"
-        },
-        "remindersShowCompleted": {
-            "type": "checkbox",
-            "label": "remindersShowCompleted",
-            "help": "remindersShowCompletedHelp",
-            "newLine": false,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "default": false,
-            "disabled": "!data.remindersEnabled"
-        },
-        "_driveHeader": {
-            "type": "header",
-            "text": "driveHeader",
-            "size": 5,
-            "newLine": true
-        },
-        "driveEnabled": {
-            "type": "checkbox",
-            "label": "driveEnabled",
-            "newLine": true,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "default": false
-        },
-        "_accountHeader": {
-            "type": "header",
-            "text": "accountHeader",
-            "size": 5,
-            "newLine": true
-        },
-        "accountStorageEnabled": {
-            "type": "checkbox",
-            "label": "accountStorageEnabled",
-            "newLine": true,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "default": false
-        },
-        "accountStorageInterval": {
-            "type": "number",
-            "label": "accountStorageInterval",
-            "help": "accountStorageIntervalHelp",
-            "newLine": false,
-            "xs": 12,
-            "sm": 6,
-            "md": 4,
-            "lg": 3,
-            "xl": 3,
-            "min": 30,
-            "max": 1440,
-            "step": 1,
-            "default": 60,
-            "disabled": "!data.accountStorageEnabled"
+        "_tabSettings": {
+            "type": "panel",
+            "label": "settingsTab",
+            "items": {
+                "_calendarHeader": {
+                    "type": "header",
+                    "text": "calendarHeader",
+                    "size": 5,
+                    "newLine": true
+                },
+                "calendarEnabled": {
+                    "type": "checkbox",
+                    "label": "calendarEnabled",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false
+                },
+                "calendarEventCount": {
+                    "type": "number",
+                    "label": "calendarEventCount",
+                    "help": "calendarEventCountHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 1,
+                    "max": 50,
+                    "step": 1,
+                    "default": 10,
+                    "disabled": "!data.calendarEnabled"
+                },
+                "calendarInterval": {
+                    "type": "number",
+                    "label": "calendarInterval",
+                    "help": "calendarIntervalHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 5,
+                    "max": 1440,
+                    "step": 1,
+                    "default": 60,
+                    "disabled": "!data.calendarEnabled"
+                },
+                "_remindersHeader": {
+                    "type": "header",
+                    "text": "remindersHeader",
+                    "size": 5,
+                    "newLine": true
+                },
+                "remindersEnabled": {
+                    "type": "checkbox",
+                    "label": "remindersEnabled",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false
+                },
+                "remindersItemCount": {
+                    "type": "number",
+                    "label": "remindersItemCount",
+                    "help": "remindersItemCountHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 1,
+                    "max": 50,
+                    "step": 1,
+                    "default": 10,
+                    "disabled": "!data.remindersEnabled"
+                },
+                "remindersInterval": {
+                    "type": "number",
+                    "label": "remindersInterval",
+                    "help": "remindersIntervalHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 5,
+                    "max": 1440,
+                    "step": 1,
+                    "default": 60,
+                    "disabled": "!data.remindersEnabled"
+                },
+                "remindersFilter": {
+                    "type": "select",
+                    "label": "remindersFilter",
+                    "help": "remindersFilterHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "options": [
+                        { "value": "due", "label": "remindersFilterDue" },
+                        { "value": "all", "label": "remindersFilterAll" }
+                    ],
+                    "default": "due",
+                    "disabled": "!data.remindersEnabled"
+                },
+                "remindersShowCompleted": {
+                    "type": "checkbox",
+                    "label": "remindersShowCompleted",
+                    "help": "remindersShowCompletedHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false,
+                    "disabled": "!data.remindersEnabled"
+                },
+                "_remindersResync": {
+                    "type": "sendTo",
+                    "command": "resetRemindersSyncMap",
+                    "label": "remindersResync",
+                    "help": "remindersResyncHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "icon": "refresh",
+                    "variant": "outlined",
+                    "disabled": "!data.remindersEnabled",
+                    "copyToClipboard": false,
+                    "showAckCheckbox": false
+                },
+                "_contactsHeader": {
+                    "type": "header",
+                    "text": "contactsHeader",
+                    "size": 5,
+                    "newLine": true
+                },
+                "contactsEnabled": {
+                    "type": "checkbox",
+                    "label": "contactsEnabled",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false
+                },
+                "contactsInterval": {
+                    "type": "number",
+                    "label": "contactsInterval",
+                    "help": "contactsIntervalHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 30,
+                    "max": 1440,
+                    "step": 1,
+                    "default": 60,
+                    "disabled": "!data.contactsEnabled"
+                },
+                "contactsWriteStates": {
+                    "type": "checkbox",
+                    "label": "contactsWriteStates",
+                    "help": "contactsWriteStatesHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false,
+                    "disabled": "!data.contactsEnabled"
+                },
+                "_driveHeader": {
+                    "type": "header",
+                    "text": "driveHeader",
+                    "size": 5,
+                    "newLine": true
+                },
+                "driveEnabled": {
+                    "type": "checkbox",
+                    "label": "driveEnabled",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false
+                },
+                "_accountHeader": {
+                    "type": "header",
+                    "text": "accountHeader",
+                    "size": 5,
+                    "newLine": true
+                },
+                "accountStorageEnabled": {
+                    "type": "checkbox",
+                    "label": "accountStorageEnabled",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false
+                },
+                "accountStorageInterval": {
+                    "type": "number",
+                    "label": "accountStorageInterval",
+                    "help": "accountStorageIntervalHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 30,
+                    "max": 1440,
+                    "step": 1,
+                    "default": 60,
+                    "disabled": "!data.accountStorageEnabled"
+                }
+            }
         }
     }
 }

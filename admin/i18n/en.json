@@ -36,6 +36,18 @@
 	"remindersFilterAll": "All open reminders",
 	"remindersShowCompleted": "Show completed reminders",
 	"remindersShowCompletedHelp": "Show completed reminders in a separate 'completed' subfolder per list.",
+	"remindersResync": "Full resync",
+	"remindersResyncHelp": "Clears the sync token and re-fetches all reminders from iCloud.",
 	"driveHeader": "iCloud Drive",
-	"driveEnabled": "Enable iCloud Drive"
+	"driveEnabled": "Enable iCloud Drive",
+	"contactsHeader": "Contacts",
+	"contactsEnabled": "Enable Contacts",
+	"contactsInterval": "Refresh interval (minutes)",
+	"contactsIntervalHelp": "How often contacts are fetched (30–1440 minutes)",
+	"contactsWriteStates": "Write contacts to states",
+	"contactsWriteStatesHelp": "Additionally writes contacts as ioBroker states (folder per contact). Always available via sendTo.",
+	"findMyTab": "FindMy",
+	"settingsTab": "Settings",
+	"findMyDevicesHeader": "Device Management",
+	"generalTab": "General"
 }

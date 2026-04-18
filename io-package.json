@@ -124,7 +124,8 @@
   "native": {
     "username": "",
     "password": "",
-    "locationPoints": []
+    "locationPoints": [],
+    "findMyDisabledDevices": []
   },
   "encryptedNative": [
     "password"

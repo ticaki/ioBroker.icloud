@@ -381,6 +381,19 @@ Blockly.Words['icloud_query_lists'] = {
     uk: 'Списки нагадувань',
     'zh-cn': '提醒列表',
 };
+Blockly.Words['icloud_query_contacts'] = {
+    en: 'Contacts',
+    de: 'Kontakte',
+    ru: 'Контакты',
+    pt: 'Contactos',
+    nl: 'Contacten',
+    fr: 'Contacts',
+    it: 'Contatti',
+    es: 'Contactos',
+    pl: 'Kontakty',
+    uk: 'Контакти',
+    'zh-cn': '联系人',
+};
 Blockly.Words['icloud_listId_optional'] = {
     en: 'Filter by list ID (optional)',
     de: 'Nach Listen-ID filtern (optional)',
@@ -753,6 +766,7 @@ Blockly.Blocks['icloud_get_data'] = {
                 new Blockly.FieldDropdown([
                     [Blockly.Translate('icloud_query_reminders'), 'getReminders'],
                     [Blockly.Translate('icloud_query_lists'), 'getReminderLists'],
+                    [Blockly.Translate('icloud_query_contacts'), 'getContacts'],
                 ]),
                 'QUERY',
             );
@@ -789,6 +803,8 @@ Blockly.JavaScript['icloud_get_data'] = function (block) {
     var msg = '{}';
     if (query === 'getReminders' && listId) {
         msg = '{ listId: ' + listId + ' }';
+    } else if (query === 'getContacts' && listId) {
+        msg = '{ contactId: ' + listId + ' }';
     }
 
     var resultVar = 'icloudResult_' + Blockly.JavaScript.variableDB_.getDistinctName('data', Blockly.Variables.NAME_TYPE);

@@ -36,6 +36,18 @@
 	"remindersFilterAll": "Alle offenen Erinnerungen",
 	"remindersShowCompleted": "Erledigte Erinnerungen anzeigen",
 	"remindersShowCompletedHelp": "Erledigte Erinnerungen in einem separaten Unterordner 'completed' pro Liste anzeigen.",
+	"remindersResync": "Vollständige Neusynchronisierung",
+	"remindersResyncHelp": "Löscht den Sync-Token und lädt alle Erinnerungen neu von iCloud.",
 	"driveHeader": "iCloud Drive",
-	"driveEnabled": "iCloud Drive aktivieren"
+	"driveEnabled": "iCloud Drive aktivieren",
+	"contactsHeader": "Kontakte",
+	"contactsEnabled": "Kontakte aktivieren",
+	"contactsInterval": "Aktualisierungsintervall (Minuten)",
+	"contactsIntervalHelp": "Wie oft Kontakte abgefragt werden (30–1440 Minuten)",
+	"contactsWriteStates": "Kontakte in States schreiben",
+	"contactsWriteStatesHelp": "Schreibt Kontakte zusätzlich als ioBroker-States (Ordner pro Kontakt). Über sendTo immer verfügbar.",
+	"findMyTab": "FindMy",
+	"settingsTab": "Einstellungen",
+	"findMyDevicesHeader": "Geräteverwaltung",
+	"generalTab": "Allgemein"
 }
