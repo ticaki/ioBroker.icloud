@@ -682,6 +682,8 @@ sendTo('icloud.0', 'getCalendarEvents', {
 
 Required fields: `calendarGuid`, `title`, `startDate`, `endDate`.
 
+The callback receives `{ success: true, eventGuid: "..." }` — the `eventGuid` can be saved and used later to update or delete the event.
+
 ```javascript
 sendTo('icloud.0', 'createCalendarEvent', {
     calendarGuid: '...',                         // required — calendar GUID from getCalendars
@@ -695,9 +697,11 @@ sendTo('icloud.0', 'createCalendarEvent', {
     alarms:       [                               // optional — array of alarm definitions
         { before: true, minutes: 15, hours: 0, days: 0, weeks: 0, seconds: 0 },
     ],
-}, (result) => { //{ success: true, eventGuid: guid }
+}, (result) => {
     if (result.success) {
-        console.log('Event created! result: ' + JSON.stringify(result));
+        // result.eventGuid contains the GUID of the newly created event.
+        // Save it (e.g. in a state) to update or delete the event later.
+        console.log('Event created! GUID: ' + result.eventGuid);
     } else {
         console.error(result.error);
     }
@@ -706,7 +710,7 @@ sendTo('icloud.0', 'createCalendarEvent', {
 
 ### Update an event
 
-All fields except `calendarGuid` and `eventGuid` are optional — only the provided fields are changed, everything else stays as-is.
+All fields except `calendarGuid` and `eventGuid` are optional — only the provided fields are changed, everything else stays as-is. The `eventGuid` comes from `createCalendarEvent` (result) or `getCalendarEvents` (field `guid`).
 
 ```javascript
 sendTo('icloud.0', 'updateCalendarEvent', {
@@ -733,7 +737,7 @@ sendTo('icloud.0', 'updateCalendarEvent', {
 
 ### Delete an event
 
-Required fields: `calendarGuid`, `eventGuid`. The etag is fetched automatically if not provided.
+Required fields: `calendarGuid`, `eventGuid`. The `eventGuid` comes from `createCalendarEvent` (result) or `getCalendarEvents` (field `guid`). The etag is fetched automatically if not provided.
 
 ```javascript
 sendTo('icloud.0', 'deleteCalendarEvent', {
