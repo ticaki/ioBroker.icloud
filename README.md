@@ -462,6 +462,101 @@ sendTo('icloud.0', 'driveRenameItem', {
 
 ---
 
+## iCloud Drive Sync
+
+The Drive Sync feature lets you automatically synchronize local directories to iCloud Drive on a configurable schedule. It is especially useful for uploading ioBroker backups to the cloud.
+
+> **Note:** Enable **iCloud Drive** in the Settings tab first. The **Drive Sync** tab only appears when iCloud Drive is enabled.
+
+### How it works
+
+1. The adapter periodically scans each configured local directory for files.
+2. New or changed files are uploaded to the specified iCloud Drive folder.
+3. If a file exists on both sides with different content, the configured **conflict resolution** strategy is applied.
+4. For backup entries, old files are automatically cleaned up on iCloud Drive according to your limits.
+
+### Setting up Drive Sync (step by step)
+
+1. **Open adapter settings** and go to the **Settings** tab.
+2. **Enable iCloud Drive** (check "Enable iCloud Drive").
+3. A new tab **Drive Sync** appears — click on it.
+4. **Enable Drive Sync** and set the sync interval (default: 60 minutes).
+5. Click **Add BackItUp Sync** or **Add Directory Sync** to create a sync entry.
+
+### BackItUp integration
+
+If you use the [BackItUp](https://github.com/simatec/ioBroker.backitup) adapter to create backups, the Drive Sync feature can automatically detect and sync those backup files to iCloud Drive.
+
+**Prerequisites:**
+
+- The **BackItUp** adapter must be installed (any instance, e.g. `backitup.0`).
+- In BackItUp settings, **CIFS/NAS backup** must be enabled.
+- The CIFS **connection type** must be set to **"Copy"** (not "CIFS mount").
+
+When all prerequisites are met, the adapter automatically reads the backup path from BackItUp and displays it as a read-only field. You only need to choose the target iCloud Drive folder.
+
+**Adding a BackItUp sync entry:**
+
+1. In the Drive Sync tab, click **"Add BackItUp Sync"** (only visible when prerequisites are met).
+2. The **Local Path** is automatically filled from BackItUp — you cannot change it.
+3. Click **Browse** next to "iCloud Drive Folder" to open the folder browser.
+4. Navigate to an existing folder or create a new one (e.g. `Backups/ioBroker`).
+5. Click **"Select this folder"** to confirm.
+6. Optionally set **backup limits**:
+   - **Max Files**: Maximum number of backup files to keep in iCloud Drive (oldest are deleted first). Set to `0` for unlimited.
+   - **Max Size (MB)**: Maximum total size of backup files in MB. When exceeded, the oldest files are removed. Set to `0` for unlimited.
+7. Choose a **conflict resolution** strategy (see below).
+8. Click **Save**.
+
+### Custom directory sync
+
+You can also sync any local directory to iCloud Drive — for example, configuration exports, log archives, or script backups.
+
+**Adding a directory sync entry:**
+
+1. Click **"Add Directory Sync"**.
+2. Enter the full **local path** (e.g. `/opt/iobroker/backups` or `/home/user/exports`).
+3. Select or create the **iCloud Drive folder** using the Browse button.
+4. Choose a **conflict resolution** strategy.
+5. Click **Save**.
+
+> **Note:** Custom directory sync does not have file count or size limits — all files in the directory are synced.
+
+### Conflict resolution
+
+When a file exists both locally and in iCloud Drive with different content (different size or the remote version is newer), a conflict is detected. You can configure how conflicts are handled:
+
+| Strategy | Behavior |
+|----------|----------|
+| **Ask me (pause sync)** | The file is skipped and a conflict notification appears in the Admin UI. Open the Drive Sync tab to resolve it manually. |
+| **Always upload local version** | The local file always overwrites the remote version. |
+| **Skip conflicting files** | Conflicting files are silently skipped — neither version is changed. |
+| **Keep both versions** | The local file is uploaded with a modified name (e.g. `backup_local_1713500000000.tar.gz`), keeping both versions. |
+
+#### Resolving conflicts manually
+
+When conflicts are detected (with the "Ask me" strategy), the Drive Sync tab shows an **error banner** listing all conflicting files. Click on a file name to open the conflict resolution dialog, which shows:
+
+- The **local version** (modification date and size)
+- The **iCloud version** (modification date and size)
+
+You can then choose to:
+- **Upload local version** — overwrite the remote file with your local copy
+- **Keep both** — upload the local file with a renamed filename
+- **Skip** — ignore this conflict (the file won't be synced until it changes again)
+
+### Sync metadata
+
+Sync status (last sync time, number of files synced, total size, errors, and conflicts) is stored in the `drive` object's `native.syncMeta` property as a JSON string.
+
+### States
+
+| State | Type | Description |
+|-------|------|-------------|
+| `drive.lastSync` | `number` | Timestamp (ms) of the last Drive metadata refresh. |
+
+---
+
 ## Contacts — sendTo() API
 
 You can read contacts and contact groups from iCloud Contacts using `sendTo()`.

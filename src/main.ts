@@ -3,6 +3,7 @@
  */
 
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import * as utils from '@iobroker/adapter-core';
 import iCloudService, { iCloudServiceStatus, LogLevel } from './lib/index';
 import type { iCloudFindMyDeviceInfo } from './lib/services/findMy';
@@ -254,6 +255,41 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// ── Drive Sync types ─────────────────────────────────────────────────────────
+
+interface DriveSyncEntry {
+    id: string;
+    enabled: boolean;
+    type: 'backitup' | 'directory';
+    localPath: string;
+    icloudFolder: string;
+    maxSizeMB: number;
+    maxFiles: number;
+    conflictResolution: 'ask' | 'overwrite-remote' | 'skip' | 'keep-both';
+}
+
+interface DriveSyncConflict {
+    entryId: string;
+    fileName: string;
+    localModified: number;
+    remoteModified: number;
+    localSize: number;
+    remoteSize: number;
+}
+
+interface DriveSyncMeta {
+    entries: Array<{
+        id: string;
+        lastSync: number;
+        lastError: string;
+        filesSynced: number;
+        totalSizeMB: number;
+        /** Files known from last successful sync — used to detect deletions in directory mode. */
+        lastKnownFiles?: string[];
+    }>;
+    conflicts: DriveSyncConflict[];
+}
+
 class Icloud extends utils.Adapter {
     private icloud: iCloudService | null = null;
     private findMyRefreshTimer: ioBroker.Timeout | null | undefined = null;
@@ -276,6 +312,8 @@ class Icloud extends utils.Adapter {
     private findMyFirstLoad = true;
     private calendarFirstLoad = true;
     private driveFirstLoad = true;
+    private driveSyncTimer: ioBroker.Timeout | null | undefined = null;
+    private driveSyncConflicts: DriveSyncConflict[] = [];
     private accountStorageFirstLoad = true;
     private geoLookup: GeoLookup = new GeoLookup();
     private externalGeocoder: ExternalGeocoder | null = null;
@@ -700,6 +738,18 @@ class Icloud extends utils.Adapter {
                 this.log.debug(`Drive PCS access skipped: ${msg}`);
             }
             await this.refreshDrive();
+
+            // Start Drive Sync if enabled
+            if (this.config.driveSyncEnabled) {
+                await this.loadDriveSyncMeta();
+                // Run initial sync quickly (30s) so users see it working right away
+                this.driveSyncTimer = this.setTimeout(async () => {
+                    this.driveSyncTimer = null;
+                    await this.executeDriveSync();
+                    this.scheduleDriveSync();
+                }, 30_000);
+                this.log.info('Drive Sync enabled — initial sync in 30 seconds');
+            }
         }
 
         // ── Account Storage ───────────────────────────────────────────────────
@@ -2644,6 +2694,10 @@ class Icloud extends utils.Adapter {
                         this.clearTimeout(this.driveRefreshTimer);
                         this.driveRefreshTimer = null;
                     }
+                    if (this.driveSyncTimer) {
+                        this.clearTimeout(this.driveSyncTimer);
+                        this.driveSyncTimer = null;
+                    }
                     if (this.accountStorageRefreshTimer) {
                         this.clearTimeout(this.accountStorageRefreshTimer);
                         this.accountStorageRefreshTimer = null;
@@ -2898,6 +2952,12 @@ class Icloud extends utils.Adapter {
             this.handleUpdateCalendarEvent(obj);
         } else if (obj.command === 'deleteCalendarEvent') {
             this.handleDeleteCalendarEvent(obj);
+        } else if (obj.command === 'driveSyncGetBackitupInfo') {
+            this.handleDriveSyncGetBackitupInfo(obj);
+        } else if (obj.command === 'driveSyncGetStatus') {
+            this.handleDriveSyncGetStatus(obj);
+        } else if (obj.command === 'driveSyncResolveConflict') {
+            this.handleDriveSyncResolveConflict(obj);
         }
     }
 
@@ -4026,6 +4086,628 @@ class Icloud extends utils.Adapter {
         if (obj.callback) {
             this.sendTo(obj.from, obj.command, response, obj.callback);
         }
+    }
+
+    // ── Drive Sync engine ────────────────────────────────────────────────────
+
+    private getDriveSyncEntries(): DriveSyncEntry[] {
+        try {
+            const raw = this.config.driveSyncConfig;
+            if (typeof raw === 'string' && raw) {
+                return JSON.parse(raw) as DriveSyncEntry[];
+            }
+        } catch {
+            // ignore
+        }
+        return [];
+    }
+
+    private async loadDriveSyncMeta(): Promise<void> {
+        try {
+            const obj = await this.getObjectAsync('drive');
+            if (obj?.native?.syncMeta) {
+                const meta = JSON.parse(obj.native.syncMeta as string) as DriveSyncMeta;
+                this.driveSyncConflicts = meta.conflicts ?? [];
+            }
+        } catch {
+            // ignore — fresh start
+        }
+    }
+
+    private async saveDriveSyncMeta(meta: DriveSyncMeta): Promise<void> {
+        this.driveSyncConflicts = meta.conflicts;
+        try {
+            const obj = await this.getObjectAsync('drive');
+            if (obj) {
+                obj.native = obj.native ?? {};
+                obj.native.syncMeta = JSON.stringify(meta);
+                await this.setObjectAsync('drive', obj);
+            }
+        } catch (err) {
+            this.log.warn(`Failed to save Drive Sync meta: ${(err as Error)?.message ?? String(err)}`);
+        }
+    }
+
+    private scheduleDriveSync(): void {
+        if (this.driveSyncTimer) {
+            this.clearTimeout(this.driveSyncTimer);
+        }
+        const intervalMs = (this.config.driveSyncInterval || 60) * 60_000;
+        this.driveSyncTimer = this.setTimeout(async () => {
+            this.driveSyncTimer = null;
+            await this.executeDriveSync();
+            this.scheduleDriveSync();
+        }, intervalMs);
+    }
+
+    private async executeDriveSync(): Promise<void> {
+        if (!this.icloud || !this.config.driveEnabled || !this.config.driveSyncEnabled) {
+            return;
+        }
+
+        const entries = this.getDriveSyncEntries().filter(e => e.enabled);
+        if (entries.length === 0) {
+            return;
+        }
+
+        this.log.debug(`Drive Sync: starting sync for ${entries.length} entries`);
+        let driveService: iCloudDriveService;
+        try {
+            driveService = this.getDriveService();
+        } catch {
+            this.log.warn('Drive Sync: iCloud not connected');
+            return;
+        }
+
+        const meta: DriveSyncMeta = { entries: [], conflicts: [...this.driveSyncConflicts] };
+
+        for (const entry of entries) {
+            const entryMeta = { id: entry.id, lastSync: 0, lastError: '', filesSynced: 0, totalSizeMB: 0 };
+            try {
+                await this.syncEntry(driveService, entry, entryMeta, meta);
+                entryMeta.lastSync = Date.now();
+            } catch (err) {
+                entryMeta.lastError = (err as Error)?.message ?? String(err);
+                this.log.warn(`Drive Sync: entry ${entry.id} (${entry.localPath}) failed: ${entryMeta.lastError}`);
+            }
+            meta.entries.push(entryMeta);
+        }
+
+        await this.saveDriveSyncMeta(meta);
+        this.log.debug('Drive Sync: completed');
+    }
+
+    private async syncEntry(
+        driveService: iCloudDriveService,
+        entry: DriveSyncEntry,
+        entryMeta: DriveSyncMeta['entries'][0],
+        meta: DriveSyncMeta,
+    ): Promise<void> {
+        // Resolve local path
+        const localDir = entry.localPath;
+        if (!localDir || !fs.existsSync(localDir)) {
+            throw new Error(`Local path does not exist: ${localDir}`);
+        }
+
+        // Get or create iCloud target folder
+        const targetNode = await this.resolveOrCreateDriveFolder(driveService, entry.icloudFolder);
+
+        if (entry.type === 'backitup') {
+            await this.syncEntryUploadOnly(driveService, targetNode, entry, entryMeta, meta);
+        } else {
+            await this.syncEntryBidirectional(driveService, targetNode, entry, entryMeta, meta);
+        }
+    }
+
+    /**
+     * Resolve a slash-separated iCloud Drive path, creating missing folders.
+     *
+     * @param driveService
+     * @param icloudFolder
+     */
+    private async resolveOrCreateDriveFolder(
+        driveService: iCloudDriveService,
+        icloudFolder: string,
+    ): Promise<iCloudDriveNode> {
+        const icloudPath = icloudFolder.replace(/^\//, '');
+        if (!icloudPath) {
+            return driveService.getNode();
+        }
+        try {
+            return await driveService.getNodeByPath(icloudPath);
+        } catch {
+            // Create folder path recursively
+            const parts = icloudPath.split('/').filter(Boolean);
+            let currentNode = await driveService.getNode();
+            for (const part of parts) {
+                const existing = await currentNode.get(part);
+                if (existing) {
+                    await existing.refresh();
+                    currentNode = existing;
+                } else {
+                    await currentNode.mkdir(part);
+                    await currentNode.refresh();
+                    const created = await currentNode.get(part);
+                    if (!created) {
+                        throw new Error(`Failed to create folder "${part}" in iCloud Drive`);
+                    }
+                    await created.refresh();
+                    currentNode = created;
+                }
+            }
+            return currentNode;
+        }
+    }
+
+    // ── BackItUp sync: UPLOAD-ONLY ───────────────────────────────────────────
+    // Local files are NEVER modified, overwritten, or deleted.
+    // Only remote (iCloud Drive) files may be created, overwritten, or deleted.
+
+    private async syncEntryUploadOnly(
+        driveService: iCloudDriveService,
+        targetNode: iCloudDriveNode,
+        entry: DriveSyncEntry,
+        entryMeta: DriveSyncMeta['entries'][0],
+        meta: DriveSyncMeta,
+    ): Promise<void> {
+        const localDir = entry.localPath;
+
+        // List local files, apply limits (sort by mtime descending, take newest)
+        const allFiles = fs.readdirSync(localDir).filter(f => fs.statSync(path.join(localDir, f)).isFile());
+        const fileStats = allFiles.map(f => {
+            const stat = fs.statSync(path.join(localDir, f));
+            return { name: f, size: stat.size, mtime: stat.mtimeMs };
+        });
+        fileStats.sort((a, b) => b.mtime - a.mtime);
+
+        if (entry.maxFiles > 0) {
+            fileStats.splice(entry.maxFiles);
+        }
+        let localFiles: string[];
+        if (entry.maxSizeMB > 0) {
+            const maxBytes = entry.maxSizeMB * 1024 * 1024;
+            let total = 0;
+            const filtered: typeof fileStats = [];
+            for (const f of fileStats) {
+                if (total + f.size > maxBytes) {
+                    break;
+                }
+                total += f.size;
+                filtered.push(f);
+            }
+            localFiles = filtered.map(f => f.name);
+        } else {
+            localFiles = fileStats.map(f => f.name);
+        }
+
+        // Get remote files
+        const remoteChildren = await targetNode.getChildren();
+        const remoteFileMap = new Map<string, iCloudDriveNode>();
+        for (const child of remoteChildren) {
+            if (child.type === 'FILE') {
+                remoteFileMap.set(child.fullName, child);
+            }
+        }
+
+        let filesSynced = 0;
+        let totalSize = 0;
+
+        for (const localFileName of localFiles) {
+            const localFilePath = path.join(localDir, localFileName);
+            const localStat = fs.statSync(localFilePath);
+            const remoteFile = remoteFileMap.get(localFileName);
+
+            if (remoteFile) {
+                // File exists on both sides — upload only if local is newer/different
+                const sizeDiffers = remoteFile.size !== localStat.size;
+                if (!sizeDiffers) {
+                    continue; // same size → skip (backup files are immutable)
+                }
+            }
+
+            // Upload the file
+            const content = new Uint8Array(fs.readFileSync(localFilePath));
+            const docwsid = targetNode.docwsid ?? targetNode.rawData?.docwsid;
+            if (!docwsid) {
+                throw new Error(`Target folder "${entry.icloudFolder}" has no docwsid`);
+            }
+            await driveService.sendFile(docwsid, { name: localFileName, content });
+            filesSynced++;
+            totalSize += localStat.size;
+            this.log.debug(
+                `Drive Sync [backup]: uploaded "${localFileName}" (${(localStat.size / 1024 / 1024).toFixed(2)} MB)`,
+            );
+        }
+
+        // Clean up remote files that exceed limits
+        if (entry.maxFiles > 0 || entry.maxSizeMB > 0) {
+            await this.cleanupRemoteBackups(driveService, targetNode, entry);
+        }
+
+        meta.conflicts = meta.conflicts.filter(c => c.entryId !== entry.id);
+        entryMeta.filesSynced = filesSynced;
+        entryMeta.totalSizeMB = totalSize / 1024 / 1024;
+    }
+
+    // ── Directory sync: BIDIRECTIONAL ─────────────────────────────────────────
+    // True sync: upload local→remote, download remote→local, propagate deletions.
+
+    private async syncEntryBidirectional(
+        driveService: iCloudDriveService,
+        targetNode: iCloudDriveNode,
+        entry: DriveSyncEntry,
+        entryMeta: DriveSyncMeta['entries'][0],
+        meta: DriveSyncMeta,
+    ): Promise<void> {
+        const localDir = entry.localPath;
+
+        // Previous known file list (for deletion detection)
+        const prevMeta = meta.entries.find(e => e.id === entry.id);
+        const lastKnownFiles = new Set<string>(prevMeta?.lastKnownFiles ?? []);
+        const isFirstSync = lastKnownFiles.size === 0 && !prevMeta;
+
+        // List local files
+        const localFiles = fs.readdirSync(localDir).filter(f => fs.statSync(path.join(localDir, f)).isFile());
+        const localSet = new Set(localFiles);
+
+        // Get remote files
+        const remoteChildren = await targetNode.getChildren();
+        const remoteFileMap = new Map<string, iCloudDriveNode>();
+        for (const child of remoteChildren) {
+            if (child.type === 'FILE') {
+                remoteFileMap.set(child.fullName, child);
+            }
+        }
+        const remoteSet = new Set(remoteFileMap.keys());
+
+        let filesSynced = 0;
+        let totalSize = 0;
+        const docwsid = targetNode.docwsid ?? targetNode.rawData?.docwsid;
+
+        // ── 1. Upload local files not yet on remote ──
+        for (const localFileName of localFiles) {
+            const localFilePath = path.join(localDir, localFileName);
+            const localStat = fs.statSync(localFilePath);
+            const remoteFile = remoteFileMap.get(localFileName);
+
+            if (remoteFile) {
+                // Both sides have the file
+                const remoteModified = remoteFile.dateModified?.getTime() ?? remoteFile.dateCreated?.getTime() ?? 0;
+                const localModified = localStat.mtimeMs;
+                const sizeDiffers = remoteFile.size !== localStat.size;
+
+                if (!sizeDiffers) {
+                    continue; // identical — nothing to do
+                }
+
+                // Size differs → conflict
+                const remoteFresher = remoteModified > localModified + 60_000;
+                const localFresher = localModified > remoteModified + 60_000;
+
+                if (remoteFresher && !localFresher) {
+                    // Remote is newer → download
+                    await this.downloadRemoteFile(remoteFile, localFilePath);
+                    filesSynced++;
+                    totalSize += remoteFile.size ?? 0;
+                    this.log.debug(`Drive Sync [dir]: downloaded newer "${localFileName}"`);
+                    continue;
+                }
+
+                if (localFresher && !remoteFresher) {
+                    // Local is newer → upload
+                    if (docwsid) {
+                        const content = new Uint8Array(fs.readFileSync(localFilePath));
+                        await driveService.sendFile(docwsid, { name: localFileName, content });
+                        filesSynced++;
+                        totalSize += localStat.size;
+                        this.log.debug(`Drive Sync [dir]: uploaded newer "${localFileName}"`);
+                    }
+                    continue;
+                }
+
+                // Both modified (or unclear) → apply conflict resolution
+                if (entry.conflictResolution === 'ask') {
+                    const existing = meta.conflicts.find(c => c.entryId === entry.id && c.fileName === localFileName);
+                    if (!existing) {
+                        meta.conflicts.push({
+                            entryId: entry.id,
+                            fileName: localFileName,
+                            localModified,
+                            remoteModified,
+                            localSize: localStat.size,
+                            remoteSize: remoteFile.size ?? 0,
+                        });
+                        this.log.warn(`Drive Sync [dir]: conflict for "${localFileName}" — open Admin to resolve`);
+                    }
+                } else if (entry.conflictResolution === 'overwrite-remote' && docwsid) {
+                    const content = new Uint8Array(fs.readFileSync(localFilePath));
+                    await driveService.sendFile(docwsid, { name: localFileName, content });
+                    filesSynced++;
+                    totalSize += localStat.size;
+                } else if (entry.conflictResolution === 'keep-both' && docwsid) {
+                    const ext = path.extname(localFileName);
+                    const base = path.basename(localFileName, ext);
+                    const renamedName = `${base}_local_${Date.now()}${ext}`;
+                    const content = new Uint8Array(fs.readFileSync(localFilePath));
+                    await driveService.sendFile(docwsid, { name: renamedName, content });
+                    filesSynced++;
+                    totalSize += localStat.size;
+                }
+                // 'skip' → do nothing
+                continue;
+            }
+
+            // File only exists locally
+            if (!isFirstSync && lastKnownFiles.has(localFileName)) {
+                // Was known before but now missing on remote → deleted remotely → delete locally
+                try {
+                    fs.unlinkSync(localFilePath);
+                    this.log.debug(`Drive Sync [dir]: deleted local "${localFileName}" (removed on remote)`);
+                } catch (err) {
+                    this.log.warn(
+                        `Drive Sync [dir]: failed to delete local "${localFileName}": ${(err as Error)?.message ?? String(err)}`,
+                    );
+                }
+                continue;
+            }
+
+            // New local file → upload
+            if (docwsid) {
+                const content = new Uint8Array(fs.readFileSync(localFilePath));
+                await driveService.sendFile(docwsid, { name: localFileName, content });
+                filesSynced++;
+                totalSize += localStat.size;
+                this.log.debug(
+                    `Drive Sync [dir]: uploaded "${localFileName}" (${(localStat.size / 1024 / 1024).toFixed(2)} MB)`,
+                );
+            }
+        }
+
+        // ── 2. Download remote-only files / propagate local deletions ──
+        for (const [remoteName, remoteNode] of remoteFileMap) {
+            if (localSet.has(remoteName)) {
+                continue; // already handled above
+            }
+
+            if (!isFirstSync && lastKnownFiles.has(remoteName)) {
+                // Was known before but now missing locally → deleted locally → delete on remote
+                try {
+                    await remoteNode.delete();
+                    this.log.debug(`Drive Sync [dir]: deleted remote "${remoteName}" (removed locally)`);
+                } catch (err) {
+                    this.log.warn(
+                        `Drive Sync [dir]: failed to delete remote "${remoteName}": ${(err as Error)?.message ?? String(err)}`,
+                    );
+                }
+                continue;
+            }
+
+            // New remote file → download
+            const localFilePath = path.join(localDir, remoteName);
+            await this.downloadRemoteFile(remoteNode, localFilePath);
+            filesSynced++;
+            totalSize += remoteNode.size ?? 0;
+            this.log.debug(`Drive Sync [dir]: downloaded "${remoteName}"`);
+        }
+
+        // ── 3. Build new known-files snapshot ──
+        // Re-read local dir after all changes to get the actual current state
+        const currentLocalFiles = fs.readdirSync(localDir).filter(f => fs.statSync(path.join(localDir, f)).isFile());
+        entryMeta.lastKnownFiles = currentLocalFiles;
+
+        meta.conflicts = meta.conflicts.filter(c => c.entryId !== entry.id || currentLocalFiles.includes(c.fileName));
+        entryMeta.filesSynced = filesSynced;
+        entryMeta.totalSizeMB = totalSize / 1024 / 1024;
+    }
+
+    /**
+     * Download a remote iCloud Drive file to a local path.
+     *
+     * @param remoteNode
+     * @param localFilePath
+     */
+    private async downloadRemoteFile(remoteNode: iCloudDriveNode, localFilePath: string): Promise<void> {
+        await remoteNode.refresh();
+        const stream = await remoteNode.open();
+        if (!stream) {
+            throw new Error(`Download returned empty stream for "${remoteNode.fullName}"`);
+        }
+        const reader = stream.getReader();
+        const chunks: Uint8Array[] = [];
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) {
+                break;
+            }
+            chunks.push(value);
+        }
+        const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+        const merged = new Uint8Array(totalLen);
+        let offset = 0;
+        for (const c of chunks) {
+            merged.set(c, offset);
+            offset += c.length;
+        }
+        fs.writeFileSync(localFilePath, merged);
+    }
+
+    private async cleanupRemoteBackups(
+        _driveService: iCloudDriveService,
+        targetNode: iCloudDriveNode,
+        entry: DriveSyncEntry,
+    ): Promise<void> {
+        await targetNode.refresh();
+        const children = await targetNode.getChildren();
+        const remoteFiles = children
+            .filter(c => c.type === 'FILE')
+            .map(c => ({
+                node: c,
+                name: c.fullName,
+                size: c.size ?? 0,
+                modified: c.dateModified?.getTime() ?? c.dateCreated?.getTime() ?? 0,
+            }))
+            .sort((a, b) => b.modified - a.modified); // newest first
+
+        const toDelete: typeof remoteFiles = [];
+
+        if (entry.maxFiles > 0 && remoteFiles.length > entry.maxFiles) {
+            toDelete.push(...remoteFiles.slice(entry.maxFiles));
+        }
+
+        if (entry.maxSizeMB > 0) {
+            const maxBytes = entry.maxSizeMB * 1024 * 1024;
+            let total = 0;
+            for (const f of remoteFiles) {
+                total += f.size;
+                if (total > maxBytes && !toDelete.includes(f)) {
+                    toDelete.push(f);
+                }
+            }
+        }
+
+        for (const f of toDelete) {
+            try {
+                await f.node.delete();
+                this.log.debug(`Drive Sync: cleaned up remote file "${f.name}"`);
+            } catch (err) {
+                this.log.warn(
+                    `Drive Sync: failed to delete remote "${f.name}": ${(err as Error)?.message ?? String(err)}`,
+                );
+            }
+        }
+    }
+
+    // ── Drive Sync sendTo handlers ───────────────────────────────────────────
+
+    private handleDriveSyncGetBackitupInfo(obj: ioBroker.Message): void {
+        (async (): Promise<void> => {
+            const info: {
+                success: boolean;
+                installed: boolean;
+                cifsEnabled: boolean;
+                cifsConnType: string;
+                cifsPath: string;
+                instance: string;
+            } = {
+                success: true,
+                installed: false,
+                cifsEnabled: false,
+                cifsConnType: '',
+                cifsPath: '',
+                instance: '',
+            };
+
+            // Check all possible BackItUp instances (0-9)
+            for (let i = 0; i < 10; i++) {
+                const instId = `system.adapter.backitup.${i}`;
+                try {
+                    const instObj = await this.getForeignObjectAsync(instId);
+                    if (instObj) {
+                        info.installed = true;
+                        info.instance = `backitup.${i}`;
+                        const native = instObj.native as Record<string, unknown> | undefined;
+                        if (native) {
+                            info.cifsEnabled = !!native.cifsEnabled;
+                            const ct = native.connectType;
+                            info.cifsConnType = typeof ct === 'string' ? ct : '';
+                            const cp = native.cifsDir ?? native.backupDir;
+                            info.cifsPath = typeof cp === 'string' ? cp : '';
+                        }
+                        break;
+                    }
+                } catch {
+                    // instance doesn't exist
+                }
+            }
+
+            this.sendCallback(obj, info);
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
+    }
+
+    private handleDriveSyncGetStatus(obj: ioBroker.Message): void {
+        (async (): Promise<void> => {
+            await this.loadDriveSyncMeta();
+            const driveObj = await this.getObjectAsync('drive');
+            let meta: DriveSyncMeta = { entries: [], conflicts: [] };
+            if (driveObj?.native?.syncMeta) {
+                try {
+                    meta = JSON.parse(driveObj.native.syncMeta as string) as DriveSyncMeta;
+                } catch {
+                    // ignore
+                }
+            }
+            this.sendCallback(obj, { success: true, ...meta });
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
+    }
+
+    private handleDriveSyncResolveConflict(obj: ioBroker.Message): void {
+        const msg = obj.message as Record<string, unknown> | undefined;
+        if (!msg || typeof msg !== 'object') {
+            this.sendCallback(obj, { success: false, error: 'Message must be an object' });
+            return;
+        }
+        const entryId = msg.entryId as string | undefined;
+        const fileName = msg.fileName as string | undefined;
+        const action = msg.action as string | undefined;
+        if (!entryId || !fileName || !action) {
+            this.sendCallback(obj, { success: false, error: 'Required: entryId, fileName, action' });
+            return;
+        }
+
+        (async (): Promise<void> => {
+            // Remove conflict from meta
+            const driveObj = await this.getObjectAsync('drive');
+            let meta: DriveSyncMeta = { entries: [], conflicts: [] };
+            if (driveObj?.native?.syncMeta) {
+                try {
+                    meta = JSON.parse(driveObj.native.syncMeta as string) as DriveSyncMeta;
+                } catch {
+                    // ignore
+                }
+            }
+
+            // Find and remove the conflict
+            meta.conflicts = meta.conflicts.filter(c => !(c.entryId === entryId && c.fileName === fileName));
+
+            // If action is overwrite-remote or keep-both, trigger immediate sync for that entry
+            if (action === 'overwrite-remote' || action === 'keep-both') {
+                const entries = this.getDriveSyncEntries();
+                const entry = entries.find(e => e.id === entryId);
+                if (entry && this.icloud && this.config.driveEnabled) {
+                    try {
+                        const driveService = this.getDriveService();
+                        // Temporarily override conflict resolution for this entry
+                        const overrideEntry = {
+                            ...entry,
+                            conflictResolution: action as DriveSyncEntry['conflictResolution'],
+                        };
+                        const entryMeta = { id: entry.id, lastSync: 0, lastError: '', filesSynced: 0, totalSizeMB: 0 };
+                        await this.syncEntry(driveService, overrideEntry, entryMeta, meta);
+                        entryMeta.lastSync = Date.now();
+                        // Update meta entry
+                        const idx = meta.entries.findIndex(e => e.id === entry.id);
+                        if (idx >= 0) {
+                            meta.entries[idx] = entryMeta;
+                        } else {
+                            meta.entries.push(entryMeta);
+                        }
+                    } catch (err) {
+                        this.log.warn(
+                            `Drive Sync: conflict resolution sync failed: ${(err as Error)?.message ?? String(err)}`,
+                        );
+                    }
+                }
+            }
+
+            await this.saveDriveSyncMeta(meta);
+            this.sendCallback(obj, { success: true });
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
     }
 }
 if (require.main !== module) {

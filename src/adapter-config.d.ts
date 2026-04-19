@@ -29,6 +29,9 @@ declare global {
 			remindersFilter: 'due' | 'all';
 			remindersShowCompleted: boolean;
 			driveEnabled: boolean;
+			driveSyncEnabled: boolean;
+			driveSyncConfig: string;
+			driveSyncInterval: number;
 			photosEnabled: boolean;
 			photosInterval: number;
 			contactsEnabled: boolean;

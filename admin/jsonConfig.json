@@ -549,6 +549,67 @@
                     "hidden": "data.geocodingProvider === 'none'"
                 }
             }
+        },
+        "_tabDriveSync": {
+            "type": "panel",
+            "label": "driveSyncTab",
+            "hidden": "!data.driveEnabled",
+            "items": {
+                "_driveSyncHeader": {
+                    "type": "header",
+                    "text": "driveSyncHeader",
+                    "size": 5,
+                    "newLine": true
+                },
+                "_driveSyncInfo": {
+                    "type": "staticText",
+                    "text": "driveSyncInfo",
+                    "newLine": true,
+                    "xs": 12
+                },
+                "driveSyncEnabled": {
+                    "type": "checkbox",
+                    "label": "driveSyncEnabled",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false
+                },
+                "driveSyncInterval": {
+                    "type": "number",
+                    "label": "driveSyncInterval",
+                    "help": "driveSyncIntervalHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 5,
+                    "max": 1440,
+                    "step": 1,
+                    "default": 60,
+                    "disabled": "!data.driveSyncEnabled"
+                },
+                "_driveSyncComponent": {
+                    "type": "custom",
+                    "name": "ConfigCustomIcloudSet/Components/DriveSync",
+                    "url": "custom/customComponents.js",
+                    "i18n": true,
+                    "bundlerType": "module",
+                    "attr": "driveSyncConfig",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12,
+                    "hidden": "!data.driveSyncEnabled"
+                }
+            }
         }
     }
 }

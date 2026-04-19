@@ -77,5 +77,11 @@
 	"photosHeader": "Fotos do iCloud",
 	"photosEnabled": "Ativar Fotos",
 	"photosInterval": "Intervalo de atualização (minutos)",
-	"photosIntervalHelp": "Com que frequência os metadados de fotos são obtidos (15–1440 minutos)"
+	"photosIntervalHelp": "How often photo metadata is fetched (15–1440 minutes)",
+	"driveSyncTab": "Drive Sync",
+	"driveSyncHeader": "iCloud Drive Sync",
+	"driveSyncInfo": "Synchronize local directories to iCloud Drive. Supports BackItUp integration and custom directories with conflict resolution.",
+	"driveSyncEnabled": "Enable Drive Sync",
+	"driveSyncInterval": "Sync interval (minutes)",
+	"driveSyncIntervalHelp": "How often files are synced to iCloud Drive (5–1440 minutes)"
 }
