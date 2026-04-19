@@ -3854,7 +3854,6 @@ class Icloud extends utils.Adapter {
         remoteFileMap.set(child.fullName, child);
       }
     }
-    const remoteSet = new Set(remoteFileMap.keys());
     let filesSynced = 0;
     let totalSize = 0;
     const docwsid = (_c = targetNode.docwsid) != null ? _c : (_b = targetNode.rawData) == null ? void 0 : _b.docwsid;

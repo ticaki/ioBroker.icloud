@@ -4358,7 +4358,7 @@ class Icloud extends utils.Adapter {
                 remoteFileMap.set(child.fullName, child);
             }
         }
-        const remoteSet = new Set(remoteFileMap.keys());
+        //const remoteSet = new Set(remoteFileMap.keys()); Not finish yet
 
         let filesSynced = 0;
         let totalSize = 0;
