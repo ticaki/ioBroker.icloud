@@ -12,16 +12,17 @@
 
 ## icloud adapter for ioBroker
 
-This adapter connects ioBroker to your Apple iCloud account. It reads the location of your devices via **Find My** and exposes them as ioBroker states, including GPS coordinates, battery level, and distance to configurable home points.
+This adapter integrates your Apple iCloud account with ioBroker. It gives you access to a wide range of Apple services — from device locations and reminders to drive files, contacts, notes, calendar events, and your photo library — all readable and (where supported) writable as ioBroker states or via `sendTo()`.
 
 ## This adapter supports
 
-- [Find My](#find-my) — device locations, battery level, home distance and sound alerts
+- [Find My](#find-my) — last known device locations, battery level, home distance and sound alerts
 - [Reminders](#reminders--sendto-api) — read, create, edit, complete and delete iCloud Reminders via `sendTo()`; lists and individual reminders are also written as ioBroker states under `reminders.*`
 - [iCloud Drive](#icloud-drive--sendto-api) — browse, upload, download, create, delete and rename files via `sendTo()`
 - [Contacts](#contacts--sendto-api) — read contacts and contact groups via `sendTo()`; optionally also writes individual contact fields as ioBroker states under `contacts.*`
 - [Notes](#notes--states) — iCloud Notes as ioBroker states (`notes.list`, `notes.textList`)
-- [Calendar](#configuration) — upcoming calendar events as ioBroker states
+- [Calendar](#calendar--sendto-api) — upcoming calendar events as ioBroker states; create and delete events via `sendTo()`
+- [Photos](#icloud-photos--sendto-api) — browse albums, list photos, download and delete items via `sendTo()`; metadata counters as ioBroker states
 - [Two-factor authentication (2FA)](#two-factor-authentication-2fa)
 
 ## Configuration
@@ -50,7 +51,11 @@ This adapter connects ioBroker to your Apple iCloud account. It reads the locati
 
 ## Find My
 
-Find My locates all devices linked to your Apple ID (including family members if enabled) and writes their GPS coordinates, battery level, and distance to ioBroker states under `findme.<numericId>.*`.
+Find My reports the last known location of all devices linked to your Apple ID (including family members if enabled) and writes their GPS coordinates, battery level, and distance to ioBroker states under `findme.<numericId>.*`.
+
+> **Important — this is not real-time tracking.**
+> Apple's Find My service delivers a *snapshot* of the last position the device uploaded to iCloud. By the time the data reaches this adapter it is already at least a minute old — and on top of that the device itself may not have updated its location recently either. The actual age of a position is shown in the `locationTimestamp` state; `isOld` is set to `true` when Apple itself considers the fix outdated.
+> Use Find My to get a general sense of where a device is, not to follow its movement in real time.
 
 ### Device states
 
@@ -593,6 +598,302 @@ A flat array of plain text strings — one entry per note. Contains only non-loc
 
 ---
 
+## Calendar — sendTo() API
+
+You can list calendars, browse events, create new events, and delete events using `sendTo()`.
+
+> **Note:** Enable **Calendar** in the adapter settings first.
+
+### States
+
+| State | Type | Description |
+|-------|------|-------------|
+| `calendar.lastSync` | `number` | Timestamp (ms) of the last successful sync. |
+| `calendar.<name>.guid` | `string` | Calendar GUID. |
+| `calendar.<name>.color` | `string` | Calendar color. |
+| `calendar.<name>.enabled` | `boolean` | Whether the calendar is enabled. |
+| `calendar.<name>.readOnly` | `boolean` | Whether the calendar is read-only. |
+| `calendar.<name>.<slot>.title` | `string` | Event title. |
+| `calendar.<name>.<slot>.startDate` | `number` | Event start timestamp (ms). |
+| `calendar.<name>.<slot>.endDate` | `number` | Event end timestamp (ms). |
+| `calendar.<name>.<slot>.allDay` | `boolean` | Whether the event is all-day. |
+| `calendar.<name>.<slot>.duration` | `number` | Duration in minutes. |
+
+Upcoming events are automatically synced at the configured refresh interval.
+
+### Get calendars
+
+```javascript
+sendTo('icloud.0', 'getCalendars', {}, (result) => {
+    if (result.success) {
+        // result.calendars = [
+        //   { guid: "...", title: "Home", color: "#1badf8", enabled: true, isDefault: true, isFamily: false, readOnly: false, order: 1 },
+        //   { guid: "...", title: "Work", color: "#ff9500", enabled: true, isDefault: false, isFamily: false, readOnly: false, order: 2 },
+        // ]
+        result.calendars.forEach(c => {
+            console.log(c.title + ' (GUID: ' + c.guid + ')');
+        });
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Get events
+
+Returns events for a date range. Defaults to the current month.
+
+```javascript
+sendTo('icloud.0', 'getCalendarEvents', {
+    from: Date.now(),                         // optional — start timestamp (default: first of month)
+    to:   Date.now() + 7 * 24 * 60 * 60000,  // optional — end timestamp (default: last of month)
+    calendarGuid: '...',                      // optional — filter by calendar GUID
+}, (result) => {
+    if (result.success) {
+        // result.events = [
+        //   {
+        //     guid: "ABC-123",
+        //     calendarGuid: "...",
+        //     title: "Team Meeting",
+        //     startDate: 1713500000000,
+        //     endDate: 1713503600000,
+        //     allDay: false,
+        //     duration: 60,
+        //     location: "Room 42",
+        //     description: "Weekly sync",
+        //     url: "",
+        //     tz: "Europe/Berlin",
+        //     etag: "...",
+        //     readOnly: false,
+        //     recurrenceMaster: false,
+        //     alarms: [],
+        //   }, ...
+        // ]
+        result.events.forEach(e => {
+            console.log(e.title + ' — ' + new Date(e.startDate).toLocaleString());
+        });
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Create an event
+
+Required fields: `calendarGuid`, `title`, `startDate`, `endDate`.
+
+```javascript
+sendTo('icloud.0', 'createCalendarEvent', {
+    calendarGuid: '...',                         // required — calendar GUID from getCalendars
+    title:        'Dentist Appointment',          // required
+    startDate:    new Date('2026-05-15T10:00').getTime(),  // required — timestamp ms
+    endDate:      new Date('2026-05-15T11:00').getTime(),  // required — timestamp ms
+    allDay:       false,                          // optional — default: false
+    location:     'Main Street 5',                // optional
+    description:  'Annual checkup',               // optional
+    url:          '',                             // optional
+    alarms:       [                               // optional — array of alarm definitions
+        { before: true, minutes: 15, hours: 0, days: 0, weeks: 0, seconds: 0 },
+    ],
+}, (result) => { //{ success: true, eventGuid: guid }
+    if (result.success) {
+        console.log('Event created! result: ' + JSON.stringify(result));
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Update an event
+
+All fields except `calendarGuid` and `eventGuid` are optional — only the provided fields are changed, everything else stays as-is.
+
+```javascript
+sendTo('icloud.0', 'updateCalendarEvent', {
+    calendarGuid: '...',                         // required — calendar GUID
+    eventGuid:    '...',                          // required — event GUID from getCalendarEvents
+    etag:         '...',                          // optional — if omitted, fetched automatically
+    title:        'Dentist (rescheduled)',         // optional — new title
+    startDate:    new Date('2026-05-20T10:00').getTime(),  // optional — new start timestamp ms
+    endDate:      new Date('2026-05-20T11:00').getTime(),  // optional — new end timestamp ms
+    allDay:       false,                          // optional
+    location:     'New Street 10',                // optional
+    description:  'Moved appointment',            // optional
+    alarms:       [                               // optional — replaces all existing alarms
+        { before: true, minutes: 30, hours: 0, days: 0, weeks: 0, seconds: 0 },
+    ],
+}, (result) => {
+    if (result.success) {
+        console.log('Event updated!');
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Delete an event
+
+Required fields: `calendarGuid`, `eventGuid`. The etag is fetched automatically if not provided.
+
+```javascript
+sendTo('icloud.0', 'deleteCalendarEvent', {
+    calendarGuid: '...',    // required — calendar GUID
+    eventGuid:    '...',    // required — event GUID from getCalendarEvents
+    etag:         '...',    // optional — if omitted, fetched automatically
+}, (result) => {
+    if (result.success) {
+        console.log('Event deleted!');
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Alarm field reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `before` | `boolean` | `true` = alarm fires before the event start. |
+| `minutes` | `number` | Minutes component of the offset. |
+| `hours` | `number` | Hours component of the offset. |
+| `days` | `number` | Days component of the offset. |
+| `weeks` | `number` | Weeks component of the offset. |
+| `seconds` | `number` | Seconds component of the offset. |
+
+> **Tip:** Use `getCalendars` to discover the `calendarGuid`, then `getCalendarEvents` to discover event GUIDs and etags.
+
+---
+
+## iCloud Photos — sendTo() API
+
+You can list albums, browse photos, download files, and delete photos using `sendTo()`.
+
+> **Note:** Enable **Photos** in the adapter settings first.
+
+### States
+
+| State | Type | Description |
+|-------|------|-------------|
+| `photos.albumCount` | `number` | Total number of albums (smart + custom). |
+| `photos.photoCount` | `number` | Total number of photos in the library. |
+| `photos.videoCount` | `number` | Total number of videos. |
+| `photos.favoriteCount` | `number` | Number of favorite items. |
+| `photos.albums` | `string` | JSON array of albums with name and photo count. |
+| `photos.lastSync` | `number` | Timestamp (ms) of the last successful sync. |
+
+### Get albums
+
+```javascript
+sendTo('icloud.0', 'photosGetAlbums', {}, (result) => {
+    if (result.success) {
+        // result.albums = [
+        //   { name: "All Photos", photoCount: 12345 },
+        //   { name: "Favorites", photoCount: 42 },
+        //   { name: "Videos", photoCount: 100 },
+        //   { name: "My Album", photoCount: 25 },
+        // ]
+        result.albums.forEach(a => {
+            console.log(a.name + ': ' + a.photoCount + ' item(s)');
+        });
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Get photos (paginated)
+
+Returns a page of photo metadata from a given album.
+
+```javascript
+sendTo('icloud.0', 'photosGetPhotos', {
+    albumName: 'All Photos',  // optional — defaults to 'All Photos'
+    offset:    0,              // optional — start offset (default: 0)
+    limit:     50,             // optional — max items per page (1–100, default: 50)
+}, (result) => {
+    if (result.success) {
+        // result.photos = [
+        //   {
+        //     id: "AaBbCc...",
+        //     filename: "IMG_1234.HEIC",
+        //     size: 3456789,
+        //     width: 4032,
+        //     height: 3024,
+        //     itemType: "image",         // "image" or "movie"
+        //     isFavorite: false,
+        //     isHidden: false,
+        //     duration: 0,               // seconds (> 0 for videos)
+        //     assetDate: 1713500000000,  // timestamp ms
+        //     addedDate: 1713500100000,
+        //     latitude: 52.52,           // null if no location
+        //     longitude: 13.405,
+        //   }, ...
+        // ]
+        result.photos.forEach(p => {
+            console.log(p.filename + ' (' + p.itemType + ', ' + p.size + ' bytes)');
+        });
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Download a photo
+
+Returns the photo file content as a Base64 string.
+
+```javascript
+sendTo('icloud.0', 'photosDownload', {
+    photoId: 'AaBbCc...',      // required — photo ID from photosGetPhotos
+    version: 'original',       // optional — 'original', 'medium', or 'thumb' (default: 'original')
+}, (result) => {
+    if (result.success) {
+        // result.name   = "IMG_1234.HEIC"
+        // result.size   = 3456789
+        // result.base64 = "/9j/4AAQ..." (Base64 encoded content)
+        console.log('Downloaded: ' + result.name + ' (' + result.size + ' bytes)');
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Delete a photo
+
+Moves a photo to the "Recently Deleted" album.
+
+```javascript
+sendTo('icloud.0', 'photosDelete', {
+    photoId: 'AaBbCc...',  // required — photo ID
+}, (result) => {
+    if (result.success) {
+        console.log('Photo deleted');
+    } else {
+        console.error(result.error);
+    }
+});
+```
+
+### Photo field reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique photo identifier (CloudKit record name). |
+| `filename` | `string` | Original filename (e.g. `"IMG_1234.HEIC"`). |
+| `size` | `number` | File size in bytes (original version). |
+| `width` | `number` | Width in pixels. |
+| `height` | `number` | Height in pixels. |
+| `itemType` | `string` | `"image"` or `"movie"`. |
+| `isFavorite` | `boolean` | Whether the item is marked as favorite. |
+| `isHidden` | `boolean` | Whether the item is hidden. |
+| `duration` | `number` | Duration in seconds (0 for photos, > 0 for videos). |
+| `assetDate` | `number` | Creation timestamp (ms). |
+| `addedDate` | `number` | Added-to-library timestamp (ms). |
+| `latitude` | `number \| null` | GPS latitude (null if no location). |
+| `longitude` | `number \| null` | GPS longitude (null if no location). |
+
+---
+
 ## Credits
 
 This adapter would not have been possible without the following open-source projects:
@@ -618,7 +919,13 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (ticaki) Calendar sendTo() API: create, update and delete calendar events; new Blockly blocks for calendar actions
+* (ticaki) Photos sendTo() API: browse albums, list photos, download and delete items
+
 ### 0.4.0 (2026-04-19)
+* (ticaki) iCloud Photos integration: browse albums, paginated photo listing, download and delete photos via sendTo()
+* (ticaki) Photos metadata states: album count, photo count, video count, favorites, album list (JSON)
 * (ticaki) Geocoding tab: unified reverse-geocoding for FindMy device positions, selectable provider (local German municipalities, Traccar, Nominatim/OpenStreetMap, OpenCage Data)
 * (ticaki) External geocoders: shared URL + API-key fields, LRU cache with configurable size (3 m grid, ~50/150/300 MB), 1 req/s throttle with automatic delay, street names returned in ioBroker system language
 

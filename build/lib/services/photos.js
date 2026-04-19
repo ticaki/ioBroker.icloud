@@ -40,11 +40,13 @@ import_dayjs.default.extend(import_timezone.default);
 const SMART_FOLDERS = {
   "All Photos": {
     type: "CPLAssetAndMasterByAssetDateWithoutHiddenOrDeleted",
+    obj_type: "CPLAssetByAssetDateWithoutHiddenOrDeleted",
     direction: "ASCENDING",
     query_filter: null
   },
   "Time-lapse": {
     type: "CPLAssetAndMasterInSmartAlbumByAssetDate",
+    obj_type: "CPLAssetInSmartAlbumByAssetDate:Timelapse",
     direction: "ASCENDING",
     query_filter: [
       {
@@ -56,6 +58,7 @@ const SMART_FOLDERS = {
   },
   Videos: {
     type: "CPLAssetAndMasterInSmartAlbumByAssetDate",
+    obj_type: "CPLAssetInSmartAlbumByAssetDate:Video",
     direction: "ASCENDING",
     query_filter: [
       {
@@ -67,6 +70,7 @@ const SMART_FOLDERS = {
   },
   "Slo-mo": {
     type: "CPLAssetAndMasterInSmartAlbumByAssetDate",
+    obj_type: "CPLAssetInSmartAlbumByAssetDate:Slomo",
     direction: "ASCENDING",
     query_filter: [
       {
@@ -78,11 +82,13 @@ const SMART_FOLDERS = {
   },
   Bursts: {
     type: "CPLBurstStackAssetAndMasterByAssetDate",
+    obj_type: "CPLBurstStackAssetAndMasterByAssetDate",
     direction: "ASCENDING",
     query_filter: null
   },
   Favorites: {
     type: "CPLAssetAndMasterInSmartAlbumByAssetDate",
+    obj_type: "CPLAssetInSmartAlbumByAssetDate:Favorite",
     direction: "ASCENDING",
     query_filter: [
       {
@@ -94,6 +100,7 @@ const SMART_FOLDERS = {
   },
   Panoramas: {
     type: "CPLAssetAndMasterInSmartAlbumByAssetDate",
+    obj_type: "CPLAssetInSmartAlbumByAssetDate:Panorama",
     direction: "ASCENDING",
     query_filter: [
       {
@@ -105,6 +112,7 @@ const SMART_FOLDERS = {
   },
   Screenshots: {
     type: "CPLAssetAndMasterInSmartAlbumByAssetDate",
+    obj_type: "CPLAssetInSmartAlbumByAssetDate:Screenshot",
     direction: "ASCENDING",
     query_filter: [
       {
@@ -116,6 +124,7 @@ const SMART_FOLDERS = {
   },
   Live: {
     type: "CPLAssetAndMasterInSmartAlbumByAssetDate",
+    obj_type: "CPLAssetInSmartAlbumByAssetDate:Live",
     direction: "ASCENDING",
     query_filter: [
       {
@@ -127,6 +136,7 @@ const SMART_FOLDERS = {
   },
   Portrait: {
     type: "CPLAssetAndMasterInSmartAlbumByAssetDate",
+    obj_type: "CPLAssetInSmartAlbumByAssetDate:Depth",
     direction: "ASCENDING",
     query_filter: [
       {
@@ -138,6 +148,7 @@ const SMART_FOLDERS = {
   },
   "Long Exposure": {
     type: "CPLAssetAndMasterInSmartAlbumByAssetDate",
+    obj_type: "CPLAssetInSmartAlbumByAssetDate:LongExposure",
     direction: "ASCENDING",
     query_filter: [
       {
@@ -149,6 +160,7 @@ const SMART_FOLDERS = {
   },
   Animated: {
     type: "CPLAssetAndMasterInSmartAlbumByAssetDate",
+    obj_type: "CPLAssetInSmartAlbumByAssetDate:Animated",
     direction: "ASCENDING",
     query_filter: [
       {
@@ -160,15 +172,116 @@ const SMART_FOLDERS = {
   },
   "Recently Deleted": {
     type: "CPLAssetAndMasterDeletedByExpungedDate",
+    obj_type: "CPLAssetAndMasterDeletedByExpungedDate",
     direction: "ASCENDING",
     query_filter: null
   },
   Hidden: {
     type: "CPLAssetAndMasterHiddenByAssetDate",
+    obj_type: "CPLAssetAndMasterHiddenByAssetDate",
     direction: "ASCENDING",
     query_filter: null
   }
 };
+const DESIRED_KEYS = [
+  "resJPEGFullWidth",
+  "resJPEGFullHeight",
+  "resJPEGFullFileType",
+  "resJPEGFullFingerprint",
+  "resJPEGFullRes",
+  "resJPEGLargeWidth",
+  "resJPEGLargeHeight",
+  "resJPEGLargeFileType",
+  "resJPEGLargeFingerprint",
+  "resJPEGLargeRes",
+  "resJPEGMedWidth",
+  "resJPEGMedHeight",
+  "resJPEGMedFileType",
+  "resJPEGMedFingerprint",
+  "resJPEGMedRes",
+  "resJPEGThumbWidth",
+  "resJPEGThumbHeight",
+  "resJPEGThumbFileType",
+  "resJPEGThumbFingerprint",
+  "resJPEGThumbRes",
+  "resVidFullWidth",
+  "resVidFullHeight",
+  "resVidFullFileType",
+  "resVidFullFingerprint",
+  "resVidFullRes",
+  "resVidMedWidth",
+  "resVidMedHeight",
+  "resVidMedFileType",
+  "resVidMedFingerprint",
+  "resVidMedRes",
+  "resVidSmallWidth",
+  "resVidSmallHeight",
+  "resVidSmallFileType",
+  "resVidSmallFingerprint",
+  "resVidSmallRes",
+  "resSidecarWidth",
+  "resSidecarHeight",
+  "resSidecarFileType",
+  "resSidecarFingerprint",
+  "resSidecarRes",
+  "itemType",
+  "dataClassType",
+  "filenameEnc",
+  "originalOrientation",
+  "resOriginalWidth",
+  "resOriginalHeight",
+  "resOriginalFileType",
+  "resOriginalFingerprint",
+  "resOriginalRes",
+  "resOriginalAltWidth",
+  "resOriginalAltHeight",
+  "resOriginalAltFileType",
+  "resOriginalAltFingerprint",
+  "resOriginalAltRes",
+  "resOriginalVidComplWidth",
+  "resOriginalVidComplHeight",
+  "resOriginalVidComplFileType",
+  "resOriginalVidComplFingerprint",
+  "resOriginalVidComplRes",
+  "isDeleted",
+  "isExpunged",
+  "dateExpunged",
+  "remappedRef",
+  "recordName",
+  "recordType",
+  "recordChangeTag",
+  "masterRef",
+  "adjustmentRenderType",
+  "assetDate",
+  "addedDate",
+  "isFavorite",
+  "isHidden",
+  "orientation",
+  "duration",
+  "assetSubtype",
+  "assetSubtypeV2",
+  "assetHDRType",
+  "burstFlags",
+  "burstFlagsExt",
+  "burstId",
+  "captionEnc",
+  "locationEnc",
+  "locationV2Enc",
+  "locationLatitude",
+  "locationLongitude",
+  "adjustmentType",
+  "timeZoneOffset",
+  "vidComplDurValue",
+  "vidComplDurScale",
+  "vidComplDispValue",
+  "vidComplDispScale",
+  "vidComplVisibilityState",
+  "customRenderedValue",
+  "containerId",
+  "itemId",
+  "position",
+  "isKeyAsset"
+];
 class iCloudPhotosEndpointService {
   constructor(serviceUri, headers, _fetchFn) {
     this.serviceUri = serviceUri;
@@ -219,7 +332,25 @@ class iCloudPhotosService {
   }
   endpointService;
   _albums = /* @__PURE__ */ new Map();
+  /**
+   * Check if the photo library indexing is finished.
+   * Returns true when ready, false when still indexing.
+   */
+  async checkIndexingState() {
+    var _a, _b, _c, _d;
+    try {
+      const result = await this.endpointService.fetch("/records/query", {
+        query: { recordType: "CheckIndexingState" },
+        zoneID: { zoneName: "PrimarySync", zoneType: "REGULAR_CUSTOM_ZONE" }
+      });
+      const state = (_d = (_c = (_b = (_a = result.records) == null ? void 0 : _a[0]) == null ? void 0 : _b.fields) == null ? void 0 : _c.state) == null ? void 0 : _d.value;
+      return state === "FINISHED";
+    } catch {
+      return false;
+    }
+  }
   async getAlbums() {
+    var _a;
     if (this._albums.size > 0) {
       return this._albums;
     }
@@ -227,16 +358,15 @@ class iCloudPhotosService {
       query: { recordType: "CPLAlbumByPositionLive" },
       zoneID: { zoneName: "PrimarySync", zoneType: "REGULAR_CUSTOM_ZONE" }
     })).records;
-    Object.entries(SMART_FOLDERS).map(([folderName, folderOptions]) => {
+    for (const [folderName, folderOptions] of Object.entries(SMART_FOLDERS)) {
       this._albums.set(folderName, new iCloudPhotoAlbum(this.endpointService, folderName, folderOptions));
-    });
-    folders.map((folder) => {
-      var _a;
+    }
+    for (const folder of folders) {
       if (!("albumNameEnc" in folder.fields)) {
-        return;
+        continue;
       }
       if (folder.recordName === "----Root-Folder----" || ((_a = folder.fields.isDeleted) == null ? void 0 : _a.value)) {
-        return;
+        continue;
       }
       const folderName = Buffer.from(folder.fields.albumNameEnc.value, "base64").toString("utf-8");
       this._albums.set(
@@ -250,14 +380,96 @@ class iCloudPhotosService {
               comparator: "EQUALS",
               fieldValue: { type: "STRING", value: folder.recordName }
             }
-          ]
+          ],
+          obj_type: "CPLContainerRelationNotDeletedByAssetDate",
+          record_id: folder.recordName
         })
       );
-    });
+    }
     return this._albums;
+  }
+  /**
+   * Invalidate cached albums so the next getAlbums() call fetches fresh data.
+   */
+  resetAlbums() {
+    this._albums.clear();
   }
   get all() {
     return this._albums.get("All Photos");
+  }
+  /**
+   * Returns a summary of all albums: name and photo count.
+   * Automatically loads albums if not yet fetched.
+   */
+  async getAlbumSummaries() {
+    const albums = await this.getAlbums();
+    const summaries = [];
+    for (const [name, album] of albums) {
+      try {
+        const count = await album.getLength();
+        summaries.push({ name, photoCount: count });
+      } catch {
+        summaries.push({ name, photoCount: -1 });
+      }
+    }
+    return summaries;
+  }
+  /**
+   * Retrieve a page of photos from a given album.
+   *
+   * @param albumName - Album name (defaults to 'All Photos')
+   * @param offset - Start offset for pagination
+   * @param limit - Number of photos to retrieve (max 100)
+   * @returns Array of serializable photo metadata
+   */
+  async getPhotosPage(albumName = "All Photos", offset = 0, limit = 100) {
+    const albums = await this.getAlbums();
+    const album = albums.get(albumName);
+    if (!album) {
+      throw new Error(`Album not found: ${albumName}`);
+    }
+    const photos = await album.getPhotosPage(offset, Math.min(limit, 100));
+    return photos.map((p) => p.toInfo());
+  }
+  /**
+   * Download a photo by its record name from the 'All Photos' album.
+   *
+   * @param photoId - The recordName of the photo master record
+   * @param version - Which version to download (original, medium, thumb)
+   * @returns The raw bytes as ArrayBuffer, or null if not found
+   */
+  async downloadPhoto(photoId, version = "original") {
+    const albums = await this.getAlbums();
+    const allPhotos = albums.get("All Photos");
+    if (!allPhotos) {
+      throw new Error("All Photos album not available");
+    }
+    const photo = await allPhotos.getPhotoById(photoId);
+    if (!photo) {
+      return null;
+    }
+    const data = await photo.download(version);
+    if (!data) {
+      return null;
+    }
+    return { data, filename: photo.filename, size: data.byteLength };
+  }
+  /**
+   * Delete a photo by its record name.
+   *
+   * @param photoId - The recordName of the photo master record
+   */
+  async deletePhoto(photoId) {
+    const albums = await this.getAlbums();
+    const allPhotos = albums.get("All Photos");
+    if (!allPhotos) {
+      throw new Error("All Photos album not available");
+    }
+    const photo = await allPhotos.getPhotoById(photoId);
+    if (!photo) {
+      throw new Error(`Photo not found: ${photoId}`);
+    }
+    return photo.delete();
   }
 }
 class iCloudPhotoAlbum {
@@ -268,7 +480,6 @@ class iCloudPhotoAlbum {
     this.pageSize = pageSize;
   }
   _length;
-  _photos = [];
   get title() {
     return this.name;
   }
@@ -281,7 +492,12 @@ class iCloudPhotoAlbum {
             query: {
               filterBy: {
                 fieldName: "indexCountID",
-                fieldValue: { type: "STRING_LIST", value: [this.album.type] },
+                fieldValue: {
+                  type: "STRING_LIST",
+                  value: [
+                    this.album.record_id ? `${this.album.obj_type}:${this.album.record_id}` : this.album.obj_type
+                  ]
+                },
                 comparator: "IN"
               },
               recordType: "HyperionIndexCountLookup"
@@ -295,7 +511,7 @@ class iCloudPhotoAlbum {
     }
     return this._length;
   }
-  async photosEndpointBody(offset) {
+  photosEndpointBody(offset, limit) {
     return {
       query: {
         filterBy: [
@@ -319,143 +535,84 @@ class iCloudPhotoAlbum {
         ],
         recordType: this.album.type
       },
-      resultsLimit: this.pageSize * 2,
-      desiredKeys: [
-        "resJPEGFullWidth",
-        "resJPEGFullHeight",
-        "resJPEGFullFileType",
-        "resJPEGFullFingerprint",
-        "resJPEGFullRes",
-        "resJPEGLargeWidth",
-        "resJPEGLargeHeight",
-        "resJPEGLargeFileType",
-        "resJPEGLargeFingerprint",
-        "resJPEGLargeRes",
-        "resJPEGMedWidth",
-        "resJPEGMedHeight",
-        "resJPEGMedFileType",
-        "resJPEGMedFingerprint",
-        "resJPEGMedRes",
-        "resJPEGThumbWidth",
-        "resJPEGThumbHeight",
-        "resJPEGThumbFileType",
-        "resJPEGThumbFingerprint",
-        "resJPEGThumbRes",
-        "resVidFullWidth",
-        "resVidFullHeight",
-        "resVidFullFileType",
-        "resVidFullFingerprint",
-        "resVidFullRes",
-        "resVidMedWidth",
-        "resVidMedHeight",
-        "resVidMedFileType",
-        "resVidMedFingerprint",
-        "resVidMedRes",
-        "resVidSmallWidth",
-        "resVidSmallHeight",
-        "resVidSmallFileType",
-        "resVidSmallFingerprint",
-        "resVidSmallRes",
-        "resSidecarWidth",
-        "resSidecarHeight",
-        "resSidecarFileType",
-        "resSidecarFingerprint",
-        "resSidecarRes",
-        "itemType",
-        "dataClassType",
-        "filenameEnc",
-        "originalOrientation",
-        "resOriginalWidth",
-        "resOriginalHeight",
-        "resOriginalFileType",
-        "resOriginalFingerprint",
-        "resOriginalRes",
-        "resOriginalAltWidth",
-        "resOriginalAltHeight",
-        "resOriginalAltFileType",
-        "resOriginalAltFingerprint",
-        "resOriginalAltRes",
-        "resOriginalVidComplWidth",
-        "resOriginalVidComplHeight",
-        "resOriginalVidComplFileType",
-        "resOriginalVidComplFingerprint",
-        "resOriginalVidComplRes",
-        "isDeleted",
-        "isExpunged",
-        "dateExpunged",
-        "remappedRef",
-        "recordName",
-        "recordType",
-        "recordChangeTag",
-        "masterRef",
-        "adjustmentRenderType",
-        "assetDate",
-        "addedDate",
-        "isFavorite",
-        "isHidden",
-        "orientation",
-        "duration",
-        "assetSubtype",
-        "assetSubtypeV2",
-        "assetHDRType",
-        "burstFlags",
-        "burstFlagsExt",
-        "burstId",
-        "captionEnc",
-        "locationEnc",
-        "locationV2Enc",
-        "locationLatitude",
-        "locationLongitude",
-        "adjustmentType",
-        "timeZoneOffset",
-        "vidComplDurValue",
-        "vidComplDurScale",
-        "vidComplDispValue",
-        "vidComplDispScale",
-        "vidComplVisibilityState",
-        "customRenderedValue",
-        "containerId",
-        "itemId",
-        "position",
-        "isKeyAsset"
-      ],
+      resultsLimit: (limit != null ? limit : this.pageSize) * 2,
+      desiredKeys: DESIRED_KEYS,
       zoneID: { zoneName: "PrimarySync" }
     };
   }
-  async getPhotos() {
-    if (this._photos.length) {
-      return this._photos;
+  /**
+   * Fetch a single page of photos at the given offset.
+   *
+   * @param offset - Start offset
+   * @param limit - Maximum number of photo assets to return (max 100)
+   */
+  async getPhotosPage(offset, limit) {
+    const result = await this.endpointService.fetch(
+      "/records/query",
+      this.photosEndpointBody(offset, limit)
+    );
+    return this.parsePhotoResponse(result);
+  }
+  /**
+   * Find a specific photo by its master record name (paging through the album).
+   *
+   * @param photoId - The recordName of the master record
+   */
+  async getPhotoById(photoId) {
+    const total = await this.getLength();
+    const isDescending = this.album.direction === "DESCENDING";
+    let offset = isDescending ? total - 1 : 0;
+    while (true) {
+      const result = await this.endpointService.fetch(
+        "/records/query",
+        this.photosEndpointBody(offset)
+      );
+      const photos = this.parsePhotoResponse(result);
+      const found = photos.find((p) => p.id === photoId);
+      if (found) {
+        return found;
+      }
+      if (photos.length === 0) {
+        break;
+      }
+      offset += isDescending ? -photos.length : photos.length;
+      if (isDescending && offset < 0) {
+        break;
+      }
     }
+    return null;
+  }
+  async getPhotos() {
+    const photos = [];
     const isDescending = this.album.direction === "DESCENDING";
     const total = await this.getLength();
     let offset = isDescending ? total - 1 : 0;
     while (true) {
       const result = await this.endpointService.fetch(
         "/records/query",
-        await this.photosEndpointBody(offset)
+        this.photosEndpointBody(offset)
       );
-      const assetRecords = {};
-      const masterRecords = [];
-      result.records.map((item) => {
-        switch (item.recordType) {
-          case "CPLAsset":
-            assetRecords[item.fields.masterRef.value.recordName] = item;
-            break;
-          case "CPLMaster":
-            masterRecords.push(item);
-            break;
-        }
-      });
-      masterRecords.map((record) => {
-        this._photos.push(new iCloudPhotoAsset(this.endpointService, record, assetRecords[record.recordName]));
-      });
-      if (masterRecords.length > 0) {
-        offset += isDescending ? -masterRecords.length : masterRecords.length;
+      const page = this.parsePhotoResponse(result);
+      photos.push(...page);
+      if (page.length > 0) {
+        offset += isDescending ? -page.length : page.length;
       } else {
         break;
       }
     }
-    return this._photos;
+    return photos;
+  }
+  parsePhotoResponse(result) {
+    const assetRecords = {};
+    const masterRecords = [];
+    for (const item of result.records) {
+      if (item.recordType === "CPLAsset") {
+        assetRecords[item.fields.masterRef.value.recordName] = item;
+      } else if (item.recordType === "CPLMaster") {
+        masterRecords.push(item);
+      }
+    }
+    return masterRecords.filter((record) => record.recordName in assetRecords).map((record) => new iCloudPhotoAsset(this.endpointService, record, assetRecords[record.recordName]));
   }
 }
 class iCloudPhotoAsset {
@@ -474,6 +631,12 @@ class iCloudPhotoAsset {
     medium: "resVidMed",
     thumb: "resVidSmall"
   };
+  ITEM_TYPES = {
+    "public.heic": "image",
+    "public.jpeg": "image",
+    "public.png": "image",
+    "com.apple.quicktime-movie": "movie"
+  };
   _versions = {};
   get id() {
     return this.masterRecord.recordName;
@@ -482,7 +645,8 @@ class iCloudPhotoAsset {
     return Buffer.from(this.masterRecord.fields.filenameEnc.value, "base64").toString("utf-8");
   }
   get size() {
-    return this.masterRecord.fields.resOriginalRes.value.size;
+    var _a, _b;
+    return (_b = (_a = this.masterRecord.fields.resOriginalRes) == null ? void 0 : _a.value.size) != null ? _b : 0;
   }
   get created() {
     return this.assetDate;
@@ -497,7 +661,43 @@ class iCloudPhotoAsset {
    * @returns array [width, height] in pixels
    */
   get dimension() {
-    return [this.masterRecord.fields.resOriginalWidth.value, this.masterRecord.fields.resOriginalHeight.value];
+    var _a, _b, _c, _d;
+    return [
+      (_b = (_a = this.masterRecord.fields.resOriginalWidth) == null ? void 0 : _a.value) != null ? _b : 0,
+      (_d = (_c = this.masterRecord.fields.resOriginalHeight) == null ? void 0 : _c.value) != null ? _d : 0
+    ];
+  }
+  get itemType() {
+    var _a, _b;
+    const raw = (_b = (_a = this.masterRecord.fields.itemType) == null ? void 0 : _a.value) != null ? _b : "";
+    if (raw in this.ITEM_TYPES) {
+      return this.ITEM_TYPES[raw];
+    }
+    const ext = this.filename.toLowerCase();
+    if (ext.endsWith(".heic") || ext.endsWith(".jpg") || ext.endsWith(".jpeg") || ext.endsWith(".png")) {
+      return "image";
+    }
+    return "movie";
+  }
+  get isFavorite() {
+    var _a;
+    return ((_a = this.assetRecord.fields.isFavorite) == null ? void 0 : _a.value) === 1;
+  }
+  get isHidden() {
+    var _a;
+    return ((_a = this.assetRecord.fields.isHidden) == null ? void 0 : _a.value) === 1;
+  }
+  get duration() {
+    var _a, _b;
+    return (_b = (_a = this.assetRecord.fields.duration) == null ? void 0 : _a.value) != null ? _b : 0;
+  }
+  get latitude() {
+    var _a, _b;
+    return (_b = (_a = this.assetRecord.fields.locationLatitude) == null ? void 0 : _a.value) != null ? _b : null;
+  }
+  get longitude() {
+    var _a, _b;
+    return (_b = (_a = this.assetRecord.fields.locationLongitude) == null ? void 0 : _a.value) != null ? _b : null;
   }
   get versions() {
     if (Object.keys(this._versions).length <= 0) {
@@ -550,6 +750,27 @@ class iCloudPhotoAsset {
     } catch {
       return false;
     }
+  }
+  /**
+   * Returns a serializable info object for sendTo responses.
+   */
+  toInfo() {
+    const [width, height] = this.dimension;
+    return {
+      id: this.id,
+      filename: this.filename,
+      size: this.size,
+      width,
+      height,
+      itemType: this.itemType,
+      isFavorite: this.isFavorite,
+      isHidden: this.isHidden,
+      duration: this.duration,
+      assetDate: this.assetDate.getTime(),
+      addedDate: this.addedDate.getTime(),
+      latitude: this.latitude,
+      longitude: this.longitude
+    };
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

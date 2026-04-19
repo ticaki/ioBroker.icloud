@@ -36,6 +36,22 @@ var import_timezone = __toESM(require("dayjs/plugin/timezone"));
 var import_utc = __toESM(require("dayjs/plugin/utc"));
 import_dayjs.default.extend(import_utc.default);
 import_dayjs.default.extend(import_timezone.default);
+function generateGuid() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    return (c === "x" ? r : r & 3 | 8).toString(16);
+  }).toUpperCase();
+}
+function dateToAppleList(dt, isStart) {
+  const year = dt.getFullYear();
+  const month = dt.getMonth() + 1;
+  const day = dt.getDate();
+  const hour = dt.getHours();
+  const minute = dt.getMinutes();
+  const dateString = `${year}${String(month).padStart(2, "0")}${String(day).padStart(2, "0")}`;
+  const minutesFromMidnight = isStart ? hour * 60 + minute : (24 - hour) * 60 + (60 - minute);
+  return [dateString, year, month, day, hour, minute, minutesFromMidnight];
+}
 class iCloudCalendarService {
   service;
   serviceUri;
@@ -48,6 +64,29 @@ class iCloudCalendarService {
     this.serviceUri = serviceUri;
     this.dsid = this.service.accountInfo.dsInfo.dsid;
     this.calendarServiceUri = `${service.accountInfo.webservices.calendar.url}/ca`;
+  }
+  defaultParams(from, to) {
+    return {
+      startDate: (0, import_dayjs.default)(from != null ? from : (0, import_dayjs.default)().startOf("month")).format(this.dateFormat),
+      endDate: (0, import_dayjs.default)(to != null ? to : (0, import_dayjs.default)().endOf("month")).format(this.dateFormat),
+      dsid: this.dsid,
+      lang: "en-us",
+      usertz: this.tz
+    };
+  }
+  async handleAuthError(json, retry, retryFn) {
+    if ((json == null ? void 0 : json.error) === 1 && typeof (json == null ? void 0 : json.reason) === "string" && json.reason.includes("X-APPLE-WEBAUTH-TOKEN")) {
+      if (retry) {
+        this.service._log(
+          0,
+          "[calendar] Missing X-APPLE-WEBAUTH-TOKEN \u2014 re-authenticating for calendar service"
+        );
+        await this.service.authenticateWebService("calendar");
+        return retryFn();
+      }
+      throw new Error(`Calendar authentication failed: ${json.reason}`);
+    }
+    return null;
   }
   async fetchEndpoint(endpointUrl, params, retry = true) {
     const url = new URL(`${this.calendarServiceUri}${endpointUrl}`);
@@ -73,16 +112,50 @@ class iCloudCalendarService {
       return {};
     }
     const json = JSON.parse(text);
-    if ((json == null ? void 0 : json.error) === 1 && typeof (json == null ? void 0 : json.reason) === "string" && json.reason.includes("X-APPLE-WEBAUTH-TOKEN")) {
-      if (retry) {
-        this.service._log(
-          0,
-          "[calendar] Missing X-APPLE-WEBAUTH-TOKEN \u2014 re-authenticating for calendar service"
-        );
+    const authResult = await this.handleAuthError(
+      json,
+      retry,
+      () => this.fetchEndpoint(endpointUrl, params, false)
+    );
+    if (authResult !== null) {
+      return authResult;
+    }
+    return json;
+  }
+  async postEndpoint(endpointUrl, params, body, retry = true) {
+    const url = new URL(`${this.calendarServiceUri}${endpointUrl}`);
+    url.search = new URLSearchParams(params).toString();
+    this.service._log(0, `[calendar] POST ${url.toString()}`);
+    const headers = this.service.authStore.getHeaders();
+    const response = await this.service.fetch(url, {
+      method: "POST",
+      headers: {
+        ...headers,
+        "Content-Type": "text/plain",
+        Referer: "https://www.icloud.com/"
+      },
+      body: JSON.stringify(body)
+    });
+    const text = await response.text();
+    if (!text || !text.trim()) {
+      this.service._log(
+        0,
+        `[calendar] Empty response from POST ${endpointUrl} (HTTP ${response.status})`
+      );
+      if (response.status === 401 && retry) {
         await this.service.authenticateWebService("calendar");
-        return this.fetchEndpoint(endpointUrl, params, false);
+        return this.postEndpoint(endpointUrl, params, body, false);
       }
-      throw new Error(`Calendar authentication failed: ${json.reason}`);
+      return {};
+    }
+    const json = JSON.parse(text);
+    const authResult = await this.handleAuthError(
+      json,
+      retry,
+      () => this.postEndpoint(endpointUrl, params, body, false)
+    );
+    if (authResult !== null) {
+      return authResult;
     }
     return json;
   }
@@ -94,32 +167,218 @@ class iCloudCalendarService {
     });
   }
   async events(from, to) {
-    return this.fetchEndpoint("/events", {
-      startDate: (0, import_dayjs.default)(from != null ? from : (0, import_dayjs.default)().startOf("month")).format(this.dateFormat),
-      endDate: (0, import_dayjs.default)(to != null ? to : (0, import_dayjs.default)().endOf("month")).format(this.dateFormat),
-      dsid: this.dsid,
-      lang: "en-us",
-      usertz: this.tz
-    });
+    return this.fetchEndpoint("/events", this.defaultParams(from, to));
   }
   async calendars(from, to) {
-    const response = await this.fetchEndpoint("/startup", {
-      startDate: (0, import_dayjs.default)(from != null ? from : (0, import_dayjs.default)().startOf("month")).format(this.dateFormat),
-      endDate: (0, import_dayjs.default)(to != null ? to : (0, import_dayjs.default)().endOf("month")).format(this.dateFormat),
-      dsid: this.dsid,
-      lang: "en-us",
-      usertz: this.tz
-    });
+    const response = await this.fetchEndpoint(
+      "/startup",
+      this.defaultParams(from, to)
+    );
     return response.Collection || [];
   }
   async startup(from, to) {
-    return this.fetchEndpoint("/startup", {
-      startDate: (0, import_dayjs.default)(from != null ? from : (0, import_dayjs.default)().startOf("month")).format(this.dateFormat),
-      endDate: (0, import_dayjs.default)(to != null ? to : (0, import_dayjs.default)().endOf("month")).format(this.dateFormat),
-      dsid: this.dsid,
-      lang: "en-us",
-      usertz: this.tz
-    });
+    return this.fetchEndpoint("/startup", this.defaultParams(from, to));
+  }
+  async getCtag(calendarGuid) {
+    const collections = await this.calendars();
+    const col = collections.find((c) => c.guid === calendarGuid);
+    if (!col) {
+      throw new Error(`Calendar with guid "${calendarGuid}" not found`);
+    }
+    return col.ctag;
+  }
+  async createEvent(opts) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+    const guid = generateGuid();
+    const now = /* @__PURE__ */ new Date();
+    const duration = Math.round((opts.endDate.getTime() - opts.startDate.getTime()) / 6e4);
+    const startDateList = dateToAppleList(opts.startDate, true);
+    const endDateList = dateToAppleList(opts.endDate, false);
+    const nowList = dateToAppleList(now, true);
+    const alarmGuids = [];
+    const alarmPayload = [];
+    if (opts.alarms && opts.alarms.length > 0) {
+      for (const alarm of opts.alarms) {
+        const alarmGuid = `${guid}:${generateGuid()}`;
+        alarmGuids.push(alarmGuid);
+        alarmPayload.push({
+          messageType: "message",
+          pGuid: guid,
+          guid: alarmGuid,
+          isLocationBased: false,
+          measurement: {
+            hours: (_a = alarm.hours) != null ? _a : 0,
+            minutes: (_b = alarm.minutes) != null ? _b : 0,
+            seconds: (_c = alarm.seconds) != null ? _c : 0,
+            days: (_d = alarm.days) != null ? _d : 0,
+            weeks: (_e = alarm.weeks) != null ? _e : 0,
+            before: (_f = alarm.before) != null ? _f : true
+          }
+        });
+      }
+    }
+    const event = {
+      title: opts.title,
+      tz: this.tz,
+      icon: 0,
+      duration,
+      allDay: (_g = opts.allDay) != null ? _g : false,
+      pGuid: opts.calendarGuid,
+      guid,
+      startDate: startDateList,
+      endDate: endDateList,
+      localStartDate: startDateList,
+      localEndDate: endDateList,
+      createdDate: nowList,
+      lastModifiedDate: nowList,
+      extendedDetailsAreIncluded: true,
+      recurrenceException: false,
+      recurrenceMaster: false,
+      hasAttachments: false,
+      readOnly: false,
+      transparent: false,
+      birthdayIsYearlessBday: false,
+      birthdayShowAsCompany: false,
+      shouldShowJunkUIWhenAppropriate: false,
+      location: (_h = opts.location) != null ? _h : "",
+      description: (_i = opts.description) != null ? _i : "",
+      url: (_j = opts.url) != null ? _j : "",
+      etag: "",
+      alarms: alarmGuids,
+      attachments: [],
+      invitees: []
+    };
+    const ctag = await this.getCtag(opts.calendarGuid);
+    const body = {
+      Event: event,
+      Invitee: [],
+      Alarm: alarmPayload,
+      ClientState: {
+        Collection: [{ guid: opts.calendarGuid, ctag }]
+      }
+    };
+    const response = await this.postEndpoint(
+      `/events/${opts.calendarGuid}/${guid}`,
+      this.defaultParams(),
+      body
+    );
+    return { guid, response };
+  }
+  async updateEvent(opts) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
+    const detail = await this.eventDetails(opts.calendarGuid, opts.eventGuid);
+    if (!detail.Event || detail.Event.length === 0) {
+      throw new Error(`Event "${opts.eventGuid}" not found`);
+    }
+    const existing = detail.Event[0];
+    const resolvedEtag = (_a = opts.etag) != null ? _a : existing.etag;
+    if (!resolvedEtag) {
+      throw new Error(`Could not determine etag for event "${opts.eventGuid}"`);
+    }
+    const now = /* @__PURE__ */ new Date();
+    const nowList = dateToAppleList(now, true);
+    const startDate = opts.startDate;
+    const endDate = opts.endDate;
+    const startDateList = startDate ? dateToAppleList(startDate, true) : existing.localStartDate;
+    const endDateList = endDate ? dateToAppleList(endDate, false) : existing.localEndDate;
+    const startMs = startDate ? startDate.getTime() : new Date(
+      existing.localStartDate[1],
+      existing.localStartDate[2] - 1,
+      existing.localStartDate[3],
+      (_b = existing.localStartDate[4]) != null ? _b : 0,
+      (_c = existing.localStartDate[5]) != null ? _c : 0
+    ).getTime();
+    const endMs = endDate ? endDate.getTime() : new Date(
+      existing.localEndDate[1],
+      existing.localEndDate[2] - 1,
+      existing.localEndDate[3],
+      (_d = existing.localEndDate[4]) != null ? _d : 0,
+      (_e = existing.localEndDate[5]) != null ? _e : 0
+    ).getTime();
+    const duration = Math.round((endMs - startMs) / 6e4);
+    const alarmGuids = [];
+    const alarmPayload = [];
+    if (opts.alarms !== void 0) {
+      for (const alarm of opts.alarms) {
+        const alarmGuid = `${opts.eventGuid}:${generateGuid()}`;
+        alarmGuids.push(alarmGuid);
+        alarmPayload.push({
+          messageType: "message",
+          pGuid: opts.eventGuid,
+          guid: alarmGuid,
+          isLocationBased: false,
+          measurement: {
+            hours: (_f = alarm.hours) != null ? _f : 0,
+            minutes: (_g = alarm.minutes) != null ? _g : 0,
+            seconds: (_h = alarm.seconds) != null ? _h : 0,
+            days: (_i = alarm.days) != null ? _i : 0,
+            weeks: (_j = alarm.weeks) != null ? _j : 0,
+            before: (_k = alarm.before) != null ? _k : true
+          }
+        });
+      }
+    }
+    const event = {
+      ...existing,
+      title: (_l = opts.title) != null ? _l : existing.title,
+      allDay: opts.allDay !== void 0 ? opts.allDay : existing.allDay,
+      location: opts.location !== void 0 ? opts.location : (_m = existing.location) != null ? _m : "",
+      description: opts.description !== void 0 ? opts.description : (_n = existing.description) != null ? _n : "",
+      url: opts.url !== void 0 ? opts.url : (_o = existing.url) != null ? _o : "",
+      startDate: startDateList,
+      endDate: endDateList,
+      localStartDate: startDateList,
+      localEndDate: endDateList,
+      duration,
+      lastModifiedDate: nowList,
+      etag: resolvedEtag,
+      alarms: opts.alarms !== void 0 ? alarmGuids : existing.alarms
+    };
+    const ctag = await this.getCtag(opts.calendarGuid);
+    const body = {
+      Event: event,
+      Invitee: [],
+      Alarm: opts.alarms !== void 0 ? alarmPayload : (_p = detail.Alarm) != null ? _p : [],
+      ClientState: {
+        Collection: [{ guid: opts.calendarGuid, ctag }]
+      }
+    };
+    const params = {
+      ...this.defaultParams(),
+      ifMatch: resolvedEtag
+    };
+    return this.postEndpoint(
+      `/events/${opts.calendarGuid}/${opts.eventGuid}`,
+      params,
+      body
+    );
+  }
+  async deleteEvent(calendarGuid, eventGuid, etag) {
+    let resolvedEtag = etag;
+    if (!resolvedEtag) {
+      const detail = await this.eventDetails(calendarGuid, eventGuid);
+      if (detail.Event && detail.Event.length > 0) {
+        resolvedEtag = detail.Event[0].etag;
+      }
+      if (!resolvedEtag) {
+        throw new Error(`Could not determine etag for event "${eventGuid}"`);
+      }
+    }
+    const ctag = await this.getCtag(calendarGuid);
+    const body = {
+      Event: {},
+      Invitee: [],
+      Alarm: [],
+      ClientState: {
+        Collection: [{ guid: calendarGuid, ctag }]
+      }
+    };
+    const params = {
+      ...this.defaultParams(),
+      methodOverride: "DELETE",
+      ifMatch: resolvedEtag
+    };
+    return this.postEndpoint(`/events/${calendarGuid}/${eventGuid}`, params, body);
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

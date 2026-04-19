@@ -366,6 +366,39 @@
                     "xl": 3,
                     "default": false
                 },
+                "_photosHeader": {
+                    "type": "header",
+                    "text": "photosHeader",
+                    "size": 5,
+                    "newLine": true
+                },
+                "photosEnabled": {
+                    "type": "checkbox",
+                    "label": "photosEnabled",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false
+                },
+                "photosInterval": {
+                    "type": "number",
+                    "label": "photosInterval",
+                    "help": "photosIntervalHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 15,
+                    "max": 1440,
+                    "step": 1,
+                    "default": 60,
+                    "disabled": "!data.photosEnabled"
+                },
                 "_accountHeader": {
                     "type": "header",
                     "text": "accountHeader",

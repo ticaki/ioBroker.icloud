@@ -1070,3 +1070,410 @@ Blockly.JavaScript['icloud_drive_get'] = function (block) {
     code += '})()';
     return [code, Blockly.JavaScript.ORDER_FUNCTION_CALL];
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Translations — Calendar blocks
+// ══════════════════════════════════════════════════════════════════════════════
+
+Blockly.Words['icloud_calendar_event'] = {
+    en: 'iCloud Calendar: Event action',
+    de: 'iCloud Kalender: Termin-Aktion',
+    ru: 'iCloud Календарь: Действие с событием',
+    pt: 'iCloud Calendário: Ação de evento',
+    nl: 'iCloud Kalender: Evenement-actie',
+    fr: 'iCloud Calendrier: Action événement',
+    it: 'iCloud Calendario: Azione evento',
+    es: 'iCloud Calendario: Acción de evento',
+    pl: 'iCloud Kalendarz: Akcja wydarzenia',
+    uk: 'iCloud Календар: Дія з подією',
+    'zh-cn': 'iCloud 日历: 事件操作',
+};
+Blockly.Words['icloud_calendar_action_create'] = {
+    en: 'Create',
+    de: 'Erstellen',
+    ru: 'Создать',
+    pt: 'Criar',
+    nl: 'Aanmaken',
+    fr: 'Créer',
+    it: 'Crea',
+    es: 'Crear',
+    pl: 'Utwórz',
+    uk: 'Створити',
+    'zh-cn': '创建',
+};
+Blockly.Words['icloud_calendar_action_delete'] = {
+    en: 'Delete',
+    de: 'Löschen',
+    ru: 'Удалить',
+    pt: 'Excluir',
+    nl: 'Verwijderen',
+    fr: 'Supprimer',
+    it: 'Eliminare',
+    es: 'Eliminar',
+    pl: 'Usuń',
+    uk: 'Видалити',
+    'zh-cn': '删除',
+};
+Blockly.Words['icloud_calendar_guid'] = {
+    en: 'Calendar GUID',
+    de: 'Kalender-GUID',
+    ru: 'GUID календаря',
+    pt: 'GUID do calendário',
+    nl: 'Kalender-GUID',
+    fr: 'GUID du calendrier',
+    it: 'GUID calendario',
+    es: 'GUID del calendario',
+    pl: 'GUID kalendarza',
+    uk: 'GUID календаря',
+    'zh-cn': '日历GUID',
+};
+Blockly.Words['icloud_event_guid'] = {
+    en: 'Event GUID (for delete)',
+    de: 'Termin-GUID (zum Löschen)',
+    ru: 'GUID события (для удаления)',
+    pt: 'GUID do evento (para excluir)',
+    nl: 'Evenement-GUID (voor verwijderen)',
+    fr: 'GUID événement (pour suppression)',
+    it: 'GUID evento (per eliminare)',
+    es: 'GUID del evento (para eliminar)',
+    pl: 'GUID wydarzenia (do usunięcia)',
+    uk: 'GUID події (для видалення)',
+    'zh-cn': '事件GUID（用于删除）',
+};
+Blockly.Words['icloud_calendar_startDate'] = {
+    en: 'Start date (timestamp)',
+    de: 'Startdatum (Zeitstempel)',
+    ru: 'Начало (метка времени)',
+    pt: 'Data de início (timestamp)',
+    nl: 'Startdatum (tijdstempel)',
+    fr: 'Date de début (timestamp)',
+    it: 'Data inizio (timestamp)',
+    es: 'Fecha de inicio (timestamp)',
+    pl: 'Data rozpoczęcia (znacznik czasu)',
+    uk: 'Дата початку (часова мітка)',
+    'zh-cn': '开始日期（时间戳）',
+};
+Blockly.Words['icloud_calendar_endDate'] = {
+    en: 'End date (timestamp)',
+    de: 'Enddatum (Zeitstempel)',
+    ru: 'Конец (метка времени)',
+    pt: 'Data de término (timestamp)',
+    nl: 'Einddatum (tijdstempel)',
+    fr: 'Date de fin (timestamp)',
+    it: 'Data fine (timestamp)',
+    es: 'Fecha de fin (timestamp)',
+    pl: 'Data zakończenia (znacznik czasu)',
+    uk: 'Дата закінчення (часова мітка)',
+    'zh-cn': '结束日期（时间戳）',
+};
+Blockly.Words['icloud_calendar_allDay'] = {
+    en: 'All day',
+    de: 'Ganztägig',
+    ru: 'Весь день',
+    pt: 'Dia inteiro',
+    nl: 'Hele dag',
+    fr: 'Toute la journée',
+    it: 'Tutto il giorno',
+    es: 'Todo el día',
+    pl: 'Cały dzień',
+    uk: 'Весь день',
+    'zh-cn': '全天',
+};
+Blockly.Words['icloud_calendar_location'] = {
+    en: 'Location (optional)',
+    de: 'Ort (optional)',
+    ru: 'Место (необязательно)',
+    pt: 'Local (opcional)',
+    nl: 'Locatie (optioneel)',
+    fr: 'Lieu (facultatif)',
+    it: 'Luogo (opzionale)',
+    es: 'Ubicación (opcional)',
+    pl: 'Lokalizacja (opcjonalnie)',
+    uk: 'Місце (необов\'язково)',
+    'zh-cn': '位置（可选）',
+};
+Blockly.Words['icloud_calendar_alarmMinutes'] = {
+    en: 'Alarm (minutes before, 0 = none)',
+    de: 'Alarm (Minuten vorher, 0 = kein)',
+    ru: 'Напоминание (минуты до, 0 = нет)',
+    pt: 'Alarme (minutos antes, 0 = nenhum)',
+    nl: 'Alarm (minuten voor, 0 = geen)',
+    fr: 'Alarme (minutes avant, 0 = aucune)',
+    it: 'Allarme (minuti prima, 0 = nessuno)',
+    es: 'Alarma (minutos antes, 0 = ninguna)',
+    pl: 'Alarm (minuty przed, 0 = brak)',
+    uk: 'Нагадування (хвилин до, 0 = немає)',
+    'zh-cn': '提醒（提前分钟数，0 = 无）',
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  7) icloud_calendar_event (create / delete)
+// ══════════════════════════════════════════════════════════════════════════════
+
+Blockly.Sendto.blocks['icloud_calendar_event'] =
+    '<sep gap="5"></sep>' +
+    '<block type="icloud_calendar_event">' +
+    '  <field name="INSTANCE"></field>' +
+    '  <field name="ACTION">create</field>' +
+    '  <field name="ALL_DAY">FALSE</field>' +
+    '  <field name="LOG"></field>' +
+    '  <value name="CALENDAR_GUID">' +
+    '    <shadow type="text"><field name="TEXT"></field></shadow>' +
+    '  </value>' +
+    '  <value name="TITLE">' +
+    '    <shadow type="text"><field name="TEXT">My event</field></shadow>' +
+    '  </value>' +
+    '  <value name="START_DATE">' +
+    '    <shadow type="math_number"><field name="NUM">0</field></shadow>' +
+    '  </value>' +
+    '  <value name="END_DATE">' +
+    '    <shadow type="math_number"><field name="NUM">0</field></shadow>' +
+    '  </value>' +
+    '  <value name="EVENT_GUID">' +
+    '    <shadow type="text"><field name="TEXT"></field></shadow>' +
+    '  </value>' +
+    '  <value name="LOCATION">' +
+    '    <shadow type="text"><field name="TEXT"></field></shadow>' +
+    '  </value>' +
+    '  <value name="ALARM_MINUTES">' +
+    '    <shadow type="math_number"><field name="NUM">0</field></shadow>' +
+    '  </value>' +
+    '</block>';
+
+Blockly.Blocks['icloud_calendar_event'] = {
+    init: function () {
+        var options = icloudGetInstances(Blockly.Translate('icloud_anyInstance'));
+
+        this.appendDummyInput('INSTANCE')
+            .appendField(Blockly.Translate('icloud_calendar_event'))
+            .appendField(new Blockly.FieldDropdown(options), 'INSTANCE');
+
+        this.appendDummyInput('ACTION')
+            .appendField(Blockly.Translate('icloud_action'))
+            .appendField(
+                new Blockly.FieldDropdown([
+                    [Blockly.Translate('icloud_calendar_action_create'), 'create'],
+                    [Blockly.Translate('icloud_calendar_action_delete'), 'delete'],
+                ]),
+                'ACTION',
+            );
+
+        this.appendValueInput('CALENDAR_GUID').appendField(Blockly.Translate('icloud_calendar_guid'));
+
+        this.appendValueInput('TITLE').appendField(Blockly.Translate('icloud_title'));
+
+        this.appendValueInput('START_DATE').appendField(Blockly.Translate('icloud_calendar_startDate'));
+
+        this.appendValueInput('END_DATE').appendField(Blockly.Translate('icloud_calendar_endDate'));
+
+        this.appendDummyInput('ALL_DAY')
+            .appendField(Blockly.Translate('icloud_calendar_allDay'))
+            .appendField(new Blockly.FieldCheckbox('FALSE'), 'ALL_DAY');
+
+        this.appendValueInput('LOCATION').appendField(Blockly.Translate('icloud_calendar_location'));
+
+        this.appendValueInput('ALARM_MINUTES').appendField(Blockly.Translate('icloud_calendar_alarmMinutes'));
+
+        this.appendValueInput('EVENT_GUID').appendField(Blockly.Translate('icloud_event_guid'));
+
+        this.appendDummyInput('LOG')
+            .appendField(Blockly.Translate('icloud_log'))
+            .appendField(
+                new Blockly.FieldDropdown([
+                    ['none', ''],
+                    ['debug', 'debug'],
+                    ['info', 'info'],
+                    ['warn', 'warn'],
+                    ['error', 'error'],
+                ]),
+                'LOG',
+            );
+
+        this.setInputsInline(false);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(Blockly.Sendto.HUE);
+        this.setTooltip(Blockly.Translate('icloud_calendar_event'));
+        this.setHelpUrl(Blockly.Translate('icloud_help'));
+    },
+};
+
+Blockly.JavaScript['icloud_calendar_event'] = function (block) {
+    var instance = block.getFieldValue('INSTANCE');
+    var action = block.getFieldValue('ACTION');
+    var calendarGuid = Blockly.JavaScript.valueToCode(block, 'CALENDAR_GUID', Blockly.JavaScript.ORDER_ATOMIC);
+    var logLevel = block.getFieldValue('LOG');
+
+    var code;
+    if (action === 'delete') {
+        var eventGuid = Blockly.JavaScript.valueToCode(block, 'EVENT_GUID', Blockly.JavaScript.ORDER_ATOMIC);
+        code = 'sendTo(\'icloud' + instance + "', 'deleteCalendarEvent', {\n";
+        code += '  calendarGuid: ' + (calendarGuid || "''") + ',\n';
+        code += '  eventGuid: ' + (eventGuid || "''") + '\n';
+        code += '}, function (result) {\n';
+        if (logLevel) {
+            code += "  console." + logLevel + "('iCloud deleteCalendarEvent: ' + JSON.stringify(result));\n";
+        }
+        code += '});\n';
+    } else {
+        var title = Blockly.JavaScript.valueToCode(block, 'TITLE', Blockly.JavaScript.ORDER_ATOMIC);
+        var startDate = Blockly.JavaScript.valueToCode(block, 'START_DATE', Blockly.JavaScript.ORDER_ATOMIC);
+        var endDate = Blockly.JavaScript.valueToCode(block, 'END_DATE', Blockly.JavaScript.ORDER_ATOMIC);
+        var allDay = block.getFieldValue('ALL_DAY') === 'TRUE';
+        var location = Blockly.JavaScript.valueToCode(block, 'LOCATION', Blockly.JavaScript.ORDER_ATOMIC);
+        var alarmMinutes = Blockly.JavaScript.valueToCode(block, 'ALARM_MINUTES', Blockly.JavaScript.ORDER_ATOMIC);
+
+        code = 'sendTo(\'icloud' + instance + "', 'createCalendarEvent', {\n";
+        code += '  calendarGuid: ' + (calendarGuid || "''") + ',\n';
+        code += '  title: ' + (title || "''") + ',\n';
+        code += '  startDate: ' + (startDate || '0') + ',\n';
+        code += '  endDate: ' + (endDate || '0') + ',\n';
+        code += '  allDay: ' + allDay + ',\n';
+        if (location) {
+            code += '  location: ' + location + ' || undefined,\n';
+        }
+        if (alarmMinutes) {
+            code += '  alarms: (' + alarmMinutes + ' > 0) ? [{ before: true, minutes: ' + alarmMinutes + ', hours: 0, days: 0, weeks: 0, seconds: 0 }] : undefined,\n';
+        }
+        code += '}, function (result) {\n';
+        if (logLevel) {
+            code += "  console." + logLevel + "('iCloud createCalendarEvent: ' + JSON.stringify(result));\n";
+        }
+        code += '});\n';
+    }
+    return code;
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  8) icloud_calendar_create_result  (Value-Block — returns result object)
+// ══════════════════════════════════════════════════════════════════════════════
+
+Blockly.Words['icloud_calendar_create_result'] = {
+    en: 'iCloud Calendar: Create event (with result)',
+    de: 'iCloud Kalender: Termin erstellen (mit Ergebnis)',
+    ru: 'iCloud Календарь: Создать событие (с результатом)',
+    pt: 'iCloud Calendário: Criar evento (com resultado)',
+    nl: 'iCloud Kalender: Evenement aanmaken (met resultaat)',
+    fr: 'iCloud Calendrier: Créer événement (avec résultat)',
+    it: 'iCloud Calendario: Crea evento (con risultato)',
+    es: 'iCloud Calendario: Crear evento (con resultado)',
+    pl: 'iCloud Kalendarz: Utwórz wydarzenie (z wynikiem)',
+    uk: 'iCloud Календар: Створити подію (з результатом)',
+    'zh-cn': 'iCloud 日历: 创建事件（带返回值）',
+};
+
+Blockly.Sendto.blocks['icloud_calendar_create_result'] =
+    '<sep gap="5"></sep>' +
+    '<block type="icloud_calendar_create_result">' +
+    '  <field name="INSTANCE"></field>' +
+    '  <field name="ALL_DAY">FALSE</field>' +
+    '  <field name="LOG"></field>' +
+    '  <value name="CALENDAR_GUID">' +
+    '    <shadow type="text"><field name="TEXT"></field></shadow>' +
+    '  </value>' +
+    '  <value name="TITLE">' +
+    '    <shadow type="text"><field name="TEXT">My event</field></shadow>' +
+    '  </value>' +
+    '  <value name="START_DATE">' +
+    '    <shadow type="math_number"><field name="NUM">0</field></shadow>' +
+    '  </value>' +
+    '  <value name="END_DATE">' +
+    '    <shadow type="math_number"><field name="NUM">0</field></shadow>' +
+    '  </value>' +
+    '  <value name="LOCATION">' +
+    '    <shadow type="text"><field name="TEXT"></field></shadow>' +
+    '  </value>' +
+    '  <value name="ALARM_MINUTES">' +
+    '    <shadow type="math_number"><field name="NUM">0</field></shadow>' +
+    '  </value>' +
+    '</block>';
+
+Blockly.Blocks['icloud_calendar_create_result'] = {
+    init: function () {
+        var options = icloudGetInstances(Blockly.Translate('icloud_anyInstance'));
+
+        this.appendDummyInput('INSTANCE')
+            .appendField(Blockly.Translate('icloud_calendar_create_result'))
+            .appendField(new Blockly.FieldDropdown(options), 'INSTANCE');
+
+        this.appendValueInput('CALENDAR_GUID').appendField(Blockly.Translate('icloud_calendar_guid'));
+
+        this.appendValueInput('TITLE').appendField(Blockly.Translate('icloud_title'));
+
+        this.appendValueInput('START_DATE').appendField(Blockly.Translate('icloud_calendar_startDate'));
+
+        this.appendValueInput('END_DATE').appendField(Blockly.Translate('icloud_calendar_endDate'));
+
+        this.appendDummyInput('ALL_DAY')
+            .appendField(Blockly.Translate('icloud_calendar_allDay'))
+            .appendField(new Blockly.FieldCheckbox('FALSE'), 'ALL_DAY');
+
+        this.appendValueInput('LOCATION').appendField(Blockly.Translate('icloud_calendar_location'));
+
+        this.appendValueInput('ALARM_MINUTES').appendField(Blockly.Translate('icloud_calendar_alarmMinutes'));
+
+        this.appendDummyInput('LOG')
+            .appendField(Blockly.Translate('icloud_log'))
+            .appendField(
+                new Blockly.FieldDropdown([
+                    ['none', ''],
+                    ['debug', 'debug'],
+                    ['info', 'info'],
+                    ['warn', 'warn'],
+                    ['error', 'error'],
+                ]),
+                'LOG',
+            );
+
+        this.setInputsInline(false);
+        this.setOutput(true, null);
+        this.setColour(Blockly.Sendto.HUE);
+        this.setTooltip(Blockly.Translate('icloud_calendar_create_result'));
+        this.setHelpUrl(Blockly.Translate('icloud_help'));
+    },
+};
+
+Blockly.JavaScript['icloud_calendar_create_result'] = function (block) {
+    var instance = block.getFieldValue('INSTANCE');
+    var calendarGuid = Blockly.JavaScript.valueToCode(block, 'CALENDAR_GUID', Blockly.JavaScript.ORDER_ATOMIC);
+    var title = Blockly.JavaScript.valueToCode(block, 'TITLE', Blockly.JavaScript.ORDER_ATOMIC);
+    var startDate = Blockly.JavaScript.valueToCode(block, 'START_DATE', Blockly.JavaScript.ORDER_ATOMIC);
+    var endDate = Blockly.JavaScript.valueToCode(block, 'END_DATE', Blockly.JavaScript.ORDER_ATOMIC);
+    var allDay = block.getFieldValue('ALL_DAY') === 'TRUE';
+    var location = Blockly.JavaScript.valueToCode(block, 'LOCATION', Blockly.JavaScript.ORDER_ATOMIC);
+    var alarmMinutes = Blockly.JavaScript.valueToCode(block, 'ALARM_MINUTES', Blockly.JavaScript.ORDER_ATOMIC);
+    var logLevel = block.getFieldValue('LOG');
+
+    var resultVar =
+        'icloudCalResult_' +
+        Blockly.JavaScript.variableDB_.getDistinctName('data', Blockly.Variables.NAME_TYPE);
+
+    var code = '(function () {\n';
+    code += '  var ' + resultVar + ';\n';
+    code += '  sendTo(\'icloud' + instance + "', 'createCalendarEvent', {\n";
+    code += '    calendarGuid: ' + (calendarGuid || "''") + ',\n';
+    code += '    title: ' + (title || "''") + ',\n';
+    code += '    startDate: ' + (startDate || '0') + ',\n';
+    code += '    endDate: ' + (endDate || '0') + ',\n';
+    code += '    allDay: ' + allDay + ',\n';
+    if (location) {
+        code += '    location: ' + location + ' || undefined,\n';
+    }
+    if (alarmMinutes) {
+        code +=
+            '    alarms: (' +
+            alarmMinutes +
+            ' > 0) ? [{ before: true, minutes: ' +
+            alarmMinutes +
+            ', hours: 0, days: 0, weeks: 0, seconds: 0 }] : undefined,\n';
+    }
+    code += '  }, function (result) {\n';
+    if (logLevel) {
+        code += "    console." + logLevel + "('iCloud createCalendarEvent: ' + JSON.stringify(result));\n";
+    }
+    code += '    ' + resultVar + ' = result;\n';
+    code += '  });\n';
+    code += '  return ' + resultVar + ';\n';
+    code += '})()';
+    return [code, Blockly.JavaScript.ORDER_FUNCTION_CALL];
+};

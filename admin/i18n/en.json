@@ -75,5 +75,9 @@
 	"geocodingCacheLarge": "Large (~300 MB, ~1 500 000 entries)",
 	"geocodingInfoTraccar": "Self-hosted server — no external rate limit. Street names are returned in the ioBroker system language (where supported by the server).\nSetup guide: https://www.traccar.org/geocoder/\nAPI key: depends on your server configuration — see the guide above.",
 	"geocodingInfoNominatim": "No API key required for the public server (https://nominatim.openstreetmap.org). Street names are returned in the ioBroker system language.\nUsage policy (max 1 req/s, fair use, no bulk requests): https://operations.osmfoundation.org/policies/nominatim/\nFor heavy use, run your own instance: https://nominatim.org/release-docs/latest/admin/Installation/",
-	"geocodingInfoOpencage": "API key required. Street names are returned in the ioBroker system language.\nFree tier: 2 500 requests/day (no credit card required).\nGet your API key: https://opencagedata.com/users/sign_up\nPricing & limits: https://opencagedata.com/pricing\nAPI documentation: https://opencagedata.com/api"
+	"geocodingInfoOpencage": "API key required. Street names are returned in the ioBroker system language.\nFree tier: 2 500 requests/day (no credit card required).\nGet your API key: https://opencagedata.com/users/sign_up\nPricing & limits: https://opencagedata.com/pricing\nAPI documentation: https://opencagedata.com/api",
+	"photosHeader": "iCloud Photos",
+	"photosEnabled": "Enable Photos",
+	"photosInterval": "Refresh interval (minutes)",
+	"photosIntervalHelp": "How often photo metadata is fetched (15–1440 minutes)"
 }

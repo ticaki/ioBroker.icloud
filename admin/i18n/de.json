@@ -75,5 +75,9 @@
 	"geocodingCacheLarge": "Groß (~300 MB, ~1 500 000 Einträge)",
 	"geocodingInfoTraccar": "Selbst gehosteter Dienst — kein externes Rate-Limit. Straßennamen werden in der ioBroker-Systemsprache zurückgegeben (sofern vom Server unterstützt).\nEinrichtungsanleitung: https://www.traccar.org/geocoder/\nAPI-Schlüssel: abhängig von der Serverkonfiguration — siehe Anleitung oben.",
 	"geocodingInfoNominatim": "Kein API-Schlüssel für den öffentlichen Server (https://nominatim.openstreetmap.org) erforderlich. Straßennamen werden in der ioBroker-Systemsprache zurückgegeben.\nNutzungsrichtlinie (max. 1 Anfrage/s, Fair Use, keine Massenanfragen): https://operations.osmfoundation.org/policies/nominatim/\nFür intensiven Einsatz eigene Instanz betreiben: https://nominatim.org/release-docs/latest/admin/Installation/",
-	"geocodingInfoOpencage": "API-Schlüssel erforderlich. Straßennamen werden in der ioBroker-Systemsprache zurückgegeben.\nFree-Tier: 2.500 Anfragen/Tag (keine Kreditkarte nötig).\nAPI-Schlüssel holen: https://opencagedata.com/users/sign_up\nPreise & Limits: https://opencagedata.com/pricing\nAPI-Dokumentation: https://opencagedata.com/api"
+	"geocodingInfoOpencage": "API-Schlüssel erforderlich. Straßennamen werden in der ioBroker-Systemsprache zurückgegeben.\nFree-Tier: 2.500 Anfragen/Tag (keine Kreditkarte nötig).\nAPI-Schlüssel holen: https://opencagedata.com/users/sign_up\nPreise & Limits: https://opencagedata.com/pricing\nAPI-Dokumentation: https://opencagedata.com/api",
+	"photosHeader": "iCloud Fotos",
+	"photosEnabled": "Fotos aktivieren",
+	"photosInterval": "Aktualisierungsintervall (Minuten)",
+	"photosIntervalHelp": "Wie oft Foto-Metadaten abgefragt werden (15–1440 Minuten)"
 }

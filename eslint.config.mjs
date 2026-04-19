@@ -3,37 +3,38 @@
 import config from '@iobroker/eslint-config';
 import pluginUnicorn from 'eslint-plugin-unicorn';
 
+
 export default [
-	...config,
-	{
-		// specify files to exclude from linting here
-		ignores: [
-			'.dev-server/',
-			'.vscode/',
-			'*.test.js',
-			'test/**/*.js',
-			'*.config.mjs',
-			'build',
-			'dist',
-			'admin/words.js',
-			'admin/admin.d.ts',
-			'admin/blockly.js',
-			'**/adapter-config.d.ts',
-			'widgets/**/*.js',
-			'tasks.ts',
+    ...config,
+    {
+        // specify files to exclude from linting here
+        ignores: [
+            '.dev-server/',
+            '.vscode/',
+            '*.test.js',
+            'test/**/*.js',
+            '*.config.mjs',
+            'build',
+            'dist',
+            'admin/words.js',
+            'admin/admin.d.ts',
+            'admin/blockly.js',
+            '**/adapter-config.d.ts',
+            'widgets/**/*.js',
+            'tasks.ts',
             'data',
-            'admin',,
+            'admin', ,
             'src-admin',
 
-		],
-	},
-	{
+        ],
+    },
+    {
         plugins: {
             unicorn: pluginUnicorn,   // <- wichtig: als Objekt
         },
-		// you may disable some 'jsdoc' warnings - but using jsdoc is highly recommended
-		// as this improves maintainability. jsdoc warnings will not block build process.
-		rules: {
+        // you may disable some 'jsdoc' warnings - but using jsdoc is highly recommended
+        // as this improves maintainability. jsdoc warnings will not block build process.
+        rules: {
             'jsdoc/require-jsdoc': 'off',
             "require-await": "off",
             "@typescript-eslint/require-await": "off",
@@ -49,5 +50,5 @@ export default [
             ]
             // or "@typescript-eslint/no-unused-vars": "off",
         },
-	},
+    },
 ];

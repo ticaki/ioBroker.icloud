@@ -214,6 +214,8 @@ class Icloud extends utils.Adapter {
   contactsSyncMapLoaded = false;
   notesRefreshTimer = null;
   notesSyncMapLoaded = false;
+  photosRefreshTimer = null;
+  photosFirstLoad = true;
   driveRefreshTimer = null;
   accountStorageRefreshTimer = null;
   findMyFirstLoad = true;
@@ -566,6 +568,13 @@ class Icloud extends utils.Adapter {
         this.log.warn(`Notes initial refresh failed: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
       });
       this.scheduleNotesRefresh();
+    }
+    if (activeServices.includes("ckdatabasews") && this.config.photosEnabled) {
+      this.refreshPhotos().catch((err) => {
+        var _a2;
+        this.log.warn(`Photos initial refresh failed: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
+      });
+      this.schedulePhotosRefresh();
     }
     if (activeServices.includes("drivews") && this.config.driveEnabled) {
       try {
@@ -1935,6 +1944,128 @@ class Icloud extends utils.Adapter {
     schedule();
     this.log.debug(`Notes refresh scheduled every ${intervalMin} min`);
   }
+  // ── Photos helpers ────────────────────────────────────────────────────────
+  async refreshPhotos() {
+    var _a;
+    if (!this.icloud) {
+      return;
+    }
+    try {
+      const photosService = this.icloud.getService("photos");
+      if (this.photosFirstLoad) {
+        const ready = await photosService.checkIndexingState();
+        if (!ready) {
+          this.log.warn("Photos: library is still indexing \u2014 metadata may be incomplete");
+        }
+      }
+      await this.writePhotosStates(photosService);
+      if (this.photosFirstLoad) {
+        this.photosFirstLoad = false;
+      }
+    } catch (err) {
+      const msg = (_a = err == null ? void 0 : err.message) != null ? _a : String(err);
+      this.log.warn(`Photos refresh failed: ${msg}`);
+    }
+  }
+  async writePhotosStates(photosService) {
+    await this.extendObject("photos", {
+      type: "channel",
+      common: { name: "iCloud Photos" },
+      native: {}
+    });
+    await this.extendObject("photos.lastSync", {
+      type: "state",
+      common: { name: "Last Sync", type: "number", role: "value.time", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("photos.albumCount", {
+      type: "state",
+      common: { name: "Album Count", type: "number", role: "value", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("photos.photoCount", {
+      type: "state",
+      common: { name: "Total Photos", type: "number", role: "value", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("photos.videoCount", {
+      type: "state",
+      common: { name: "Total Videos", type: "number", role: "value", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("photos.favoriteCount", {
+      type: "state",
+      common: { name: "Favorites", type: "number", role: "value", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("photos.albums", {
+      type: "state",
+      common: { name: "Albums (JSON)", type: "string", role: "json", read: true, write: false },
+      native: {}
+    });
+    const summaries = await photosService.getAlbumSummaries();
+    const albumCount = summaries.length;
+    let photoCount = 0;
+    let videoCount = 0;
+    let favoriteCount = 0;
+    for (const s of summaries) {
+      if (s.name === "All Photos") {
+        photoCount = s.photoCount;
+      } else if (s.name === "Videos") {
+        videoCount = s.photoCount;
+      } else if (s.name === "Favorites") {
+        favoriteCount = s.photoCount;
+      }
+    }
+    await this.setStateIfChanged("photos.albumCount", albumCount);
+    await this.setStateIfChanged("photos.photoCount", photoCount);
+    await this.setStateIfChanged("photos.videoCount", videoCount);
+    await this.setStateIfChanged("photos.favoriteCount", favoriteCount);
+    await this.setStateIfChanged(
+      "photos.albums",
+      JSON.stringify(summaries.map((s) => ({ name: s.name, photoCount: s.photoCount })))
+    );
+    await this.setState("photos.lastSync", Date.now(), true);
+    if (this.photosFirstLoad) {
+      this.log.info(
+        `Photos ready \u2014 ${albumCount} album(s), ${photoCount} photo(s), ${videoCount} video(s), ${favoriteCount} favorite(s)`
+      );
+    } else {
+      this.log.debug(`Photos refresh done \u2014 ${albumCount} album(s), ${photoCount} photo(s)`);
+    }
+  }
+  schedulePhotosRefresh() {
+    var _a;
+    if (this.photosRefreshTimer) {
+      this.clearTimeout(this.photosRefreshTimer);
+      this.photosRefreshTimer = null;
+    }
+    let intervalMin = Math.floor((_a = this.config.photosInterval) != null ? _a : 60);
+    if (!Number.isFinite(intervalMin) || intervalMin < 15) {
+      this.log.warn(
+        `Photos interval is ${this.config.photosInterval} \u2014 value below 15 minutes, falling back to 60 minutes`
+      );
+      intervalMin = 60;
+    } else if (intervalMin > 1440) {
+      this.log.warn(`Photos interval is ${intervalMin} minutes \u2014 clamping to 1440 minutes`);
+      intervalMin = 1440;
+    }
+    const INTERVAL_MS = intervalMin * 60 * 1e3;
+    const schedule = () => {
+      this.photosRefreshTimer = this.setTimeout(async () => {
+        this.photosRefreshTimer = null;
+        if (!this.icloud) {
+          return;
+        }
+        this.log.debug("Photos scheduled refresh starting...");
+        this.icloud.getService("photos").resetAlbums();
+        await this.refreshPhotos();
+        schedule();
+      }, INTERVAL_MS);
+    };
+    schedule();
+    this.log.debug(`Photos refresh scheduled every ${intervalMin} min`);
+  }
   // ── iCloud Drive helpers ──────────────────────────────────────────────────
   async refreshDrive() {
     var _a, _b, _c;
@@ -2194,6 +2325,10 @@ class Icloud extends utils.Adapter {
           this.clearTimeout(this.notesRefreshTimer);
           this.notesRefreshTimer = null;
         }
+        if (this.photosRefreshTimer) {
+          this.clearTimeout(this.photosRefreshTimer);
+          this.photosRefreshTimer = null;
+        }
         if (this.driveRefreshTimer) {
           this.clearTimeout(this.driveRefreshTimer);
           this.driveRefreshTimer = null;
@@ -2339,7 +2474,16 @@ class Icloud extends utils.Adapter {
     if (typeof obj !== "object") {
       return;
     }
-    const requiresPayload = ["submitMfa", "createReminder", "completeReminder", "updateReminder", "deleteReminder"];
+    const requiresPayload = [
+      "submitMfa",
+      "createReminder",
+      "completeReminder",
+      "updateReminder",
+      "deleteReminder",
+      "createCalendarEvent",
+      "updateCalendarEvent",
+      "deleteCalendarEvent"
+    ];
     if (!obj.message && requiresPayload.includes(obj.command)) {
       return;
     }
@@ -2396,10 +2540,28 @@ class Icloud extends utils.Adapter {
       this.handleGetContacts(obj);
     } else if (obj.command === "getContactGroups") {
       this.handleGetContactGroups(obj);
+    } else if (obj.command === "photosGetAlbums") {
+      this.handlePhotosGetAlbums(obj);
+    } else if (obj.command === "photosGetPhotos") {
+      this.handlePhotosGetPhotos(obj);
+    } else if (obj.command === "photosDownload") {
+      this.handlePhotosDownload(obj);
+    } else if (obj.command === "photosDelete") {
+      this.handlePhotosDelete(obj);
     } else if (obj.command === "resetRemindersSyncMap") {
       this.handleResetRemindersSyncMap(obj);
     } else if (obj.command === "getDevices") {
       this.handleGetDevices(obj);
+    } else if (obj.command === "getCalendars") {
+      this.handleGetCalendars(obj);
+    } else if (obj.command === "getCalendarEvents") {
+      this.handleGetCalendarEvents(obj);
+    } else if (obj.command === "createCalendarEvent") {
+      this.handleCreateCalendarEvent(obj);
+    } else if (obj.command === "updateCalendarEvent") {
+      this.handleUpdateCalendarEvent(obj);
+    } else if (obj.command === "deleteCalendarEvent") {
+      this.handleDeleteCalendarEvent(obj);
     }
   }
   // ── onMessage FindMy handlers ────────────────────────────────────────────
@@ -3105,6 +3267,353 @@ class Icloud extends utils.Adapter {
       contactCount: g.contactIds.length
     }));
     this.sendCallback(obj, { success: true, groups });
+  }
+  // ── onMessage Calendar handlers ─────────────────────────────────────────
+  handleGetCalendars(obj) {
+    if (!this.config.calendarEnabled) {
+      this.sendCallback(obj, {
+        success: false,
+        error: "Calendar is disabled \u2014 enable it in the adapter settings first"
+      });
+      return;
+    }
+    if (!this.icloud) {
+      this.sendCallback(obj, { success: false, error: "iCloud not connected" });
+      return;
+    }
+    const calService = this.icloud.getService("calendar");
+    calService.calendars().then((collections) => {
+      const calendars = collections.map((c) => ({
+        guid: c.guid,
+        title: c.title,
+        color: c.color,
+        symbolicColor: c.symbolicColor,
+        enabled: c.enabled,
+        isDefault: c.isDefault,
+        isFamily: c.isFamily,
+        readOnly: c.readOnly,
+        order: c.order
+      }));
+      this.sendCallback(obj, { success: true, calendars });
+    }).catch((err) => {
+      var _a;
+      this.sendCallback(obj, { success: false, error: (_a = err == null ? void 0 : err.message) != null ? _a : String(err) });
+    });
+  }
+  handleGetCalendarEvents(obj) {
+    var _a;
+    if (!this.config.calendarEnabled) {
+      this.sendCallback(obj, {
+        success: false,
+        error: "Calendar is disabled \u2014 enable it in the adapter settings first"
+      });
+      return;
+    }
+    if (!this.icloud) {
+      this.sendCallback(obj, { success: false, error: "iCloud not connected" });
+      return;
+    }
+    const msg = (_a = obj.message) != null ? _a : {};
+    const fromTs = msg.from;
+    const toTs = msg.to;
+    const calendarGuid = msg.calendarGuid;
+    const from = fromTs ? new Date(fromTs) : void 0;
+    const to = toTs ? new Date(toTs) : void 0;
+    const calService = this.icloud.getService("calendar");
+    calService.events(from, to).then((resp) => {
+      var _a2;
+      let events = (_a2 = resp.Event) != null ? _a2 : [];
+      if (calendarGuid) {
+        events = events.filter((e) => e.pGuid === calendarGuid);
+      }
+      const mapped = events.map((e) => {
+        var _a3, _b, _c, _d;
+        return {
+          guid: e.guid,
+          calendarGuid: e.pGuid,
+          title: e.title,
+          startDate: this.localDateArrayToTimestamp(e.localStartDate),
+          endDate: this.localDateArrayToTimestamp(e.localEndDate),
+          allDay: e.allDay,
+          duration: e.duration,
+          location: (_a3 = e.location) != null ? _a3 : "",
+          description: (_b = e.description) != null ? _b : "",
+          url: (_c = e.url) != null ? _c : "",
+          tz: e.tz,
+          etag: e.etag,
+          readOnly: e.readOnly,
+          recurrenceMaster: e.recurrenceMaster,
+          alarms: (_d = e.alarms) != null ? _d : []
+        };
+      });
+      this.sendCallback(obj, { success: true, events: mapped });
+    }).catch((err) => {
+      var _a2;
+      this.sendCallback(obj, { success: false, error: (_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err) });
+    });
+  }
+  handleCreateCalendarEvent(obj) {
+    var _a, _b, _c, _d, _e;
+    if (!this.config.calendarEnabled) {
+      this.sendCallback(obj, {
+        success: false,
+        error: "Calendar is disabled \u2014 enable it in the adapter settings first"
+      });
+      return;
+    }
+    const msg = obj.message;
+    if (!msg || typeof msg !== "object") {
+      this.sendCallback(obj, { success: false, error: "Message must be an object" });
+      return;
+    }
+    const calendarGuid = msg.calendarGuid;
+    const title = msg.title;
+    const startDate = msg.startDate;
+    const endDate = msg.endDate;
+    if (!calendarGuid || !title || !startDate || !endDate) {
+      this.sendCallback(obj, {
+        success: false,
+        error: 'Required fields missing: "calendarGuid", "title", "startDate" (timestamp), "endDate" (timestamp)'
+      });
+      return;
+    }
+    if (endDate <= startDate) {
+      this.sendCallback(obj, { success: false, error: '"endDate" must be after "startDate"' });
+      return;
+    }
+    if (!this.icloud) {
+      this.sendCallback(obj, { success: false, error: "iCloud not connected" });
+      return;
+    }
+    const calService = this.icloud.getService("calendar");
+    calService.createEvent({
+      calendarGuid,
+      title,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      allDay: (_a = msg.allDay) != null ? _a : false,
+      location: (_b = msg.location) != null ? _b : void 0,
+      description: (_c = msg.description) != null ? _c : void 0,
+      url: (_d = msg.url) != null ? _d : void 0,
+      alarms: (_e = msg.alarms) != null ? _e : void 0
+    }).then(({ guid }) => {
+      this.sendCallback(obj, { success: true, eventGuid: guid });
+      this.refreshCalendarEvents().catch(() => {
+      });
+    }).catch((err) => {
+      var _a2;
+      this.sendCallback(obj, { success: false, error: (_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err) });
+    });
+  }
+  handleUpdateCalendarEvent(obj) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    if (!this.config.calendarEnabled) {
+      this.sendCallback(obj, {
+        success: false,
+        error: "Calendar is disabled \u2014 enable it in the adapter settings first"
+      });
+      return;
+    }
+    const msg = obj.message;
+    if (!msg || typeof msg !== "object") {
+      this.sendCallback(obj, { success: false, error: "Message must be an object" });
+      return;
+    }
+    const calendarGuid = msg.calendarGuid;
+    const eventGuid = msg.eventGuid;
+    if (!calendarGuid || !eventGuid) {
+      this.sendCallback(obj, {
+        success: false,
+        error: 'Required fields missing: "calendarGuid" and "eventGuid"'
+      });
+      return;
+    }
+    const startDate = msg.startDate;
+    const endDate = msg.endDate;
+    if (startDate !== void 0 && endDate !== void 0 && endDate <= startDate) {
+      this.sendCallback(obj, { success: false, error: '"endDate" must be after "startDate"' });
+      return;
+    }
+    if (!this.icloud) {
+      this.sendCallback(obj, { success: false, error: "iCloud not connected" });
+      return;
+    }
+    const opts = {
+      calendarGuid,
+      eventGuid,
+      etag: (_a = msg.etag) != null ? _a : void 0,
+      title: (_b = msg.title) != null ? _b : void 0,
+      startDate: startDate !== void 0 ? new Date(startDate) : void 0,
+      endDate: endDate !== void 0 ? new Date(endDate) : void 0,
+      allDay: (_c = msg.allDay) != null ? _c : void 0,
+      location: (_d = msg.location) != null ? _d : void 0,
+      description: (_e = msg.description) != null ? _e : void 0,
+      url: (_f = msg.url) != null ? _f : void 0,
+      alarms: (_g = msg.alarms) != null ? _g : void 0
+    };
+    const calService = this.icloud.getService("calendar");
+    calService.updateEvent(opts).then(() => {
+      this.sendCallback(obj, { success: true });
+      this.refreshCalendarEvents().catch(() => {
+      });
+    }).catch((err) => {
+      var _a2;
+      this.sendCallback(obj, { success: false, error: (_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err) });
+    });
+  }
+  handleDeleteCalendarEvent(obj) {
+    if (!this.config.calendarEnabled) {
+      this.sendCallback(obj, {
+        success: false,
+        error: "Calendar is disabled \u2014 enable it in the adapter settings first"
+      });
+      return;
+    }
+    const msg = obj.message;
+    if (!msg || typeof msg !== "object") {
+      this.sendCallback(obj, { success: false, error: "Message must be an object" });
+      return;
+    }
+    const calendarGuid = msg.calendarGuid;
+    const eventGuid = msg.eventGuid;
+    if (!calendarGuid || !eventGuid) {
+      this.sendCallback(obj, {
+        success: false,
+        error: 'Required fields missing: "calendarGuid" and "eventGuid"'
+      });
+      return;
+    }
+    if (!this.icloud) {
+      this.sendCallback(obj, { success: false, error: "iCloud not connected" });
+      return;
+    }
+    const calService = this.icloud.getService("calendar");
+    calService.deleteEvent(calendarGuid, eventGuid, msg.etag).then(() => {
+      this.sendCallback(obj, { success: true });
+      this.refreshCalendarEvents().catch(() => {
+      });
+    }).catch((err) => {
+      var _a;
+      this.sendCallback(obj, { success: false, error: (_a = err == null ? void 0 : err.message) != null ? _a : String(err) });
+    });
+  }
+  // ── onMessage Photos handlers ─────────────────────────────────────────────
+  handlePhotosGetAlbums(obj) {
+    if (!this.config.photosEnabled) {
+      this.sendCallback(obj, {
+        success: false,
+        error: "Photos are disabled \u2014 enable them in the adapter settings first"
+      });
+      return;
+    }
+    if (!this.icloud) {
+      this.sendCallback(obj, { success: false, error: "iCloud not connected" });
+      return;
+    }
+    const photosService = this.icloud.getService("photos");
+    photosService.getAlbumSummaries().then((albums) => {
+      this.sendCallback(obj, { success: true, albums });
+    }).catch((err) => {
+      var _a;
+      this.sendCallback(obj, { success: false, error: (_a = err == null ? void 0 : err.message) != null ? _a : String(err) });
+    });
+  }
+  handlePhotosGetPhotos(obj) {
+    var _a;
+    if (!this.config.photosEnabled) {
+      this.sendCallback(obj, {
+        success: false,
+        error: "Photos are disabled \u2014 enable them in the adapter settings first"
+      });
+      return;
+    }
+    if (!this.icloud) {
+      this.sendCallback(obj, { success: false, error: "iCloud not connected" });
+      return;
+    }
+    const msg = obj.message;
+    const albumName = (_a = msg == null ? void 0 : msg.albumName) != null ? _a : "All Photos";
+    const offset = Math.max(0, Number(msg == null ? void 0 : msg.offset) || 0);
+    const limit = Math.min(100, Math.max(1, Number(msg == null ? void 0 : msg.limit) || 50));
+    const photosService = this.icloud.getService("photos");
+    photosService.getPhotosPage(albumName, offset, limit).then((photos) => {
+      this.sendCallback(obj, { success: true, photos });
+    }).catch((err) => {
+      var _a2;
+      this.sendCallback(obj, { success: false, error: (_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err) });
+    });
+  }
+  handlePhotosDownload(obj) {
+    var _a;
+    if (!this.config.photosEnabled) {
+      this.sendCallback(obj, {
+        success: false,
+        error: "Photos are disabled \u2014 enable them in the adapter settings first"
+      });
+      return;
+    }
+    const msg = obj.message;
+    if (!msg || typeof msg !== "object") {
+      this.sendCallback(obj, { success: false, error: "Message must be an object" });
+      return;
+    }
+    const photoId = msg.photoId;
+    if (!photoId) {
+      this.sendCallback(obj, { success: false, error: 'Required field missing: "photoId"' });
+      return;
+    }
+    if (!this.icloud) {
+      this.sendCallback(obj, { success: false, error: "iCloud not connected" });
+      return;
+    }
+    const version = (_a = msg.version) != null ? _a : "original";
+    const photosService = this.icloud.getService("photos");
+    photosService.downloadPhoto(photoId, version).then((result) => {
+      if (!result) {
+        this.sendCallback(obj, { success: false, error: `Photo not found: ${photoId}` });
+        return;
+      }
+      const base64 = Buffer.from(result.data).toString("base64");
+      this.sendCallback(obj, {
+        success: true,
+        name: result.filename,
+        size: result.size,
+        base64
+      });
+    }).catch((err) => {
+      var _a2;
+      this.sendCallback(obj, { success: false, error: (_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err) });
+    });
+  }
+  handlePhotosDelete(obj) {
+    if (!this.config.photosEnabled) {
+      this.sendCallback(obj, {
+        success: false,
+        error: "Photos are disabled \u2014 enable them in the adapter settings first"
+      });
+      return;
+    }
+    const msg = obj.message;
+    if (!msg || typeof msg !== "object") {
+      this.sendCallback(obj, { success: false, error: "Message must be an object" });
+      return;
+    }
+    const photoId = msg.photoId;
+    if (!photoId) {
+      this.sendCallback(obj, { success: false, error: 'Required field missing: "photoId"' });
+      return;
+    }
+    if (!this.icloud) {
+      this.sendCallback(obj, { success: false, error: "iCloud not connected" });
+      return;
+    }
+    const photosService = this.icloud.getService("photos");
+    photosService.deletePhoto(photoId).then((success) => {
+      this.sendCallback(obj, { success });
+    }).catch((err) => {
+      var _a;
+      this.sendCallback(obj, { success: false, error: (_a = err == null ? void 0 : err.message) != null ? _a : String(err) });
+    });
   }
   sendCallback(obj, response) {
     if (obj.callback) {
