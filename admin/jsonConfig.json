@@ -72,6 +72,49 @@
                     "default": false,
                     "disabled": "!data.findMyEnabled"
                 },
+                "_traccarHeader": {
+                    "type": "header",
+                    "text": "traccarHeader",
+                    "size": 5,
+                    "newLine": true
+                },
+                "traccarEnabled": {
+                    "type": "checkbox",
+                    "label": "traccarEnabled",
+                    "help": "traccarEnabledHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false,
+                    "disabled": "!data.findMyEnabled"
+                },
+                "traccarUrl": {
+                    "type": "text",
+                    "label": "traccarUrl",
+                    "help": "traccarUrlHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6,
+                    "disabled": "!data.findMyEnabled || !data.traccarEnabled"
+                },
+                "traccarApiKey": {
+                    "type": "text",
+                    "label": "traccarApiKey",
+                    "help": "traccarApiKeyHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6,
+                    "disabled": "!data.findMyEnabled || !data.traccarEnabled"
+                },
                 "locationPoints": {
                     "type": "table",
                     "label": "locationPoints",

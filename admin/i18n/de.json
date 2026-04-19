@@ -53,5 +53,12 @@
 	"notesHeader": "Notizen",
 	"notesEnabled": "Notizen aktivieren",
 	"notesInterval": "Aktualisierungsintervall (Minuten)",
-	"notesIntervalHelp": "Wie oft Notizen abgefragt werden (15–1440 Minuten)"
+	"notesIntervalHelp": "Wie oft Notizen abgefragt werden (15–1440 Minuten)",
+	"traccarHeader": "Traccar Geocoder",
+	"traccarEnabled": "Traccar Geocoder aktivieren",
+	"traccarEnabledHelp": "Löst Gerätepositionen über einen selbst gehosteten Traccar-Geocoder-Server in Straßenadressen auf und schreibt das Ergebnis als 'locationName'.",
+	"traccarUrl": "Traccar Geocoder URL",
+	"traccarUrlHelp": "Vollständige URL des Traccar-Geocoder-Servers, z. B. http://192.168.1.100:3000",
+	"traccarApiKey": "API-Schlüssel",
+	"traccarApiKeyHelp": "API-Schlüssel für den Traccar-Geocoder-Server"
 }

@@ -51,5 +51,12 @@
     "notesHeader": "Notes",
     "notesEnabled": "Enable Notes",
     "notesInterval": "Refresh interval (minutes)",
-    "notesIntervalHelp": "How often notes are fetched (15–1440 minutes)"
+    "notesIntervalHelp": "How often notes are fetched (15–1440 minutes)",
+    "traccarHeader": "Traccar 地理编码器",
+    "traccarEnabled": "启用 Traccar 地理编码器",
+    "traccarEnabledHelp": "通过自托管的 Traccar Geocoder 服务器将设备位置解析为街道地址，并将结果写入 'locationName'。",
+    "traccarUrl": "Traccar Geocoder URL",
+    "traccarUrlHelp": "Traccar Geocoder 服务器的完整 URL，例如 http://192.168.1.100:3000",
+    "traccarApiKey": "API 密钥",
+    "traccarApiKeyHelp": "Traccar Geocoder 服务器的 API 密钥"
 }

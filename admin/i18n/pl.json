@@ -51,5 +51,12 @@
     "notesHeader": "Notes",
     "notesEnabled": "Enable Notes",
     "notesInterval": "Refresh interval (minutes)",
-    "notesIntervalHelp": "How often notes are fetched (15–1440 minutes)"
+    "notesIntervalHelp": "How often notes are fetched (15–1440 minutes)",
+    "traccarHeader": "Traccar Geocoder",
+    "traccarEnabled": "Włącz Traccar Geocoder",
+    "traccarEnabledHelp": "Rozwiązuje pozycje urządzeń na adresy uliczne za pośrednictwem serwera Traccar Geocoder i zapisuje wynik jako 'locationName'.",
+    "traccarUrl": "URL Traccar Geocoder",
+    "traccarUrlHelp": "Pełny URL serwera Traccar Geocoder, np. http://192.168.1.100:3000",
+    "traccarApiKey": "Klucz API",
+    "traccarApiKeyHelp": "Klucz API do serwera Traccar Geocoder"
 }

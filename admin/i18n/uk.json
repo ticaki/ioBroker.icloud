@@ -51,5 +51,12 @@
     "notesHeader": "Notes",
     "notesEnabled": "Enable Notes",
     "notesInterval": "Refresh interval (minutes)",
-    "notesIntervalHelp": "How often notes are fetched (15–1440 minutes)"
+    "notesIntervalHelp": "How often notes are fetched (15–1440 minutes)",
+    "traccarHeader": "Traccar Geocoder",
+    "traccarEnabled": "Увімкнути Traccar Geocoder",
+    "traccarEnabledHelp": "Перетворює позиції пристроїв на вуличні адреси через власний сервер Traccar Geocoder і записує результат як 'locationName'.",
+    "traccarUrl": "URL Traccar Geocoder",
+    "traccarUrlHelp": "Повна URL-адреса сервера Traccar Geocoder, напр. http://192.168.1.100:3000",
+    "traccarApiKey": "API-ключ",
+    "traccarApiKeyHelp": "API-ключ для сервера Traccar Geocoder"
 }

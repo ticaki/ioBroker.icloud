@@ -138,7 +138,10 @@
     "username": "",
     "password": "",
     "locationPoints": [],
-    "findMyDisabledDevices": []
+    "findMyDisabledDevices": [],
+    "traccarEnabled": false,
+    "traccarUrl": "",
+    "traccarApiKey": ""
   },
   "encryptedNative": [
     "password"

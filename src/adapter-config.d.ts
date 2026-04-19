@@ -33,6 +33,9 @@ declare global {
 			notesInterval: number;
 			accountStorageEnabled: boolean;
 			accountStorageInterval: number;
+			traccarEnabled: boolean;
+			traccarUrl: string;
+			traccarApiKey: string;
 		}
 	}
 }
