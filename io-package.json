@@ -139,9 +139,10 @@
     "password": "",
     "locationPoints": [],
     "findMyDisabledDevices": [],
-    "traccarEnabled": false,
-    "traccarUrl": "",
-    "traccarApiKey": ""
+    "geocodingProvider": "none",
+    "geocodingUrl": "",
+    "geocodingApiKey": "",
+    "geocodingCacheSize": "small"
   },
   "encryptedNative": [
     "password"

@@ -11,6 +11,8 @@ import type { iCloudDriveService, iCloudDriveNode, iCloudDriveItem } from './lib
 import type { iCloudContactsService, Contact, ContactsSyncMap } from './lib/services/contacts';
 import type { iCloudNotesService, NotesSyncMap } from './lib/services/notes';
 import { GeoLookup } from './lib/geo';
+import { ExternalGeocoder } from './lib/geocoding';
+import type { GeocodingProvider, GeocodingCacheSize } from './lib/geocoding';
 
 /** Best-effort human-readable names for Apple FindMy feature flags (not officially documented). */
 const FINDMY_FEATURE_NAMES: Record<string, string> = {
@@ -268,14 +270,11 @@ class Icloud extends utils.Adapter {
     private driveRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private accountStorageRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private findMyFirstLoad = true;
-    /** True until the first successful Traccar Geocoder response — used for the one-time success log. */
-    private traccarFirstSuccess = true;
     private calendarFirstLoad = true;
     private driveFirstLoad = true;
     private accountStorageFirstLoad = true;
     private geoLookup: GeoLookup = new GeoLookup();
-    /** ISO country code of the ioBroker system location (lower-case, e.g. 'de'). */
-    private systemCountryCode = '';
+    private externalGeocoder: ExternalGeocoder | null = null;
     /** In-memory cache of last written state values — used to skip unchanged writes after adapter start. */
     private stateCache: Map<string, ioBroker.StateValue> = new Map();
 
@@ -638,52 +637,8 @@ class Icloud extends utils.Adapter {
 
         // ── FindMy devices ────────────────────────────────────────────────────
         if (activeServices.includes('findme') && this.config.findMyEnabled) {
-            // Load GeoJSON spatial index for municipality lookup (optional feature)
-            if (this.config.findMyGeoEnabled) {
-                // __dirname = build/ → adapter root is one level up
-                const adapterRoot = path.join(__dirname, '..');
-                this.geoLookup.load(adapterRoot, msg => this.log.info(msg));
-            }
-            // Resolve system country code for Traccar address formatting
-            if (this.config.traccarEnabled) {
-                if (!this.config.traccarUrl) {
-                    this.log.warn(
-                        'Traccar Geocoder is enabled but no server URL is configured. ' +
-                            'Please enter the URL (e.g. http://192.168.1.100:3000) in the adapter settings.',
-                    );
-                } else {
-                    let urlValid = true;
-                    try {
-                        new URL(this.config.traccarUrl);
-                    } catch {
-                        this.log.error(
-                            `Traccar Geocoder: invalid URL "${this.config.traccarUrl}". ` +
-                                'Please use a full URL including scheme, e.g. http://192.168.1.100:3000',
-                        );
-                        urlValid = false;
-                    }
-                    if (urlValid) {
-                        if (!this.config.traccarApiKey) {
-                            this.log.info(
-                                'Traccar Geocoder: no API key configured — requests will be sent without authentication. ' +
-                                    'Make sure the server allows unauthenticated access.',
-                            );
-                        }
-                        this.systemCountryCode = await this.resolveSystemCountryCode();
-                        if (this.systemCountryCode) {
-                            this.log.info(
-                                `Traccar Geocoder: system country code resolved to '${this.systemCountryCode}' — ` +
-                                    'country will be omitted from location names for devices in this country.',
-                            );
-                        } else {
-                            this.log.info(
-                                'Traccar Geocoder: could not determine system country code from system.config coordinates. ' +
-                                    'Country will always be appended to location names.',
-                            );
-                        }
-                    }
-                }
-            }
+            // Initialise geocoding provider
+            await this.initGeocoding();
             await this.loadFindMyIdMap();
             await this.refreshFindMyDevices(locationPoints);
             this.scheduleFindMyRefresh(locationPoints);
@@ -783,160 +738,65 @@ class Icloud extends utils.Adapter {
     }
 
     /**
-     * Resolve the ISO country code for the ioBroker system location.
-     * Uses the Traccar Geocoder to reverse-geocode the system.config coordinates.
-     * Falls back to empty string if unavailable.
+     * Initialise the geocoding provider based on adapter config.
+     * Loads the local GeoJSON index or creates an ExternalGeocoder instance.
      */
-    private async resolveSystemCountryCode(): Promise<string> {
+    private async initGeocoding(): Promise<void> {
+        const provider = this.config.geocodingProvider ?? 'none';
+        if (provider === 'none') {
+            this.log.debug('Geocoding: disabled');
+            return;
+        }
+
+        if (provider === 'local') {
+            const adapterRoot = path.join(__dirname, '..');
+            this.geoLookup.load(adapterRoot, msg => this.log.info(msg));
+            return;
+        }
+
+        // External provider
+        const geocoder = new ExternalGeocoder(
+            provider as GeocodingProvider,
+            this.config.geocodingUrl ?? '',
+            this.config.geocodingApiKey ?? '',
+            (this.config.geocodingCacheSize ?? 'small') as GeocodingCacheSize,
+            (level, msg) => this.log[level](msg),
+        );
+
+        if (!geocoder.validate()) {
+            return;
+        }
+
+        // Resolve system country code and language for localized address names
         try {
             const sysCfg = await this.getForeignObjectAsync('system.config');
             const common = sysCfg?.common;
+            const lang = (common as unknown as Record<string, unknown>)?.language as string | undefined;
+            if (lang) {
+                geocoder.language = lang;
+                this.log.info(`Geocoder: using system language '${lang}' for localized address names.`);
+            }
             const lat = Number(common?.latitude);
             const lon = Number(common?.longitude);
-            if (isNaN(lat) || isNaN(lon) || (lat === 0 && lon === 0)) {
-                return '';
+            if (!isNaN(lat) && !isNaN(lon) && (lat !== 0 || lon !== 0)) {
+                geocoder.systemCountryCode = await geocoder.resolveSystemCountry(lat, lon);
+                if (geocoder.systemCountryCode) {
+                    this.log.info(
+                        `Geocoder: system country code resolved to '${geocoder.systemCountryCode}' — ` +
+                            'country will be omitted from location names for devices in this country.',
+                    );
+                } else {
+                    this.log.info(
+                        'Geocoder: could not determine system country code from system.config coordinates. ' +
+                            'Country will always be appended to location names.',
+                    );
+                }
             }
-            const addr = await this.traccarReverse(lat, lon);
-            return addr?.country_code?.toLowerCase() ?? '';
         } catch {
-            return '';
+            /* ignore — country will always be appended */
         }
-    }
 
-    /**
-     * Call the Traccar Geocoder `/reverse` endpoint.
-     *
-     * @param lat - Latitude in degrees
-     * @param lon - Longitude in degrees
-     * @returns The `address` object from the response, or `null` on error.
-     */
-    private async traccarReverse(
-        lat: number,
-        lon: number,
-    ): Promise<{
-        house_number?: string;
-        road?: string;
-        city?: string;
-        town?: string;
-        village?: string;
-        state?: string;
-        postcode?: string;
-        country?: string;
-        country_code?: string;
-    } | null> {
-        const baseUrl = (this.config.traccarUrl ?? '').replace(/\/+$/, '');
-        if (!baseUrl) {
-            return null;
-        }
-        let url: URL;
-        try {
-            url = new URL('/reverse', baseUrl);
-        } catch {
-            this.log.error(
-                `Traccar Geocoder: cannot build request URL from base "${baseUrl}". Check the server URL in settings.`,
-            );
-            return null;
-        }
-        url.searchParams.set('lat', String(lat));
-        url.searchParams.set('lon', String(lon));
-        const apiKey = this.config.traccarApiKey ?? '';
-        if (apiKey) {
-            url.searchParams.set('key', apiKey);
-        }
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10_000);
-        try {
-            const res = await fetch(url.toString(), { signal: controller.signal });
-            if (res.status === 401) {
-                this.log.warn(
-                    'Traccar Geocoder: authentication failed (HTTP 401). ' +
-                        'The API key is missing or incorrect — check the "API Key" setting.',
-                );
-                return null;
-            }
-            if (res.status === 429) {
-                this.log.warn(
-                    'Traccar Geocoder: rate limit exceeded (HTTP 429). ' +
-                        'The server is rejecting requests — consider increasing the FindMy refresh interval.',
-                );
-                return null;
-            }
-            if (!res.ok) {
-                this.log.warn(
-                    `Traccar Geocoder: unexpected HTTP ${res.status} for (${lat}, ${lon}). ` +
-                        'Check that the server is running and the URL is correct.',
-                );
-                return null;
-            }
-            const data = (await res.json()) as { address?: Record<string, string> };
-            if (!data?.address) {
-                this.log.debug(
-                    `Traccar Geocoder: no address in response for (${lat}, ${lon}). ` +
-                        "The position may be in an area not covered by the server's map data.",
-                );
-                return null;
-            }
-            return data.address;
-        } catch (err) {
-            const msg = (err as Error)?.message ?? String(err);
-            if (msg.includes('aborted') || msg.includes('abort')) {
-                this.log.warn(
-                    `Traccar Geocoder: request timed out after 10 s for (${lat}, ${lon}). ` +
-                        'The server may be unreachable or overloaded.',
-                );
-            } else if (msg.includes('ECONNREFUSED')) {
-                this.log.warn(
-                    `Traccar Geocoder: connection refused at "${baseUrl}". ` +
-                        'Make sure the server is running and the URL/port are correct.',
-                );
-            } else if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
-                this.log.warn(
-                    `Traccar Geocoder: hostname not found for "${baseUrl}". ` +
-                        'Check the server URL — the hostname cannot be resolved.',
-                );
-            } else {
-                this.log.warn(`Traccar Geocoder: request failed — ${msg}`);
-            }
-            return null;
-        } finally {
-            clearTimeout(timeout);
-        }
-    }
-
-    /**
-     * Format a Traccar Geocoder address as "Strasse Hausnummer, Ort (Land)".
-     * Country is only appended when it differs from the ioBroker system country.
-     *
-     * @param addr - Address object from Traccar Geocoder response
-     * @param addr.house_number - House number
-     * @param addr.road - Street name
-     * @param addr.city - City name
-     * @param addr.town - Town name (fallback for city)
-     * @param addr.village - Village name (fallback for city/town)
-     * @param addr.country - Country name
-     * @param addr.country_code - ISO country code
-     */
-    private formatTraccarAddress(addr: {
-        house_number?: string;
-        road?: string;
-        city?: string;
-        town?: string;
-        village?: string;
-        country?: string;
-        country_code?: string;
-    }): string {
-        const street = [addr.road, addr.house_number].filter(Boolean).join(' ');
-        const city = addr.city || addr.town || addr.village || '';
-        const parts = [street, city].filter(Boolean);
-        if (!parts.length) {
-            return 'unknown';
-        }
-        let result = parts.join(', ');
-        const cc = addr.country_code?.toLowerCase() ?? '';
-        if (cc && cc !== this.systemCountryCode && addr.country) {
-            result += ` (${addr.country})`;
-        }
-        return result;
+        this.externalGeocoder = geocoder;
     }
 
     /**
@@ -983,10 +843,11 @@ class Icloud extends utils.Adapter {
                 this.findMyCleanupDone = false;
             }
             const allDevices = allDevicesUnfiltered.filter(d => !disabledSet.has(d.id ?? ''));
+            const geocodingActive = (this.config.geocodingProvider ?? 'none') !== 'none';
             if (!this.findMyCleanupDone) {
                 await this.cleanupFindMyObjects(allDevices);
                 await this.cleanupDisabledDevices(disabledSet);
-                if (!this.config.findMyGeoEnabled && !this.config.traccarEnabled) {
+                if (!geocodingActive) {
                     await this.cleanupFindMyGeoStates();
                 }
                 this.findMyCleanupDone = true;
@@ -1050,11 +911,14 @@ class Icloud extends utils.Adapter {
                         native: {},
                     });
                 }
-                if (this.config.findMyGeoEnabled || this.config.traccarEnabled) {
+                if (geocodingActive) {
                     await this.extendObject(`${safeId}.locationName`, {
                         type: 'state',
                         common: {
-                            name: this.config.traccarEnabled ? 'Location (Address)' : 'Location (Municipality)',
+                            name:
+                                this.config.geocodingProvider === 'local'
+                                    ? 'Location (Municipality)'
+                                    : 'Location (Address)',
                             type: 'string',
                             role: 'text',
                             read: true,
@@ -1108,18 +972,12 @@ class Icloud extends utils.Adapter {
                 // DEBUG:GEO_TIMING
                 const _geoT0 = process.hrtime.bigint();
                 let _geoResult = 'unknown';
-                if (loc && this.config.traccarEnabled && this.config.traccarUrl) {
-                    const addr = await this.traccarReverse(loc.latitude, loc.longitude);
+                if (loc && this.externalGeocoder) {
+                    const addr = await this.externalGeocoder.resolve(loc.latitude, loc.longitude);
                     if (addr) {
-                        _geoResult = this.formatTraccarAddress(addr);
-                        if (this.traccarFirstSuccess) {
-                            this.traccarFirstSuccess = false;
-                            this.log.info(
-                                `Traccar Geocoder: first successful reverse geocode — "${_geoResult}" for device "${d.name ?? d.id ?? '?'}"`,
-                            );
-                        }
+                        _geoResult = addr;
                     }
-                } else if (loc && this.config.findMyGeoEnabled) {
+                } else if (loc && this.config.geocodingProvider === 'local') {
                     _geoResult = this.geoLookup.resolve(loc.latitude, loc.longitude);
                 }
                 const _geoElapsed = loc ? Number(process.hrtime.bigint() - _geoT0) : 0; // ns, only if loc present
@@ -1153,7 +1011,7 @@ class Icloud extends utils.Adapter {
                     isOld: loc?.isOld ?? null,
                     isInaccurate: loc?.isInaccurate ?? null,
                     distanceKm: distKm !== null ? Math.round(distKm * 1000) / 1000 : null,
-                    ...(this.config.findMyGeoEnabled || this.config.traccarEnabled ? { locationName: _geoResult } : {}),
+                    ...(geocodingActive ? { locationName: _geoResult } : {}),
                     ownerAppleId: d.prsId ? (membersInfo[d.prsId]?.appleId ?? null) : null,
                     ownerName: d.prsId
                         ? [membersInfo[d.prsId]?.firstName, membersInfo[d.prsId]?.lastName].filter(Boolean).join(' ') ||

@@ -15,8 +15,11 @@ declare global {
 			locationPoints: LocationPoint[];
 			findMyEnabled: boolean;
 			findMyInterval: number;
-			findMyGeoEnabled: boolean;
 			findMyDisabledDevices: string[];
+			geocodingProvider: 'none' | 'local' | 'traccar' | 'nominatim' | 'opencage';
+			geocodingUrl: string;
+			geocodingApiKey: string;
+			geocodingCacheSize: 'small' | 'medium' | 'large';
 			calendarEnabled: boolean;
 			calendarEventCount: number;
 			calendarInterval: number;
@@ -33,9 +36,6 @@ declare global {
 			notesInterval: number;
 			accountStorageEnabled: boolean;
 			accountStorageInterval: number;
-			traccarEnabled: boolean;
-			traccarUrl: string;
-			traccarApiKey: string;
 		}
 	}
 }

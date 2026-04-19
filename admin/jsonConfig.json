@@ -59,62 +59,6 @@
                     "default": 5,
                     "disabled": "!data.findMyEnabled"
                 },
-                "findMyGeoEnabled": {
-                    "type": "checkbox",
-                    "label": "findMyGeoEnabled",
-                    "help": "findMyGeoEnabledHelp",
-                    "newLine": true,
-                    "xs": 12,
-                    "sm": 6,
-                    "md": 4,
-                    "lg": 3,
-                    "xl": 3,
-                    "default": false,
-                    "disabled": "!data.findMyEnabled"
-                },
-                "_traccarHeader": {
-                    "type": "header",
-                    "text": "traccarHeader",
-                    "size": 5,
-                    "newLine": true
-                },
-                "traccarEnabled": {
-                    "type": "checkbox",
-                    "label": "traccarEnabled",
-                    "help": "traccarEnabledHelp",
-                    "newLine": true,
-                    "xs": 12,
-                    "sm": 6,
-                    "md": 4,
-                    "lg": 3,
-                    "xl": 3,
-                    "default": false,
-                    "disabled": "!data.findMyEnabled"
-                },
-                "traccarUrl": {
-                    "type": "text",
-                    "label": "traccarUrl",
-                    "help": "traccarUrlHelp",
-                    "newLine": true,
-                    "xs": 12,
-                    "sm": 12,
-                    "md": 6,
-                    "lg": 6,
-                    "xl": 6,
-                    "disabled": "!data.findMyEnabled || !data.traccarEnabled"
-                },
-                "traccarApiKey": {
-                    "type": "text",
-                    "label": "traccarApiKey",
-                    "help": "traccarApiKeyHelp",
-                    "newLine": false,
-                    "xs": 12,
-                    "sm": 12,
-                    "md": 6,
-                    "lg": 6,
-                    "xl": 6,
-                    "disabled": "!data.findMyEnabled || !data.traccarEnabled"
-                },
                 "locationPoints": {
                     "type": "table",
                     "label": "locationPoints",
@@ -454,6 +398,122 @@
                     "step": 1,
                     "default": 60,
                     "disabled": "!data.accountStorageEnabled"
+                }
+            }
+        },
+        "_tabGeocoding": {
+            "type": "panel",
+            "label": "geocodingTab",
+            "items": {
+                "geocodingProvider": {
+                    "type": "select",
+                    "label": "geocodingProvider",
+                    "help": "geocodingProviderHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6,
+                    "options": [
+                        { "value": "none", "label": "geocodingProviderNone" },
+                        { "value": "local", "label": "geocodingProviderLocal" },
+                        { "value": "traccar", "label": "geocodingProviderTraccar" },
+                        { "value": "nominatim", "label": "geocodingProviderNominatim" },
+                        { "value": "opencage", "label": "geocodingProviderOpencage" }
+                    ],
+                    "default": "none"
+                },
+                "_localHeader": {
+                    "type": "header",
+                    "text": "geocodingLocalHeader",
+                    "size": 5,
+                    "newLine": true,
+                    "hidden": "data.geocodingProvider !== 'local'"
+                },
+                "_localInfo": {
+                    "type": "staticText",
+                    "text": "geocodingLocalInfo",
+                    "newLine": true,
+                    "xs": 12,
+                    "hidden": "data.geocodingProvider !== 'local'"
+                },
+                "_externalHeader": {
+                    "type": "header",
+                    "text": "geocodingExternalHeader",
+                    "size": 5,
+                    "newLine": true,
+                    "hidden": "data.geocodingProvider === 'none' || data.geocodingProvider === 'local'"
+                },
+                "geocodingUrl": {
+                    "type": "text",
+                    "label": "geocodingUrl",
+                    "help": "geocodingUrlHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6,
+                    "hidden": "data.geocodingProvider === 'none' || data.geocodingProvider === 'local'"
+                },
+                "geocodingApiKey": {
+                    "type": "text",
+                    "label": "geocodingApiKey",
+                    "help": "geocodingApiKeyHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6,
+                    "hidden": "data.geocodingProvider === 'none' || data.geocodingProvider === 'local'"
+                },
+                "_infoTraccar": {
+                    "type": "staticText",
+                    "text": "geocodingInfoTraccar",
+                    "newLine": true,
+                    "xs": 12,
+                    "hidden": "data.geocodingProvider !== 'traccar'"
+                },
+                "_infoNominatim": {
+                    "type": "staticText",
+                    "text": "geocodingInfoNominatim",
+                    "newLine": true,
+                    "xs": 12,
+                    "hidden": "data.geocodingProvider !== 'nominatim'"
+                },
+                "_infoOpencage": {
+                    "type": "staticText",
+                    "text": "geocodingInfoOpencage",
+                    "newLine": true,
+                    "xs": 12,
+                    "hidden": "data.geocodingProvider !== 'opencage'"
+                },
+                "_cacheHeader": {
+                    "type": "header",
+                    "text": "geocodingCacheHeader",
+                    "size": 5,
+                    "newLine": true,
+                    "hidden": "data.geocodingProvider === 'none'"
+                },
+                "geocodingCacheSize": {
+                    "type": "select",
+                    "label": "geocodingCacheSize",
+                    "help": "geocodingCacheSizeHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6,
+                    "options": [
+                        { "value": "small", "label": "geocodingCacheSmall" },
+                        { "value": "medium", "label": "geocodingCacheMedium" },
+                        { "value": "large", "label": "geocodingCacheLarge" }
+                    ],
+                    "default": "small",
+                    "hidden": "data.geocodingProvider === 'none'"
                 }
             }
         }
