@@ -1018,7 +1018,8 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.5.0 (2026-04-19)
+* (ticaki) Drive Sync added see Readme
 * (ticaki) Calendar sendTo() API: create, update and delete calendar events; new Blockly blocks for calendar actions
 * (ticaki) Photos sendTo() API: browse albums, list photos, download and delete items
 
