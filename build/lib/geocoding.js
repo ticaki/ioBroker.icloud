@@ -70,6 +70,10 @@ class ExternalGeocoder {
   language = "";
   // Rate-limit state
   lastRequestTs = 0;
+  // Per-cycle stats — reset by takeStats()
+  statCacheHits = 0;
+  statRequests = 0;
+  statFails = 0;
   /** True until the first successful geocode — used for the one-time success log. */
   firstSuccess = true;
   constructor(provider, baseUrl, apiKey, cacheSize, log) {
@@ -92,13 +96,16 @@ class ExternalGeocoder {
     const key = ExternalGeocoder.gridKey(lat, lon);
     const cached = this.cache.get(key);
     if (cached) {
+      this.statCacheHits++;
       return this.formatAddress(cached);
     }
     if (!await this.enforceRateLimit()) {
       return null;
     }
+    this.statRequests++;
     const result = await this.fetchFromProvider(lat, lon);
     if (!result) {
+      this.statFails++;
       return null;
     }
     this.cache.set(key, result);
@@ -111,6 +118,22 @@ class ExternalGeocoder {
       );
     }
     return formatted;
+  }
+  /**
+   * Return per-cycle statistics and reset all counters to zero.
+   * Call once at the end of each FindMy refresh cycle.
+   */
+  takeStats() {
+    const stats = {
+      cacheHits: this.statCacheHits,
+      requests: this.statRequests,
+      fails: this.statFails,
+      cacheSize: this.cache.size
+    };
+    this.statCacheHits = 0;
+    this.statRequests = 0;
+    this.statFails = 0;
+    return stats;
   }
   /**
    * Resolve the system country code by reverse-geocoding the given coordinates.

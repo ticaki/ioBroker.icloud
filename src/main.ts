@@ -868,10 +868,9 @@ class Icloud extends utils.Adapter {
                 },
                 native: {},
             });
-            // DEBUG:GEO_TIMING
+            // Geocoding stats for end-of-cycle summary
             let _geoTotalMs = 0;
             let _geoCount = 0;
-            // END:DEBUG:GEO_TIMING
             for (const d of allDevices) {
                 const apiId = d.id ?? '';
                 if (!apiId) {
@@ -969,7 +968,7 @@ class Icloud extends utils.Adapter {
                     loc && locationPoints.length > 0
                         ? haversineKm(locationPoints[0].lat, locationPoints[0].lon, loc.latitude, loc.longitude)
                         : null;
-                // DEBUG:GEO_TIMING
+                // Geocoding
                 const _geoT0 = process.hrtime.bigint();
                 let _geoResult = 'unknown';
                 if (loc && this.externalGeocoder) {
@@ -980,8 +979,7 @@ class Icloud extends utils.Adapter {
                 } else if (loc && this.config.geocodingProvider === 'local') {
                     _geoResult = this.geoLookup.resolve(loc.latitude, loc.longitude);
                 }
-                const _geoElapsed = loc ? Number(process.hrtime.bigint() - _geoT0) : 0; // ns, only if loc present
-                // END:DEBUG:GEO_TIMING
+                const _geoElapsed = loc ? Number(process.hrtime.bigint() - _geoT0) : 0; // ns
                 const vals: Record<string, ioBroker.StateValue> = {
                     name: d.name ?? '',
                     deviceClass: d.deviceClass,
@@ -1018,12 +1016,10 @@ class Icloud extends utils.Adapter {
                           null
                         : null,
                 };
-                // DEBUG:GEO_TIMING
                 if (loc) {
                     _geoTotalMs += _geoElapsed;
                     _geoCount++;
                 }
-                // END:DEBUG:GEO_TIMING
                 for (const [key, val] of Object.entries(vals)) {
                     if (val !== null) {
                         await this.setStateIfChanged(`${safeId}.${key}`, val);
@@ -1054,11 +1050,23 @@ class Icloud extends utils.Adapter {
                     }
                 }
             }
-            // DEBUG:GEO_TIMING
-            this.log.debug(
-                `FindMy GEO timing: ${_geoCount}/${allDevices.length} device(s) with location, total ${(_geoTotalMs / 1e6).toFixed(3)} ms, avg ${(_geoCount ? _geoTotalMs / _geoCount / 1e6 : 0).toFixed(3)} ms/device`,
-            );
-            // END:DEBUG:GEO_TIMING
+            // End-of-resync geocoding summary
+            if (geocodingActive) {
+                if (this.externalGeocoder) {
+                    const st = this.externalGeocoder.takeStats();
+                    this.log.debug(
+                        `FindMy geocoding: ${allDevices.length} device(s), ${_geoCount} with location — ` +
+                            `cache hits: ${st.cacheHits}, requests: ${st.requests}, fails: ${st.fails}, ` +
+                            `cache size: ${st.cacheSize}, total: ${(_geoTotalMs / 1e6).toFixed(1)} ms`,
+                    );
+                } else {
+                    // local provider
+                    this.log.debug(
+                        `FindMy geocoding (local): ${allDevices.length} device(s), ${_geoCount} with location, ` +
+                            `total: ${(_geoTotalMs / 1e6).toFixed(1)} ms`,
+                    );
+                }
+            }
             await this.setState('findme.lastSync', Date.now(), true);
             const locatedCount = allDevices.filter(d => d.location).length;
             if (this.findMyFirstLoad) {

@@ -99,6 +99,11 @@ export class ExternalGeocoder {
     // Rate-limit state
     private lastRequestTs = 0;
 
+    // Per-cycle stats — reset by takeStats()
+    private statCacheHits = 0;
+    private statRequests = 0;
+    private statFails = 0;
+
     /** True until the first successful geocode — used for the one-time success log. */
     private firstSuccess = true;
 
@@ -130,6 +135,7 @@ export class ExternalGeocoder {
         const key = ExternalGeocoder.gridKey(lat, lon);
         const cached = this.cache.get(key);
         if (cached) {
+            this.statCacheHits++;
             return this.formatAddress(cached);
         }
 
@@ -139,8 +145,10 @@ export class ExternalGeocoder {
         }
 
         // Fetch from provider
+        this.statRequests++;
         const result = await this.fetchFromProvider(lat, lon);
         if (!result) {
+            this.statFails++;
             return null;
         }
 
@@ -159,6 +167,23 @@ export class ExternalGeocoder {
         }
 
         return formatted;
+    }
+
+    /**
+     * Return per-cycle statistics and reset all counters to zero.
+     * Call once at the end of each FindMy refresh cycle.
+     */
+    takeStats(): { cacheHits: number; requests: number; fails: number; cacheSize: number } {
+        const stats = {
+            cacheHits: this.statCacheHits,
+            requests: this.statRequests,
+            fails: this.statFails,
+            cacheSize: this.cache.size,
+        };
+        this.statCacheHits = 0;
+        this.statRequests = 0;
+        this.statFails = 0;
+        return stats;
     }
 
     /**

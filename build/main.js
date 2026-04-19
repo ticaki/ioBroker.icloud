@@ -903,9 +903,18 @@ class Icloud extends utils.Adapter {
           }
         }
       }
-      this.log.debug(
-        `FindMy GEO timing: ${_geoCount}/${allDevices.length} device(s) with location, total ${(_geoTotalMs / 1e6).toFixed(3)} ms, avg ${(_geoCount ? _geoTotalMs / _geoCount / 1e6 : 0).toFixed(3)} ms/device`
-      );
+      if (geocodingActive) {
+        if (this.externalGeocoder) {
+          const st = this.externalGeocoder.takeStats();
+          this.log.debug(
+            `FindMy geocoding: ${allDevices.length} device(s), ${_geoCount} with location \u2014 cache hits: ${st.cacheHits}, requests: ${st.requests}, fails: ${st.fails}, cache size: ${st.cacheSize}, total: ${(_geoTotalMs / 1e6).toFixed(1)} ms`
+          );
+        } else {
+          this.log.debug(
+            `FindMy geocoding (local): ${allDevices.length} device(s), ${_geoCount} with location, total: ${(_geoTotalMs / 1e6).toFixed(1)} ms`
+          );
+        }
+      }
       await this.setState("findme.lastSync", Date.now(), true);
       const locatedCount = allDevices.filter((d) => d.location).length;
       if (this.findMyFirstLoad) {
