@@ -618,6 +618,10 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.4.0 (2026-04-19)
+* (ticaki) Geocoding tab: unified reverse-geocoding for FindMy device positions, selectable provider (local German municipalities, Traccar, Nominatim/OpenStreetMap, OpenCage Data)
+* (ticaki) External geocoders: shared URL + API-key fields, LRU cache with configurable size (3 m grid, ~50/150/300 MB), 1 req/s throttle with automatic delay, street names returned in ioBroker system language
+
 ### 0.3.0 (2026-04-18)
 * (ticaki) Added iCloud Notes integration: read-only notes and folders via CloudKit, provided as JSON states
 * (ticaki) Added iCloud Contacts integration: read contacts and groups via sendTo()
