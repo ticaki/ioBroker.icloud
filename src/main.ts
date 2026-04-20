@@ -297,6 +297,7 @@ interface DriveSyncMeta {
 class Icloud extends utils.Adapter {
     private icloud: iCloudService | null = null;
     private findMyRefreshTimer: ioBroker.Timeout | null | undefined = null;
+    private findMyRefreshing = false;
     private findMyCleanupDone = false;
     /** Serialized snapshot of last-seen findMyDisabledDevices — used to detect config changes at runtime */
     private findMyLastDisabledKey = '';
@@ -520,6 +521,7 @@ class Icloud extends utils.Adapter {
         this.subscribeStates('mfa.code');
         this.subscribeStates('mfa.requestSmsCode');
         this.subscribeStates('findme.*.ping');
+        this.subscribeStates('findme.refresh');
         this.subscribeStates('reminders.*.*.completed');
         this.log.debug('Subscribed to mfa.code');
 
@@ -876,6 +878,7 @@ class Icloud extends utils.Adapter {
         if (!this.icloud) {
             return;
         }
+        this.findMyRefreshing = true;
         try {
             const findMe = this.icloud.getService('findme');
             this.log.debug('FindMy: calling API refresh...');
@@ -931,6 +934,17 @@ class Icloud extends utils.Adapter {
                     role: 'value.time',
                     read: true,
                     write: false,
+                },
+                native: {},
+            });
+            await this.extendObject('findme.refresh', {
+                type: 'state',
+                common: {
+                    name: 'Refresh now',
+                    type: 'boolean',
+                    role: 'button',
+                    read: false,
+                    write: true,
                 },
                 native: {},
             });
@@ -1147,6 +1161,8 @@ class Icloud extends utils.Adapter {
             }
         } catch (err) {
             this.log.warn(`FindMy refresh failed: ${(err as Error)?.message ?? String(err)}`);
+        } finally {
+            this.findMyRefreshing = false;
         }
     }
 
@@ -2840,6 +2856,28 @@ class Icloud extends utils.Adapter {
                 });
         }
 
+        // findme.refresh — manual trigger
+        if (id === `${this.namespace}.findme.refresh` && state.val === true) {
+            if (this.findMyRefreshing) {
+                this.log.debug('FindMy manual refresh requested but a refresh is already running — ignoring');
+                return;
+            }
+            this.log.info('FindMy manual refresh triggered via state');
+            if (this.findMyRefreshTimer) {
+                this.clearTimeout(this.findMyRefreshTimer);
+                this.findMyRefreshTimer = null;
+            }
+            this.resolveLocationPoints()
+                .then(async locationPoints => {
+                    await this.refreshFindMyDevices(locationPoints);
+                    this.scheduleFindMyRefresh(locationPoints);
+                })
+                .catch((err: unknown) => {
+                    this.log.error(`FindMy manual refresh failed: ${(err as Error)?.message ?? String(err)}`);
+                });
+            return;
+        }
+
         // reminders.*.XXXXXX.completed — toggle completed state
         const reminderCompletedMatch = id.match(/^[^.]+\.[^.]+\.reminders\.([^.]+)\.(\d{6})\.completed$/);
         if (reminderCompletedMatch) {
@@ -2968,6 +3006,8 @@ class Icloud extends utils.Adapter {
             this.handleResetRemindersSyncMap(obj);
         } else if (obj.command === 'getDevices') {
             this.handleGetDevices(obj);
+        } else if (obj.command === 'refreshFindMyNow') {
+            void this.handleRefreshFindMyNow(obj);
         } else if (obj.command === 'getCalendars') {
             this.handleGetCalendars(obj);
         } else if (obj.command === 'getCalendarEvents') {
@@ -3042,6 +3082,33 @@ class Icloud extends utils.Adapter {
             });
         }
         this.sendCallback(obj, { alive: true, devices: result });
+    }
+
+    /**
+     * Trigger an immediate FindMy refresh from the admin UI.
+     * Cancels any pending scheduled refresh and runs one now (unless a refresh
+     * is already in progress, in which case the request is ignored).
+     * After the refresh completes, the normal schedule resumes.
+     *
+     * @param obj The ioBroker message object from the message handler.
+     */
+    private async handleRefreshFindMyNow(obj: ioBroker.Message): Promise<void> {
+        if (!this.icloud || this.icloud.status !== iCloudServiceStatus.Ready) {
+            this.sendCallback(obj, { success: false, error: 'Adapter not connected to iCloud' });
+            return;
+        }
+        if (this.findMyRefreshing) {
+            this.sendCallback(obj, { success: false, busy: true });
+            return;
+        }
+        if (this.findMyRefreshTimer) {
+            this.clearTimeout(this.findMyRefreshTimer);
+            this.findMyRefreshTimer = null;
+        }
+        const locationPoints = await this.resolveLocationPoints();
+        await this.refreshFindMyDevices(locationPoints);
+        this.scheduleFindMyRefresh(locationPoints);
+        this.sendCallback(obj, { success: true });
     }
 
     // ── onMessage Reminder handlers ───────────────────────────────────────────
