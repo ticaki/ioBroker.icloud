@@ -45,7 +45,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.6.1 (2026-04-20)
 * (ticaki) Drive Sync: for BackItUp Admin UI improved
 
 ### 0.6.0 (2026-04-20)
