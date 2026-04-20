@@ -58,6 +58,7 @@ class iCloudDriveNode {
   etag;
   type;
   size;
+  zone;
   fileCount;
   shareCount;
   directChildrenCount;
@@ -75,6 +76,7 @@ class iCloudDriveNode {
     this.nodeId = nodeId;
   }
   async refresh() {
+    var _a;
     const response = await this.service.service.fetch(`${this.serviceUri}/retrieveItemDetailsInFolders`, {
       headers: this.service.service.authStore.getHeaders(),
       method: "POST",
@@ -100,6 +102,7 @@ class iCloudDriveNode {
     this.name = rawNode.name;
     this.etag = rawNode.etag;
     this.type = rawNode.type;
+    this.zone = (_a = rawNode.zone) != null ? _a : "com.apple.CloudDocs";
     this.size = rawNode.assetQuota;
     this.fileCount = rawNode.fileCount;
     this.shareCount = rawNode.shareCount;
@@ -126,7 +129,7 @@ class iCloudDriveNode {
       await this.refresh();
     }
     this._children = ((_a = this.items) != null ? _a : []).map((item) => {
-      var _a2;
+      var _a2, _b;
       const child = new iCloudDriveNode(this.service, item.drivewsid);
       child.name = item.name;
       child.etag = item.etag;
@@ -134,6 +137,7 @@ class iCloudDriveNode {
       child.size = (_a2 = item.size) != null ? _a2 : 0;
       child.parentId = item.parentId;
       child.docwsid = item.docwsid;
+      child.zone = (_b = item.zone) != null ? _b : "com.apple.CloudDocs";
       child.dateCreated = new Date(item.dateCreated);
       child.extension = item.extension;
       child.dateModified = item.dateModified ? new Date(item.dateModified) : void 0;
@@ -168,12 +172,13 @@ class iCloudDriveNode {
     return this.service.del(this.nodeId, this.etag);
   }
   async open() {
-    var _a, _b;
+    var _a, _b, _c, _d, _e;
     const docwsid = (_b = this.docwsid) != null ? _b : (_a = this.rawData) == null ? void 0 : _a.docwsid;
     if (!docwsid) {
       throw new Error("Node has no docwsid, call refresh() first");
     }
-    return this.service.downloadFile({ docwsid, size: this.size });
+    const zone = (_e = (_d = this.zone) != null ? _d : (_c = this.rawData) == null ? void 0 : _c.zone) != null ? _e : "com.apple.CloudDocs";
+    return this.service.downloadFile({ docwsid, zone, size: this.size });
   }
   async upload(file) {
     var _a, _b;
@@ -197,6 +202,7 @@ class iCloudDriveService {
     return new iCloudDriveNode(this, typeof nodeId === "string" ? nodeId : nodeId.drivewsid).refresh();
   }
   async downloadFile(item) {
+    var _a, _b;
     if (item.size === 0) {
       return new import_web.ReadableStream({
         start(controller) {
@@ -204,16 +210,46 @@ class iCloudDriveService {
         }
       });
     }
+    const params = this.service.getParams();
+    params.set("document_id", item.docwsid);
+    const zone = item.zone || "com.apple.CloudDocs";
     const response = await this.service.fetch(
-      `${this.docsServiceUri}/ws/${item.zone || "com.apple.CloudDocs"}/download/by_id?document_id=${encodeURIComponent(item.docwsid)}`,
+      `${this.docsServiceUri}/ws/${zone}/download/by_id?${params.toString()}`,
       { headers: this.service.authStore.getHeaders() }
     );
+    if (!response.ok) {
+      let body = "";
+      try {
+        body = await response.text();
+      } catch {
+      }
+      throw new Error(
+        `${response.statusText} (${response.status}) fetching download URL for ${item.docwsid} [zone=${zone}]${body ? `: ${body.slice(0, 200)}` : ""}`
+      );
+    }
     const json = await response.json();
     if (json.error_code) {
-      throw new Error(json.reason);
+      throw new Error(`${(_a = json.reason) != null ? _a : json.error_code} [docwsid=${item.docwsid}, zone=${zone}]`);
     }
-    const url = json.data_token ? json.data_token.url : json.package_token.url;
-    const fileResponse = await this.service.fetch(url, { headers: this.service.authStore.getHeaders() });
+    const url = json.data_token ? json.data_token.url : (_b = json.package_token) == null ? void 0 : _b.url;
+    if (!url) {
+      throw new Error(
+        `No download URL in response for ${item.docwsid} [zone=${zone}]: ${JSON.stringify(json).slice(0, 200)}`
+      );
+    }
+    const fileResponse = await this.service.fetch(url, {
+      headers: this.service.authStore.getHeaders()
+    });
+    if (!fileResponse.ok) {
+      let body = "";
+      try {
+        body = await fileResponse.text();
+      } catch {
+      }
+      throw new Error(
+        `${fileResponse.statusText} (${fileResponse.status}) downloading content for ${item.docwsid}${body ? `: ${body.slice(0, 200)}` : ""}`
+      );
+    }
     return fileResponse.body;
   }
   async mkdir(parent, name) {

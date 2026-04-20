@@ -614,6 +614,13 @@ class Icloud extends utils.Adapter {
       });
       this.schedulePhotosRefresh();
     }
+    if (this.config.accountStorageEnabled) {
+      await this.refreshAccountStorage();
+      this.scheduleAccountStorageRefresh();
+    }
+    this.log.info("iCloud connection established successfully");
+    await this.setState("info.connection", true, true);
+    await this.setState("mfa.required", false, true);
     if (activeServices.includes("drivews") && this.config.driveEnabled) {
       (async () => {
         var _a2;
@@ -626,25 +633,18 @@ class Icloud extends utils.Adapter {
         await this.refreshDrive();
         if (this.config.driveSyncEnabled) {
           await this.loadDriveSyncMeta();
-          this.driveSyncTimer = this.setTimeout(async () => {
-            this.driveSyncTimer = null;
-            await this.executeDriveSync();
+          this.executeDriveSync().then(() => this.scheduleDriveSync()).catch((err) => {
+            var _a3;
+            this.log.warn(`Drive Sync: initial sync failed: ${(_a3 = err == null ? void 0 : err.message) != null ? _a3 : String(err)}`);
             this.scheduleDriveSync();
-          }, 3e4);
-          this.log.info("Drive Sync enabled \u2014 initial sync in 30 seconds");
+          });
+          this.log.info("Drive Sync enabled");
         }
       })().catch((err) => {
         var _a2;
         this.log.warn(`Drive initial refresh failed: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
       });
     }
-    if (this.config.accountStorageEnabled) {
-      await this.refreshAccountStorage();
-      this.scheduleAccountStorageRefresh();
-    }
-    this.log.info("iCloud connection established successfully");
-    await this.setState("info.connection", true, true);
-    await this.setState("mfa.required", false, true);
   }
   /**
    * Resolve location points from config.
@@ -2875,6 +2875,8 @@ class Icloud extends utils.Adapter {
       this.handleUpdateCalendarEvent(obj);
     } else if (obj.command === "deleteCalendarEvent") {
       this.handleDeleteCalendarEvent(obj);
+    } else if (obj.command === "listLocalFolder") {
+      this.handleListLocalFolder(obj);
     } else if (obj.command === "driveSyncGetBackitupInfo") {
       this.handleDriveSyncGetBackitupInfo(obj);
     } else if (obj.command === "driveSyncGetStatus") {
@@ -4305,8 +4307,16 @@ class Icloud extends utils.Adapter {
    * @param localFilePath - Absolute local filesystem path to write the file to
    */
   async downloadRemoteFile(remoteNode, localFilePath) {
-    await remoteNode.refresh();
-    const stream = await remoteNode.open();
+    var _a, _b, _c, _d;
+    let stream;
+    try {
+      stream = await remoteNode.open();
+    } catch (err) {
+      this.log.debug(
+        `Drive Sync: download failed \u2014 file="${remoteNode.fullName}", docwsid=${(_a = remoteNode.docwsid) != null ? _a : "n/a"}, zone=${(_b = remoteNode.zone) != null ? _b : "n/a"}, size=${(_c = remoteNode.size) != null ? _c : "n/a"}: ${(_d = err == null ? void 0 : err.message) != null ? _d : String(err)}`
+      );
+      throw err;
+    }
     if (!stream) {
       throw new Error(`Download returned empty stream for "${remoteNode.fullName}"`);
     }
@@ -4367,6 +4377,34 @@ class Icloud extends utils.Adapter {
     }
   }
   // ── Drive Sync sendTo handlers ───────────────────────────────────────────
+  handleListLocalFolder(obj) {
+    const msg = obj.message;
+    const requestedPath = typeof (msg == null ? void 0 : msg.path) === "string" ? msg.path : "/";
+    const resolved = path.resolve(requestedPath);
+    (async () => {
+      var _a;
+      let entries = [];
+      try {
+        const dirents = fs.readdirSync(resolved, { withFileTypes: true });
+        entries = dirents.filter((d) => {
+          if (!d.isDirectory()) {
+            return false;
+          }
+          if (d.name.startsWith(".")) {
+            return false;
+          }
+          return true;
+        }).map((d) => ({ name: d.name, path: path.join(resolved, d.name) })).sort((a, b) => a.name.localeCompare(b.name));
+      } catch (err) {
+        this.log.debug(`listLocalFolder: cannot read "${resolved}": ${(_a = err == null ? void 0 : err.message) != null ? _a : String(err)}`);
+      }
+      const parent = resolved !== path.parse(resolved).root ? path.dirname(resolved) : null;
+      this.sendCallback(obj, { success: true, path: resolved, parent, entries });
+    })().catch((err) => {
+      var _a;
+      this.sendCallback(obj, { success: false, error: (_a = err == null ? void 0 : err.message) != null ? _a : String(err) });
+    });
+  }
   handleDriveSyncGetBackitupInfo(obj) {
     (async () => {
       var _a;

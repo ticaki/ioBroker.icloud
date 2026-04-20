@@ -786,6 +786,10 @@ export default class iCloudService extends EventEmitter {
      * Returns URL query parameters matching pyiCloud's self.params.
      * These are required for setup.icloud.com PCS-related endpoints.
      */
+    getParams(): URLSearchParams {
+        return this._getSetupParams();
+    }
+
     private _getSetupParams(): URLSearchParams {
         const params = new URLSearchParams({
             clientBuildNumber: '2534Project66',

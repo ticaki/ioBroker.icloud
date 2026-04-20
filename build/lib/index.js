@@ -610,6 +610,9 @@ class iCloudService extends import_node_events.default {
    * Returns URL query parameters matching pyiCloud's self.params.
    * These are required for setup.icloud.com PCS-related endpoints.
    */
+  getParams() {
+    return this._getSetupParams();
+  }
   _getSetupParams() {
     var _a, _b;
     const params = new URLSearchParams({

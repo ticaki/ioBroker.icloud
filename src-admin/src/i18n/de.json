@@ -92,6 +92,7 @@
 	"custom_drivesync_cancel": "Abbrechen",
 	"custom_drivesync_save": "Speichern",
 	"custom_drivesync_select_folder": "iCloud Drive Ordner auswählen",
+	"custom_drivesync_select_local_folder": "Lokales Verzeichnis auswählen",
 	"custom_drivesync_no_folders": "Keine Unterordner gefunden",
 	"custom_drivesync_new_folder_name": "Neuer Ordnername",
 	"custom_drivesync_create": "Erstellen",

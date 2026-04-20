@@ -115,6 +115,11 @@ interface DriveSyncState extends ConfigGenericState {
     browsePath: string[];
     browseItems: DriveFolderItem[];
     browseLoading: boolean;
+    // local folder browser
+    localBrowseDialogOpen: boolean;
+    localBrowseCurrentPath: string;
+    localBrowseItems: { name: string; path: string }[];
+    localBrowseLoading: boolean;
     // create folder
     createFolderName: string;
     createFolderOpen: boolean;
@@ -169,6 +174,10 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
             browsePath: [],
             browseItems: [],
             browseLoading: false,
+            localBrowseDialogOpen: false,
+            localBrowseCurrentPath: '/',
+            localBrowseItems: [],
+            localBrowseLoading: false,
             createFolderName: '',
             createFolderOpen: false,
             editDialogOpen: false,
@@ -313,7 +322,48 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
         this.saveEntries(this.state.entries.map(e => (e.id === id ? { ...e, enabled: !e.enabled } : e)));
     }
 
-    // ── Folder browser ───────────────────────────────────────────────────
+    private openLocalFolderBrowser(): void {
+        const { editEntry } = this.state;
+        const startPath = editEntry?.localPath && editEntry.localPath.startsWith('/') ? editEntry.localPath : '/';
+        this.setState({
+            localBrowseDialogOpen: true,
+            localBrowseCurrentPath: startPath,
+            localBrowseItems: [],
+        });
+        void this.browseLocalFolder(startPath);
+    }
+
+    private async browseLocalFolder(folderPath: string): Promise<void> {
+        this.setState({ localBrowseLoading: true });
+        try {
+            const result = await this.props.oContext.socket.sendTo(
+                `icloud.${this.props.oContext.instance}`,
+                'listLocalFolder',
+                { path: folderPath },
+            );
+            if (result?.success) {
+                this.setState({
+                    localBrowseCurrentPath: result.path as string,
+                    localBrowseItems: (result.entries as { name: string; path: string }[]) ?? [],
+                    localBrowseLoading: false,
+                });
+            } else {
+                this.setState({ localBrowseItems: [], localBrowseLoading: false });
+            }
+        } catch {
+            this.setState({ localBrowseItems: [], localBrowseLoading: false });
+        }
+    }
+
+    private selectLocalFolder(): void {
+        const { localBrowseCurrentPath, editEntry } = this.state;
+        if (editEntry) {
+            this.setState({
+                editEntry: { ...editEntry, localPath: localBrowseCurrentPath },
+                localBrowseDialogOpen: false,
+            });
+        }
+    }
 
     private openFolderBrowser(entryId: string): void {
         this.setState({
@@ -522,6 +572,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
 
                 {/* Dialogs */}
                 {this.renderEditDialog()}
+                {this.renderLocalBrowseDialog()}
                 {this.renderBrowseDialog()}
                 {this.renderConflictDialog()}
             </Box>
@@ -737,26 +788,46 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                         )}
 
                         {/* Local path */}
-                        <TextField
-                            label={I18n.t('custom_drivesync_local_path')}
-                            value={editEntry.localPath}
-                            onChange={e =>
-                                this.setState({
-                                    editEntry: { ...editEntry, localPath: e.target.value },
-                                })
-                            }
-                            fullWidth
-                            slotProps={{
-                                input: {
-                                    readOnly: isBackitup,
-                                },
-                            }}
-                            helperText={
-                                isBackitup
-                                    ? I18n.t('custom_drivesync_backitup_path_hint')
-                                    : I18n.t('custom_drivesync_local_path_hint')
-                            }
-                        />
+                        {isBackitup ? (
+                            <TextField
+                                label={I18n.t('custom_drivesync_local_path')}
+                                value={editEntry.localPath}
+                                onChange={e =>
+                                    this.setState({
+                                        editEntry: { ...editEntry, localPath: e.target.value },
+                                    })
+                                }
+                                fullWidth
+                                slotProps={{ input: { readOnly: true } }}
+                                helperText={I18n.t('custom_drivesync_backitup_path_hint')}
+                            />
+                        ) : (
+                            <Stack
+                                direction="row"
+                                spacing={1}
+                                alignItems="flex-end"
+                            >
+                                <TextField
+                                    label={I18n.t('custom_drivesync_local_path')}
+                                    value={editEntry.localPath}
+                                    onChange={e =>
+                                        this.setState({
+                                            editEntry: { ...editEntry, localPath: e.target.value },
+                                        })
+                                    }
+                                    fullWidth
+                                    helperText={I18n.t('custom_drivesync_local_path_hint')}
+                                />
+                                <Button
+                                    variant="outlined"
+                                    onClick={() => this.openLocalFolderBrowser()}
+                                    startIcon={<FolderOpenIcon />}
+                                    sx={{ whiteSpace: 'nowrap', minWidth: 'auto' }}
+                                >
+                                    {I18n.t('custom_drivesync_browse')}
+                                </Button>
+                            </Stack>
+                        )}
 
                         {/* iCloud folder */}
                         <Stack
@@ -866,6 +937,125 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                         startIcon={<SaveIcon />}
                     >
                         {I18n.t('custom_drivesync_save')}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        );
+    }
+
+    // ── Local Browse dialog ──────────────────────────────────────────────
+
+    private renderLocalBrowseDialog(): React.JSX.Element | null {
+        const { localBrowseDialogOpen, localBrowseCurrentPath, localBrowseItems, localBrowseLoading } = this.state;
+        if (!localBrowseDialogOpen) {
+            return null;
+        }
+
+        const pathParts = localBrowseCurrentPath.split('/').filter(Boolean);
+
+        return (
+            <Dialog
+                open
+                onClose={() => this.setState({ localBrowseDialogOpen: false })}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>
+                    <Stack
+                        direction="row"
+                        alignItems="center"
+                        spacing={1}
+                    >
+                        <FolderIcon />
+                        <Typography variant="h6">{I18n.t('custom_drivesync_select_local_folder')}</Typography>
+                    </Stack>
+                </DialogTitle>
+                <DialogContent dividers>
+                    {/* Breadcrumb */}
+                    <Breadcrumbs sx={{ mb: 1 }}>
+                        <Link
+                            component="button"
+                            underline="hover"
+                            onClick={() => void this.browseLocalFolder('/')}
+                        >
+                            /
+                        </Link>
+                        {pathParts.map((part, idx) => {
+                            const fullPath = `/${pathParts.slice(0, idx + 1).join('/')}`;
+                            const isLast = idx === pathParts.length - 1;
+                            return isLast ? (
+                                <Typography
+                                    key={idx}
+                                    color="text.primary"
+                                >
+                                    {part}
+                                </Typography>
+                            ) : (
+                                <Link
+                                    key={idx}
+                                    component="button"
+                                    underline="hover"
+                                    onClick={() => void this.browseLocalFolder(fullPath)}
+                                >
+                                    {part}
+                                </Link>
+                            );
+                        })}
+                    </Breadcrumbs>
+                    {/* Go up */}
+                    {localBrowseCurrentPath !== '/' && (
+                        <ListItemButton
+                            onClick={() => {
+                                const parent =
+                                    localBrowseCurrentPath.substring(0, localBrowseCurrentPath.lastIndexOf('/')) || '/';
+                                void this.browseLocalFolder(parent);
+                            }}
+                            dense
+                        >
+                            <ListItemIcon>
+                                <ArrowBackIcon fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary=".." />
+                        </ListItemButton>
+                    )}
+                    {localBrowseLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                            <CircularProgress size={24} />
+                        </Box>
+                    ) : localBrowseItems.length === 0 ? (
+                        <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ p: 1 }}
+                        >
+                            {I18n.t('custom_drivesync_no_folders')}
+                        </Typography>
+                    ) : (
+                        <List dense>
+                            {localBrowseItems.map(item => (
+                                <ListItemButton
+                                    key={item.path}
+                                    onClick={() => void this.browseLocalFolder(item.path)}
+                                >
+                                    <ListItemIcon>
+                                        <FolderIcon fontSize="small" />
+                                    </ListItemIcon>
+                                    <ListItemText primary={item.name} />
+                                </ListItemButton>
+                            ))}
+                        </List>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => this.setState({ localBrowseDialogOpen: false })}>
+                        {I18n.t('custom_drivesync_cancel')}
+                    </Button>
+                    <Button
+                        variant="contained"
+                        startIcon={<FolderOpenIcon />}
+                        onClick={() => this.selectLocalFolder()}
+                    >
+                        {I18n.t('custom_drivesync_select_this_folder')}
                     </Button>
                 </DialogActions>
             </Dialog>

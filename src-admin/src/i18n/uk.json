@@ -94,6 +94,7 @@
 	"custom_drivesync_cancel": "Cancel",
 	"custom_drivesync_save": "Save",
 	"custom_drivesync_select_folder": "Select iCloud Drive Folder",
+	"custom_drivesync_select_local_folder": "Вибрати локальну теку",
 	"custom_drivesync_no_folders": "No subfolders found",
 	"custom_drivesync_new_folder_name": "New folder name",
 	"custom_drivesync_create": "Create",

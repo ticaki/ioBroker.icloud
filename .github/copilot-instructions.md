@@ -25,6 +25,7 @@ The following constructs are **strictly forbidden** and must never appear in any
 - `// @ts-ignore` — fix the underlying type error instead
 - `// @ts-nocheck` — fix the underlying type errors instead
 - `// eslint-disable` — fix the underlying lint issue instead
+- `console.log` / `console.warn` / `console.error` in production code — use `this.log.debug/info/warn/error` instead; `console.*` is only acceptable in short-lived local dev experiments and must never be committed
 
 If a suppression directive is the only apparent solution, that is a signal to rethink the approach entirely.
 
@@ -68,7 +69,7 @@ Translations used by the custom React components (`src-admin/src/`) live in **`s
 
 Rules:
 - The source of truth is `src-admin/src/i18n/*.json`.
-- After every i18n change in `src-admin/src/i18n/`, run the sync to update `admin/custom/i18n/` — only keys starting with `custom_` are copied there.
+- After every i18n change in `src-admin/src/i18n/`, **also write the same keys directly to `admin/custom/i18n/`** — `tasks.ts admin:copy` does NOT sync i18n files, only JS assets.
 - `admin/custom/i18n/` **must not** contain keys that are not in the source; stale keys must be removed.
 - All 11 language files (`de`, `en`, `es`, `fr`, `it`, `nl`, `pl`, `pt`, `ru`, `uk`, `zh-cn`) must be kept in sync.
 

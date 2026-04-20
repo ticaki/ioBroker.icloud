@@ -779,11 +779,21 @@ class Icloud extends utils.Adapter {
             this.schedulePhotosRefresh();
         }
 
+        // ── Account Storage ───────────────────────────────────────────────────
+        if (this.config.accountStorageEnabled) {
+            await this.refreshAccountStorage();
+            this.scheduleAccountStorageRefresh();
+        }
+
+        // ── Done: mark connection as established ──────────────────────────────
+        this.log.info('iCloud connection established successfully');
+        await this.setState('info.connection', true, true);
+        await this.setState('mfa.required', false, true);
+
         // ── iCloud Drive ──────────────────────────────────────────────────────
+        // Started async after startup is fully complete so that info.connection
+        // is already true when the first Drive refresh and Drive Sync run.
         if (activeServices.includes('drivews') && this.config.driveEnabled) {
-            // Run Drive (including Drive Sync setup) async so it doesn't block
-            // the rest of the startup sequence (FindMy, Calendar, etc. are already
-            // established by this point).
             (async () => {
                 try {
                     await this.icloud!.requestServiceAccess('iclouddrive');
@@ -796,29 +806,18 @@ class Icloud extends utils.Adapter {
                 // Start Drive Sync if enabled
                 if (this.config.driveSyncEnabled) {
                     await this.loadDriveSyncMeta();
-                    // Run initial sync quickly (30s) so users see it working right away
-                    this.driveSyncTimer = this.setTimeout(async () => {
-                        this.driveSyncTimer = null;
-                        await this.executeDriveSync();
-                        this.scheduleDriveSync();
-                    }, 30_000);
-                    this.log.info('Drive Sync enabled — initial sync in 30 seconds');
+                    this.executeDriveSync()
+                        .then(() => this.scheduleDriveSync())
+                        .catch((err: unknown) => {
+                            this.log.warn(`Drive Sync: initial sync failed: ${(err as Error)?.message ?? String(err)}`);
+                            this.scheduleDriveSync();
+                        });
+                    this.log.info('Drive Sync enabled');
                 }
             })().catch((err: unknown) => {
                 this.log.warn(`Drive initial refresh failed: ${(err as Error)?.message ?? String(err)}`);
             });
         }
-
-        // ── Account Storage ───────────────────────────────────────────────────
-        if (this.config.accountStorageEnabled) {
-            await this.refreshAccountStorage();
-            this.scheduleAccountStorageRefresh();
-        }
-
-        // ── Done: mark connection as established ──────────────────────────────
-        this.log.info('iCloud connection established successfully');
-        await this.setState('info.connection', true, true);
-        await this.setState('mfa.required', false, true);
     }
 
     /**
@@ -3302,6 +3301,8 @@ class Icloud extends utils.Adapter {
             this.handleUpdateCalendarEvent(obj);
         } else if (obj.command === 'deleteCalendarEvent') {
             this.handleDeleteCalendarEvent(obj);
+        } else if (obj.command === 'listLocalFolder') {
+            this.handleListLocalFolder(obj);
         } else if (obj.command === 'driveSyncGetBackitupInfo') {
             this.handleDriveSyncGetBackitupInfo(obj);
         } else if (obj.command === 'driveSyncGetStatus') {
@@ -4895,8 +4896,15 @@ class Icloud extends utils.Adapter {
      * @param localFilePath - Absolute local filesystem path to write the file to
      */
     private async downloadRemoteFile(remoteNode: iCloudDriveNode, localFilePath: string): Promise<void> {
-        await remoteNode.refresh();
-        const stream = await remoteNode.open();
+        let stream: ReadableStream | null;
+        try {
+            stream = await remoteNode.open();
+        } catch (err) {
+            this.log.debug(
+                `Drive Sync: download failed — file="${remoteNode.fullName}", docwsid=${remoteNode.docwsid ?? 'n/a'}, zone=${remoteNode.zone ?? 'n/a'}, size=${remoteNode.size ?? 'n/a'}: ${(err as Error)?.message ?? String(err)}`,
+            );
+            throw err;
+        }
         if (!stream) {
             throw new Error(`Download returned empty stream for "${remoteNode.fullName}"`);
         }
@@ -4966,6 +4974,38 @@ class Icloud extends utils.Adapter {
     }
 
     // ── Drive Sync sendTo handlers ───────────────────────────────────────────
+
+    private handleListLocalFolder(obj: ioBroker.Message): void {
+        const msg = obj.message as Record<string, unknown> | undefined;
+        const requestedPath = typeof msg?.path === 'string' ? msg.path : '/';
+        // Resolve and sanitise — must be absolute, no traversal
+        const resolved = path.resolve(requestedPath);
+        (async (): Promise<void> => {
+            let entries: { name: string; path: string }[] = [];
+            try {
+                const dirents = fs.readdirSync(resolved, { withFileTypes: true });
+                entries = dirents
+                    .filter(d => {
+                        if (!d.isDirectory()) {
+                            return false;
+                        }
+                        // skip hidden and system dirs
+                        if (d.name.startsWith('.')) {
+                            return false;
+                        }
+                        return true;
+                    })
+                    .map(d => ({ name: d.name, path: path.join(resolved, d.name) }))
+                    .sort((a, b) => a.name.localeCompare(b.name));
+            } catch (err) {
+                this.log.debug(`listLocalFolder: cannot read "${resolved}": ${(err as Error)?.message ?? String(err)}`);
+            }
+            const parent = resolved !== path.parse(resolved).root ? path.dirname(resolved) : null;
+            this.sendCallback(obj, { success: true, path: resolved, parent, entries });
+        })().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
+    }
 
     private handleDriveSyncGetBackitupInfo(obj: ioBroker.Message): void {
         (async (): Promise<void> => {
