@@ -588,11 +588,15 @@ export default class iCloudService extends EventEmitter {
                 const body = (await authResponse.text()).slice(0, 300);
                 this._log(LogLevel.Error, '[auth] unexpected response body (truncated):', body);
                 if (authResponse.status == 401 || authResponse.status == 403) {
-                    // Clear persisted session so the next startup does not reuse the stale/invalid scnt
-                    // from this error response. The in-memory scnt (already extracted above) can still
-                    // be used for immediate in-session retries, but must not reach disk.
-                    this.authStore.clearPersistedSession(this.options.username);
-                    throw new Error(`Falsche Apple-ID oder falsches Passwort (HTTP ${authResponse.status}): ${body}`);
+                    // Clear the stale session (scnt, sessionToken, cookies) but preserve the
+                    // trustToken so that a subsequent authenticate() call can skip MFA.
+                    // clearPersistedSession would also wipe the trustToken, forcing the user to
+                    // re-enter their MFA code on the very next attempt (e.g. after an adapter update
+                    // where old session data causes a transient 401).
+                    this.authStore.clearStaleSession(this.options.username);
+                    throw new Error(
+                        `STALE_SESSION_401: Falsche Apple-ID, falsches Passwort oder veraltete Session (HTTP ${authResponse.status}): ${body}`,
+                    );
                 }
                 if (authResponse.status == 503) {
                     // Rate-limited: Apple expects the same scnt on the next attempt → persist it.

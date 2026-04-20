@@ -612,6 +612,21 @@ class Icloud extends utils.Adapter {
                     },
                     retryMinutes * 60 * 1000,
                 );
+            } else if (msg.startsWith('STALE_SESSION_401')) {
+                // The session was stale (e.g. after an adapter update) — clearStaleSession()
+                // has already been called in index.ts, preserving the trustToken.
+                // Retry once after a short delay; the fresh attempt will succeed without MFA
+                // if the device is still trusted.
+                const humanMsg = msg.replace(/^STALE_SESSION_401: /, '');
+                this.log.warn(
+                    `Veraltete Session erkannt (HTTP 401) — starte automatischen Neuversuch in 10 s. (${humanMsg})`,
+                );
+                this.setTimeout(() => {
+                    this.log.info('Starte Neuversuch nach veralteter Session…');
+                    this.connectToiCloud().catch(() => {
+                        /* Error-Event wird ausgelöst */
+                    });
+                }, 10_000);
             } else {
                 this.log.error(`Failed to start iCloud authentication: ${msg}`);
                 this.log.debug(`authenticate() exception stack: ${err instanceof Error ? err.stack : String(err)}`);

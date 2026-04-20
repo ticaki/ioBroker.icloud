@@ -293,6 +293,31 @@ class iCloudAuthenticationStore {
     this._log(import__.LogLevel.Debug, "[authStore] Persisted session + cookies cleared");
   }
   /**
+   * Clear only the stale session data (scnt, sessionToken, sessionId, accountCountry,
+   * and cookies) while preserving the trustToken.
+   *
+   * Use this on HTTP 401 responses so that the next authenticate() call starts with
+   * fresh credentials but can still skip MFA via the existing trust token.
+   *
+   * @param account - The iCloud account identifier (e.g. email address).
+   */
+  clearStaleSession(account) {
+    this.scnt = void 0;
+    this.sessionToken = void 0;
+    this.sessionId = void 0;
+    this.accountCountry = void 0;
+    try {
+      this.cookieJar.removeAllCookiesSync();
+    } catch {
+    }
+    try {
+      import_node_fs.default.unlinkSync(this._jarPath(account));
+    } catch {
+    }
+    this.saveSession(account);
+    this._log(import__.LogLevel.Debug, "[authStore] Stale session cleared; trust token preserved");
+  }
+  /**
    * Process a sign-in response: extract session headers.
    * Cookies are handled automatically by fetch-cookie (stored in cookieJar).
    *

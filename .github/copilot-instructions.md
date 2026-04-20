@@ -28,6 +28,19 @@ The following constructs are **strictly forbidden** and must never appear in any
 
 If a suppression directive is the only apparent solution, that is a signal to rethink the approach entirely.
 
+## Changelog — mandatory rules
+
+- New changelog entries **must always be placed under the `### **WORK IN PROGRESS**` placeholder** in `README.md`, never under a versioned heading.
+- The placeholder block looks like this and must be kept intact:
+  ```
+  <!--
+  	Placeholder for the next version (at the beginning of the line):
+  	### **WORK IN PROGRESS**
+  -->
+  ### **WORK IN PROGRESS**
+  ```
+- **Never** bump the `version` field in `package.json` or `io-package.json` unless the user explicitly requests a version bump. Version management is handled by the ioBroker release toolchain, not by Copilot.
+
 ## README language
 
 The `README.md` contains only the headline, short description, documentation links, the **Changelog**, and the **License**.

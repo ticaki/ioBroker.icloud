@@ -441,8 +441,10 @@ class iCloudService extends import_node_events.default {
         const body = (await authResponse.text()).slice(0, 300);
         this._log(LogLevel.Error, "[auth] unexpected response body (truncated):", body);
         if (authResponse.status == 401 || authResponse.status == 403) {
-          this.authStore.clearPersistedSession(this.options.username);
-          throw new Error(`Falsche Apple-ID oder falsches Passwort (HTTP ${authResponse.status}): ${body}`);
+          this.authStore.clearStaleSession(this.options.username);
+          throw new Error(
+            `STALE_SESSION_401: Falsche Apple-ID, falsches Passwort oder veraltete Session (HTTP ${authResponse.status}): ${body}`
+          );
         }
         if (authResponse.status == 503) {
           this.authStore.saveCookieJar(this.options.username);
