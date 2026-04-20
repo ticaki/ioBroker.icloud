@@ -83,12 +83,16 @@ interface DriveSyncStatus {
     conflicts: DriveSyncConflict[];
 }
 
-interface BackitupInfo {
-    installed: boolean;
+interface BackitupInstance {
+    instance: string;
     cifsEnabled: boolean;
     cifsConnType: string;
     cifsPath: string;
-    instance: string;
+}
+
+interface BackitupInfo {
+    installed: boolean;
+    instances: BackitupInstance[];
 }
 
 interface DriveFolderItem {
@@ -269,7 +273,15 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
     // ── Entry CRUD ───────────────────────────────────────────────────────
 
     private openAddEntry(type: 'backitup' | 'directory'): void {
-        const localPath = type === 'backitup' ? (this.state.backitupInfo?.cifsPath ?? '') : '';
+        let localPath = '';
+        if (type === 'backitup') {
+            const usable = (this.state.backitupInfo?.instances ?? []).filter(
+                i => i.cifsEnabled && i.cifsConnType === 'Copy',
+            );
+            if (usable.length === 1) {
+                localPath = usable[0].cifsPath;
+            }
+        }
         const entry = newEntry(type, localPath);
         this.setState({ editDialogOpen: true, editEntry: entry, editIsNew: true });
     }
@@ -426,8 +438,9 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
 
         const { entries, backitupInfo, syncStatus } = this.state;
         const conflicts = syncStatus?.conflicts ?? [];
-        const hasBackitup =
-            backitupInfo?.installed && backitupInfo?.cifsEnabled && backitupInfo?.cifsConnType === 'Copy';
+        const instances = backitupInfo?.instances ?? [];
+        const usableInstances = instances.filter(i => i.cifsEnabled && i.cifsConnType === 'Copy');
+        const hasBackitup = usableInstances.length > 0;
         const hasBackitupEntry = entries.some(e => e.type === 'backitup');
 
         return (
@@ -465,25 +478,14 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                         {I18n.t('custom_drivesync_backitup_not_installed')}
                     </Alert>
                 )}
-                {backitupInfo && backitupInfo.installed && !backitupInfo.cifsEnabled && (
+                {backitupInfo && backitupInfo.installed && usableInstances.length === 0 && (
                     <Alert
-                        severity="info"
+                        severity="warning"
                         sx={{ mb: 2 }}
                     >
-                        {I18n.t('custom_drivesync_backitup_no_cifs')}
+                        {I18n.t('custom_drivesync_backitup_no_usable')}
                     </Alert>
                 )}
-                {backitupInfo &&
-                    backitupInfo.installed &&
-                    backitupInfo.cifsEnabled &&
-                    backitupInfo.cifsConnType !== 'Copy' && (
-                        <Alert
-                            severity="warning"
-                            sx={{ mb: 2 }}
-                        >
-                            {I18n.t('custom_drivesync_backitup_wrong_conntype')}
-                        </Alert>
-                    )}
 
                 {/* Action buttons */}
                 <Stack
@@ -513,7 +515,9 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                 {entries.length === 0 ? (
                     <Alert severity="info">{I18n.t('custom_drivesync_no_entries')}</Alert>
                 ) : (
-                    <Stack spacing={1}>{entries.map(entry => this.renderEntry(entry, syncStatus, conflicts))}</Stack>
+                    <Stack spacing={1}>
+                        {entries.map(entry => this.renderEntry(entry, syncStatus, conflicts, usableInstances))}
+                    </Stack>
                 )}
 
                 {/* Dialogs */}
@@ -528,11 +532,14 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
         entry: DriveSyncEntry,
         syncStatus: DriveSyncStatus | null,
         conflicts: DriveSyncConflict[],
+        usableInstances: BackitupInstance[],
     ): React.JSX.Element {
         const status = syncStatus?.entries?.find(s => s.id === entry.id);
         const entryConflicts = conflicts.filter(c => c.entryId === entry.id);
         const hasConflict = entryConflicts.length > 0;
         const hasError = !!status?.lastError;
+        const matchedInstances =
+            entry.type === 'backitup' ? usableInstances.filter(i => i.cifsPath === entry.localPath) : [];
 
         return (
             <Card
@@ -562,6 +569,31 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                             >
                                 {entry.localPath} → {entry.icloudFolder}
                             </Typography>
+                            {entry.type === 'backitup' &&
+                                (matchedInstances.length > 0 ? (
+                                    <Stack
+                                        direction="row"
+                                        spacing={0.5}
+                                        sx={{ mt: 0.25, flexWrap: 'wrap' }}
+                                    >
+                                        {matchedInstances.map(i => (
+                                            <Chip
+                                                key={i.instance}
+                                                label={i.instance}
+                                                size="small"
+                                                color="success"
+                                                variant="outlined"
+                                            />
+                                        ))}
+                                    </Stack>
+                                ) : (
+                                    <Typography
+                                        variant="caption"
+                                        color="error.main"
+                                    >
+                                        {I18n.t('custom_drivesync_backitup_no_match')}
+                                    </Typography>
+                                ))}
                         </Box>
                         {hasConflict && (
                             <Tooltip title={I18n.t('custom_drivesync_has_conflict')}>
@@ -618,9 +650,8 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                             {status.remoteFileCount != null && (
                                 <>
                                     {' — '}
-                                    {I18n.t('custom_drivesync_remote_files')}:{' '}
-                                    {status.remoteFileCount} {I18n.t('custom_drivesync_files')},{' '}
-                                    {(status.remoteTotalSizeMB ?? 0).toFixed(1)} MB
+                                    {I18n.t('custom_drivesync_remote_files')}: {status.remoteFileCount}{' '}
+                                    {I18n.t('custom_drivesync_files')}, {(status.remoteTotalSizeMB ?? 0).toFixed(1)} MB
                                 </>
                             )}
                         </Typography>
@@ -639,6 +670,10 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
         }
 
         const isBackitup = editEntry.type === 'backitup';
+        const usableInstances = isBackitup
+            ? (backitupInfo?.instances ?? []).filter(i => i.cifsEnabled && i.cifsConnType === 'Copy')
+            : [];
+        const matchedInstance = usableInstances.find(i => i.cifsPath === editEntry.localPath);
         const title = editIsNew
             ? isBackitup
                 ? I18n.t('custom_drivesync_add_backup')
@@ -658,6 +693,49 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                         spacing={2}
                         sx={{ mt: 1 }}
                     >
+                        {/* BackItUp instance selector */}
+                        {isBackitup && (
+                            <FormControl
+                                fullWidth
+                                size="small"
+                                error={!matchedInstance}
+                            >
+                                <InputLabel>{I18n.t('custom_drivesync_backitup_select')}</InputLabel>
+                                <Select
+                                    value={matchedInstance?.instance ?? ''}
+                                    label={I18n.t('custom_drivesync_backitup_select')}
+                                    onChange={e => {
+                                        const inst = usableInstances.find(i => i.instance === e.target.value);
+                                        if (inst) {
+                                            this.setState({
+                                                editEntry: { ...editEntry, localPath: inst.cifsPath },
+                                            });
+                                        }
+                                    }}
+                                >
+                                    {usableInstances.map(inst => (
+                                        <MenuItem
+                                            key={inst.instance}
+                                            value={inst.instance}
+                                        >
+                                            {inst.instance} — {inst.cifsPath || '?'}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                                {!matchedInstance && (
+                                    <Typography
+                                        variant="caption"
+                                        color="error.main"
+                                        sx={{ mt: 0.5 }}
+                                    >
+                                        {usableInstances.length === 0
+                                            ? I18n.t('custom_drivesync_backitup_no_usable')
+                                            : I18n.t('custom_drivesync_backitup_no_match')}
+                                    </Typography>
+                                )}
+                            </FormControl>
+                        )}
+
                         {/* Local path */}
                         <TextField
                             label={I18n.t('custom_drivesync_local_path')}
@@ -675,10 +753,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                             }}
                             helperText={
                                 isBackitup
-                                    ? I18n.t('custom_drivesync_backitup_path_hint').replace(
-                                          '%s',
-                                          backitupInfo?.instance ?? 'backitup.0',
-                                      )
+                                    ? I18n.t('custom_drivesync_backitup_path_hint')
                                     : I18n.t('custom_drivesync_local_path_hint')
                             }
                         />

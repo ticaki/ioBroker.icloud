@@ -30,14 +30,34 @@ If a suppression directive is the only apparent solution, that is a signal to re
 
 ## README language
 
-The `README.md` must be written **entirely in English**. Do not use any other language in the README, including comments inside code examples.
+The `README.md` contains only the headline, short description, documentation links, the **Changelog**, and the **License**.
+The Changelog and work-in-progress notes **must stay in `README.md`** (required by the ioBroker release toolchain).
+
+Full documentation lives in two separate files that **must always be kept in sync**:
+
+- `README_ENGLISH.md` — complete English documentation
+- `README_GERMAN.md` — complete German documentation
+
+Whenever a section is added, changed, or removed in one file, the same change **must** be applied to the other.
+Code examples inside the German README stay in English (variable names, API calls etc.) — only descriptions and comments are translated.
 
 ## Project structure
 
 - `src/main.ts` — ioBroker adapter entry point (all adapter logic lives here)
 - `src/lib/` — TypeScript iCloud API library (auth, FindMy, Drive, Photos, …), compiled together with the adapter
 - `admin/jsonConfig.json` — Admin UI configuration (JSON Config schema)
-- `admin/i18n/*.json` — translations for the Admin UI
+- `admin/i18n/*.json` — translations for the Admin UI (JSON Config fields)
+- `admin/custom/i18n/*.json` — translations for the custom React components (customComponents); **these are separate from `admin/i18n/`**
+
+## i18n for custom React components
+
+Translations used by the custom React components (`src-admin/src/`) live in **`src-admin/src/i18n/*.json`** (source) and are mirrored to **`admin/custom/i18n/*.json`** (deployed).
+
+Rules:
+- The source of truth is `src-admin/src/i18n/*.json`.
+- After every i18n change in `src-admin/src/i18n/`, run the sync to update `admin/custom/i18n/` — only keys starting with `custom_` are copied there.
+- `admin/custom/i18n/` **must not** contain keys that are not in the source; stale keys must be removed.
+- All 11 language files (`de`, `en`, `es`, `fr`, `it`, `nl`, `pl`, `pt`, `ru`, `uk`, `zh-cn`) must be kept in sync.
 
 # Apple API reference
 
