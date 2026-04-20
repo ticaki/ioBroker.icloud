@@ -1025,7 +1025,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.6.0 (2026-04-20)
 * (ticaki) Drive Sync: true bidirectional sync for directory entries (upload new/changed, download new/changed, propagate deletions on both sides)
 * (ticaki) Drive Sync: BackItUp entries are strictly upload-only — local backup files are never modified or deleted
 * (ticaki) FindMy: added manual refresh button in admin UI/states — cancels pending timeout and triggers an immediate refresh without interrupting any ongoing refresh

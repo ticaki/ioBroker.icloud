@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "news": {
+      "0.6.0": {
+        "en": "Drive Sync: true bidirectional sync for directory entries (upload new/changed, download new/changed, propagate deletions on both sides)\nDrive Sync: BackItUp entries are strictly upload-only — local backup files are never modified or deleted\nFindMy: added manual refresh button in admin UI and state — cancels pending timeout and triggers an immediate refresh without interrupting any ongoing refresh",
+        "de": "Drive Sync: Echte bidirektionale Synchronisierung für Verzeichniseinträge (neue/geänderte hochladen, neue/geänderte herunterladen, Löschungen auf beiden Seiten übertragen)\nDrive Sync: BackItUp-Einträge sind ausschließlich zum Hochladen — lokale Backup-Dateien werden niemals geändert oder gelöscht\nFindMy: Manueller Aktualisierungs-Button in der Admin-Oberfläche und als Datenpunkt hinzugefügt — bricht ausstehenden Timeout ab und löst sofortigen Refresh aus, ohne laufenden Refresh zu unterbrechen",
+        "ru": "Drive Sync: настоящая двунаправленная синхронизация для записей каталогов (загрузка новых/изменённых, скачивание новых/изменённых, распространение удалений на обе стороны)\nDrive Sync: записи BackItUp доступны только для загрузки — локальные файлы резервных копий никогда не изменяются и не удаляются\nFindMy: добавлена кнопка ручного обновления в интерфейсе администратора и как точка данных — отменяет ожидающий таймаут и запускает немедленное обновление, не прерывая текущее",
+        "pt": "Drive Sync: sincronização verdadeiramente bidirecional para entradas de diretório (upload de novos/alterados, download de novos/alterados, propagação de exclusões em ambos os lados)\nDrive Sync: as entradas do BackItUp são estritamente somente para upload — os arquivos de backup locais nunca são modificados ou excluídos\nFindMy: adicionado botão de atualização manual na interface de administração e como ponto de dados — cancela o tempo limite pendente e aciona uma atualização imediata sem interromper qualquer atualização em andamento",
+        "nl": "Drive Sync: echte bidirectionele synchronisatie voor mapvermeldingen (nieuwe/gewijzigde uploaden, nieuwe/gewijzigde downloaden, verwijderingen aan beide kanten doorgeven)\nDrive Sync: BackItUp-vermeldingen zijn strikt alleen voor uploaden — lokale back-upbestanden worden nooit gewijzigd of verwijderd\nFindMy: handmatige vernieuwingsknop toegevoegd in de beheerinterface en als datapunt — annuleert de wachtende time-out en activeert een directe vernieuwing zonder een lopende vernieuwing te onderbreken",
+        "fr": "Drive Sync : synchronisation bidirectionnelle réelle pour les entrées de répertoire (téléverser les nouvelles/modifiées, télécharger les nouvelles/modifiées, propager les suppressions des deux côtés)\nDrive Sync : les entrées BackItUp sont strictement en téléversement uniquement — les fichiers de sauvegarde locaux ne sont jamais modifiés ni supprimés\nFindMy : ajout d'un bouton de rafraîchissement manuel dans l'interface d'administration et comme point de données — annule le délai en attente et déclenche un rafraîchissement immédiat sans interrompre un rafraîchissement en cours",
+        "it": "Drive Sync: sincronizzazione bidirezionale reale per le voci di directory (carica nuove/modificate, scarica nuove/modificate, propaga le eliminazioni su entrambi i lati)\nDrive Sync: le voci BackItUp sono strettamente solo in caricamento — i file di backup locali non vengono mai modificati o eliminati\nFindMy: aggiunto pulsante di aggiornamento manuale nell'interfaccia di amministrazione e come punto dati — annulla il timeout in sospeso e attiva un aggiornamento immediato senza interrompere un aggiornamento in corso",
+        "es": "Drive Sync: sincronización bidireccional real para entradas de directorio (subir nuevas/modificadas, descargar nuevas/modificadas, propagar eliminaciones en ambos lados)\nDrive Sync: las entradas de BackItUp son estrictamente solo de subida — los archivos de copia de seguridad locales nunca se modifican ni se eliminan\nFindMy: añadido botón de actualización manual en la interfaz de administración y como punto de datos — cancela el tiempo de espera pendiente y activa una actualización inmediata sin interrumpir ninguna actualización en curso",
+        "pl": "Drive Sync: prawdziwa dwukierunkowa synchronizacja wpisów katalogów (wysyłanie nowych/zmienionych, pobieranie nowych/zmienionych, propagowanie usunięć po obu stronach)\nDrive Sync: wpisy BackItUp są wyłącznie do wysyłania — lokalne pliki kopii zapasowych nigdy nie są modyfikowane ani usuwane\nFindMy: dodano przycisk ręcznego odświeżania w interfejsie administratora i jako punkt danych — anuluje oczekujący limit czasu i wyzwala natychmiastowe odświeżenie bez przerywania trwającego odświeżania",
+        "uk": "Drive Sync: справжня двонаправлена синхронізація для записів каталогів (завантаження нових/змінених, вивантаження нових/змінених, поширення видалень на обидві сторони)\nDrive Sync: записи BackItUp призначені виключно для завантаження — локальні файли резервних копій ніколи не змінюються та не видаляються\nFindMy: додано кнопку ручного оновлення в інтерфейсі адміністратора та як точку даних — скасовує очікуючий тайм-аут і запускає негайне оновлення, не перериваючи поточне",
+        "zh-cn": "Drive Sync：目录条目的真正双向同步（上传新增/修改，下载新增/修改，双向传播删除）\nDrive Sync：BackItUp 条目严格仅限上传 — 本地备份文件永不修改或删除\nFindMy：在管理界面和状态中添加手动刷新按钮 — 取消待处理的超时并触发即时刷新，而不中断正在进行的刷新"
+      },
       "0.5.0": {
         "en": "Drive Sync added see Readme\nCalendar sendTo() API: create, update and delete calendar events; new Blockly blocks for calendar actions\nPhotos sendTo() API: browse albums, list photos, download and delete items",
         "de": "Drive Sync hinzugefügt – siehe Readme\nKalender-sendTo()-API: Kalenderereignisse erstellen, aktualisieren und löschen; neue Blockly-Blöcke für Kalenderaktionen\nFotos-sendTo()-API: Alben durchsuchen, Fotos auflisten, Elemente herunterladen und löschen",
@@ -80,19 +93,6 @@
         "pl": "przypomnienia iCloud są odczytywane i dostarczane jako punkty danych (listy i przypomnienia z terminem wymagalności, priorytetem i statusem)\nDodano bloki Blockly sendTo do tworzenia, aktualizacji, uzupełniania, kasowania i wyszukiwania przypomnień iCloud",
         "uk": "iCloud Reminders читаються та надаються як точки даних (списки та нагадування з датою виконання, пріоритетом та статусом)\nДодано блоки Blockly sendTo для створення, оновлення, завершення, видалення та запиту iCloud Reminders",
         "zh-cn": "iCloud 提醒作为数据点读取并提供（列表和提醒，包含截止日期、优先级和状态）\n添加了 Blockly sendTo 块，用于创建、更新、完成、删除和查询 iCloud 提醒"
-      },
-      "0.1.0-alpha.0": {
-        "en": "initial release",
-        "de": "erstausstrahlung",
-        "ru": "первоначальное освобождение",
-        "pt": "libertação inicial",
-        "nl": "eerste release",
-        "fr": "libération initiale",
-        "it": "rilascio iniziale",
-        "es": "liberación inicial",
-        "pl": "początkowe zwolnienie",
-        "uk": "початковий реліз",
-        "zh-cn": "初步释放"
       }
     },
     "titleLang": {

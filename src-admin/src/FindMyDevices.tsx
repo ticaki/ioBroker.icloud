@@ -288,7 +288,11 @@ class FindMyDevices extends ConfigGeneric<ConfigGenericProps, FindMyDevicesState
                                 onClick={() => this.handleRefreshNow()}
                                 disabled={this.state.refreshing}
                             >
-                                {this.state.refreshing ? <CircularProgress size={18} /> : <RefreshIcon fontSize="small" />}
+                                {this.state.refreshing ? (
+                                    <CircularProgress size={18} />
+                                ) : (
+                                    <RefreshIcon fontSize="small" />
+                                )}
                             </IconButton>
                         </span>
                     </Tooltip>
@@ -301,90 +305,90 @@ class FindMyDevices extends ConfigGeneric<ConfigGenericProps, FindMyDevicesState
                         stickyHeader
                         size="small"
                     >
-                    <TableHead>
-                        <TableRow>
-                            <TableCell padding="checkbox">
-                                <TableSortLabel
-                                    active={sortColumn === 'active'}
-                                    direction={sortColumn === 'active' ? (sortDir ?? 'asc') : 'asc'}
-                                    onClick={() => this.handleSort('active')}
-                                >
-                                    {I18n.t('custom_findmy_active')}
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell>
-                                <TableSortLabel
-                                    active={sortColumn === 'name'}
-                                    direction={sortColumn === 'name' ? (sortDir ?? 'asc') : 'asc'}
-                                    onClick={() => this.handleSort('name')}
-                                >
-                                    {I18n.t('custom_findmy_device_name')}
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell>
-                                <TableSortLabel
-                                    active={sortColumn === 'owner'}
-                                    direction={sortColumn === 'owner' ? (sortDir ?? 'asc') : 'asc'}
-                                    onClick={() => this.handleSort('owner')}
-                                >
-                                    {I18n.t('custom_findmy_owner')}
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell align="right">
-                                <TableSortLabel
-                                    active={sortColumn === 'distance'}
-                                    direction={sortColumn === 'distance' ? (sortDir ?? 'asc') : 'asc'}
-                                    onClick={() => this.handleSort('distance')}
-                                >
-                                    {I18n.t('custom_findmy_distance')}
-                                </TableSortLabel>
-                            </TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {devices.map(device => {
-                            const isEnabled = !this.state.disabledDevices.includes(device.id);
-                            return (
-                                <TableRow
-                                    key={device.id}
-                                    hover
-                                >
-                                    <TableCell padding="checkbox">
-                                        <Checkbox
-                                            checked={isEnabled}
-                                            onChange={(_e, checked) => this.toggleDevice(device.id, checked)}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography
-                                            variant="body2"
-                                            fontWeight="medium"
-                                        >
-                                            {device.name}
-                                        </Typography>
-                                        <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                        >
-                                            {device.model}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2">
-                                            {device.owner ?? I18n.t('custom_findmy_owner_me')}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <Typography variant="body2">
-                                            {device.distanceKm != null ? `${device.distanceKm.toFixed(1)} km` : '—'}
-                                        </Typography>
-                                    </TableCell>
-                                </TableRow>
-                            );
-                        })}
-                    </TableBody>
-                </Table>
-            </TableContainer>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell padding="checkbox">
+                                    <TableSortLabel
+                                        active={sortColumn === 'active'}
+                                        direction={sortColumn === 'active' ? (sortDir ?? 'asc') : 'asc'}
+                                        onClick={() => this.handleSort('active')}
+                                    >
+                                        {I18n.t('custom_findmy_active')}
+                                    </TableSortLabel>
+                                </TableCell>
+                                <TableCell>
+                                    <TableSortLabel
+                                        active={sortColumn === 'name'}
+                                        direction={sortColumn === 'name' ? (sortDir ?? 'asc') : 'asc'}
+                                        onClick={() => this.handleSort('name')}
+                                    >
+                                        {I18n.t('custom_findmy_device_name')}
+                                    </TableSortLabel>
+                                </TableCell>
+                                <TableCell>
+                                    <TableSortLabel
+                                        active={sortColumn === 'owner'}
+                                        direction={sortColumn === 'owner' ? (sortDir ?? 'asc') : 'asc'}
+                                        onClick={() => this.handleSort('owner')}
+                                    >
+                                        {I18n.t('custom_findmy_owner')}
+                                    </TableSortLabel>
+                                </TableCell>
+                                <TableCell align="right">
+                                    <TableSortLabel
+                                        active={sortColumn === 'distance'}
+                                        direction={sortColumn === 'distance' ? (sortDir ?? 'asc') : 'asc'}
+                                        onClick={() => this.handleSort('distance')}
+                                    >
+                                        {I18n.t('custom_findmy_distance')}
+                                    </TableSortLabel>
+                                </TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {devices.map(device => {
+                                const isEnabled = !this.state.disabledDevices.includes(device.id);
+                                return (
+                                    <TableRow
+                                        key={device.id}
+                                        hover
+                                    >
+                                        <TableCell padding="checkbox">
+                                            <Checkbox
+                                                checked={isEnabled}
+                                                onChange={(_e, checked) => this.toggleDevice(device.id, checked)}
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography
+                                                variant="body2"
+                                                fontWeight="medium"
+                                            >
+                                                {device.name}
+                                            </Typography>
+                                            <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                            >
+                                                {device.model}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography variant="body2">
+                                                {device.owner ?? I18n.t('custom_findmy_owner_me')}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            <Typography variant="body2">
+                                                {device.distanceKm != null ? `${device.distanceKm.toFixed(1)} km` : '—'}
+                                            </Typography>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
             </Box>
         );
     }
