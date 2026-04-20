@@ -604,13 +604,34 @@ class iCloudService extends import_node_events.default {
     }
   }
   /**
+   * Returns URL query parameters matching pyiCloud's self.params.
+   * These are required for setup.icloud.com PCS-related endpoints.
+   */
+  _getSetupParams() {
+    var _a, _b;
+    const params = new URLSearchParams({
+      clientBuildNumber: "2534Project66",
+      clientMasteringNumber: "2534B22",
+      clientId: this.authStore.clientId || ""
+    });
+    const dsid = (_b = (_a = this.accountInfo) == null ? void 0 : _a.dsInfo) == null ? void 0 : _b.dsid;
+    if (dsid != null) {
+      params.set("dsid", String(dsid));
+    }
+    return params;
+  }
+  /**
    * Updates the PCS state (iCloudService.pcsEnabled, iCloudService.pcsAccess, iCloudService.ICDRSDisabled).
    */
   async checkPCS() {
-    const pcsTest = await this.fetch("https://setup.icloud.com/setup/ws/1/requestWebAccessState", {
-      headers: this.authStore.getHeaders(),
-      method: "POST"
-    });
+    const params = this._getSetupParams();
+    const pcsTest = await this.fetch(
+      `https://setup.icloud.com/setup/ws/1/requestWebAccessState?${params.toString()}`,
+      {
+        headers: this.authStore.getHeaders(),
+        method: "POST"
+      }
+    );
     if (pcsTest.status == 200) {
       const j = await pcsTest.json();
       this.pcsEnabled = typeof j.isDeviceConsentedForPCS == "boolean";
@@ -639,10 +660,14 @@ class iCloudService extends import_node_events.default {
     this._log(LogLevel.Info, `ADP detected (ICDRSDisabled=true) \u2014 requesting PCS cookies for "${appName}"`);
     if (!this.pcsAccess) {
       this._log(LogLevel.Debug, "Requesting PCS consent from device");
-      const requestPcs = await this.fetch("https://setup.icloud.com/setup/ws/1/enableDeviceConsentForPCS", {
-        headers: this.authStore.getHeaders(),
-        method: "POST"
-      });
+      const params = this._getSetupParams();
+      const requestPcs = await this.fetch(
+        `https://setup.icloud.com/setup/ws/1/enableDeviceConsentForPCS?${params.toString()}`,
+        {
+          headers: this.authStore.getHeaders(),
+          method: "POST"
+        }
+      );
       const requestPcsJson = await requestPcs.json();
       if (!requestPcsJson.isDeviceConsentNotificationSent) {
         throw new Error("Unable to request PCS access \u2014 consent notification not sent");
@@ -657,7 +682,8 @@ class iCloudService extends import_node_events.default {
       throw new Error("PCS consent not granted within timeout \u2014 ensure an Apple device is online and unlocked");
     }
     for (let attempt = 0; attempt < PCS_MAX_RETRIES; attempt++) {
-      const pcsRequest = await this.fetch("https://setup.icloud.com/setup/ws/1/requestPCS", {
+      const params = this._getSetupParams();
+      const pcsRequest = await this.fetch(`https://setup.icloud.com/setup/ws/1/requestPCS?${params.toString()}`, {
         headers: this.authStore.getHeaders(),
         method: "POST",
         body: JSON.stringify({ appName, derivedFromUserAction: attempt === 0 })

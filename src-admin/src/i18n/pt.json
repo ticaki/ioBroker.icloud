@@ -53,7 +53,8 @@
 		"custom_findmy_device_name": "Nome do dispositivo",
 		"custom_findmy_distance": "Distância",
 		"custom_findmy_owner": "Proprietário",
-		"custom_findmy_owner_me": "Eu"
+		"custom_findmy_owner_me": "Eu",
+		"custom_findmy_refresh": "Atualizar agora"
 ,
                 "custom_drivesync_not_connected": "Adapter is not connected to iCloud. Start the adapter to configure Drive Sync.",
                 "custom_drivesync_conflicts_found": "%s conflict(s) detected — click to resolve",
@@ -71,7 +72,8 @@
                 "custom_drivesync_edit": "Edit",
                 "custom_drivesync_delete": "Delete",
                 "custom_drivesync_last_sync": "Last sync",
-                "custom_drivesync_files": "file(s)",
+                "custom_drivesync_remote_files": "In iCloud",
+		"custom_drivesync_files": "file(s)",
                 "custom_drivesync_edit_entry": "Edit Sync Entry",
                 "custom_drivesync_local_path": "Local Path",
                 "custom_drivesync_backitup_path_hint": "Path from BackItUp (%s) — read-only",

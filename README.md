@@ -19,6 +19,7 @@ This adapter integrates your Apple iCloud account with ioBroker. It gives you ac
 - [Find My](#find-my) — last known device locations, battery level, home distance and sound alerts
 - [Reminders](#reminders--sendto-api) — read, create, edit, complete and delete iCloud Reminders via `sendTo()`; lists and individual reminders are also written as ioBroker states under `reminders.*`
 - [iCloud Drive](#icloud-drive--sendto-api) — browse, upload, download, create, delete and rename files via `sendTo()`
+- [iCloud Drive Sync](#icloud-drive-sync) — automatic scheduled sync of local directories to iCloud Drive; BackItUp integration; true bidirectional sync for custom directories
 - [Contacts](#contacts--sendto-api) — read contacts and contact groups via `sendTo()`; optionally also writes individual contact fields as ioBroker states under `contacts.*`
 - [Notes](#notes--states) — iCloud Notes as ioBroker states (`notes.list`, `notes.textList`)
 - [Calendar](#calendar--sendto-api) — upcoming calendar events as ioBroker states; create and delete events via `sendTo()`
@@ -464,16 +465,16 @@ sendTo('icloud.0', 'driveRenameItem', {
 
 ## iCloud Drive Sync
 
-The Drive Sync feature lets you automatically synchronize local directories to iCloud Drive on a configurable schedule. It is especially useful for uploading ioBroker backups to the cloud.
+The Drive Sync feature automatically keeps local directories in sync with iCloud Drive on a configurable schedule. It provides two modes depending on the sync entry type:
+
+| Mode | When used | Local files touched? |
+|------|-----------|----------------------|
+| **Upload-only** | BackItUp entries | **Never** — local backup files are read-only |
+| **Bidirectional** | Directory entries | Yes — new remote files are downloaded; remotely deleted files are removed locally |
 
 > **Note:** Enable **iCloud Drive** in the Settings tab first. The **Drive Sync** tab only appears when iCloud Drive is enabled.
 
-### How it works
-
-1. The adapter periodically scans each configured local directory for files.
-2. New or changed files are uploaded to the specified iCloud Drive folder.
-3. If a file exists on both sides with different content, the configured **conflict resolution** strategy is applied.
-4. For backup entries, old files are automatically cleaned up on iCloud Drive according to your limits.
+> **Note:** The first sync runs **30 seconds** after the adapter starts. Subsequent syncs follow the configured interval.
 
 ### Setting up Drive Sync (step by step)
 
@@ -483,9 +484,11 @@ The Drive Sync feature lets you automatically synchronize local directories to i
 4. **Enable Drive Sync** and set the sync interval (default: 60 minutes).
 5. Click **Add BackItUp Sync** or **Add Directory Sync** to create a sync entry.
 
-### BackItUp integration
+### BackItUp integration — upload-only
 
-If you use the [BackItUp](https://github.com/simatec/ioBroker.backitup) adapter to create backups, the Drive Sync feature can automatically detect and sync those backup files to iCloud Drive.
+If you use the [BackItUp](https://github.com/simatec/ioBroker.backitup) adapter to create backups, the Drive Sync feature can automatically detect and upload those backup files to iCloud Drive.
+
+> **Local files are never modified or deleted** in backup mode. The adapter only reads local files and uploads them.
 
 **Prerequisites:**
 
@@ -493,67 +496,71 @@ If you use the [BackItUp](https://github.com/simatec/ioBroker.backitup) adapter 
 - In BackItUp settings, **CIFS/NAS backup** must be enabled.
 - The CIFS **connection type** must be set to **"Copy"** (not "CIFS mount").
 
-When all prerequisites are met, the adapter automatically reads the backup path from BackItUp and displays it as a read-only field. You only need to choose the target iCloud Drive folder.
+When all prerequisites are met, the adapter automatically reads the backup path from BackItUp.
 
 **Adding a BackItUp sync entry:**
 
 1. In the Drive Sync tab, click **"Add BackItUp Sync"** (only visible when prerequisites are met).
 2. The **Local Path** is automatically filled from BackItUp — you cannot change it.
 3. Click **Browse** next to "iCloud Drive Folder" to open the folder browser.
-4. Navigate to an existing folder or create a new one (e.g. `Backups/ioBroker`).
-5. Click **"Select this folder"** to confirm.
-6. Optionally set **backup limits**:
-   - **Max Files**: Maximum number of backup files to keep in iCloud Drive (oldest are deleted first). Set to `0` for unlimited.
-   - **Max Size (MB)**: Maximum total size of backup files in MB. When exceeded, the oldest files are removed. Set to `0` for unlimited.
-7. Choose a **conflict resolution** strategy (see below).
-8. Click **Save**.
+   - Navigate folders by clicking them.
+   - Create a new folder with the **"New Folder"** button — the browser automatically navigates into it.
+   - Click **"Select this folder"** to confirm.
+4. Optionally set **backup limits**:
+   - **Max Files**: Maximum number of backup files to keep in iCloud Drive (oldest are deleted first). `0` = unlimited.
+   - **Max Size (MB)**: Maximum total size of backup files in MB. `0` = unlimited.
+5. Choose a **conflict resolution** strategy and click **Save**.
 
-### Custom directory sync
+### Custom directory sync — bidirectional
 
-You can also sync any local directory to iCloud Drive — for example, configuration exports, log archives, or script backups.
+Custom directory entries perform a **true two-way sync** between a local directory and an iCloud Drive folder:
+
+- **New local file** → uploaded to iCloud Drive.
+- **New remote file** → downloaded to the local directory.
+- **File deleted locally** → deleted from iCloud Drive on next sync.
+- **File deleted on iCloud Drive** → deleted from the local directory on next sync.
+- **File changed on one side** → the newer version wins (60-second tolerance). If both sides changed, the configured conflict resolution applies.
+
+> The first sync is treated as the initial baseline — no deletions are performed until a second sync has run.
 
 **Adding a directory sync entry:**
 
 1. Click **"Add Directory Sync"**.
-2. Enter the full **local path** (e.g. `/opt/iobroker/backups` or `/home/user/exports`).
+2. Enter the full **local path** (e.g. `/opt/iobroker/exports`).
 3. Select or create the **iCloud Drive folder** using the Browse button.
 4. Choose a **conflict resolution** strategy.
 5. Click **Save**.
 
-> **Note:** Custom directory sync does not have file count or size limits — all files in the directory are synced.
+### Folder browser
+
+The folder browser lets you navigate iCloud Drive and pick a target folder:
+
+- Click a folder to navigate into it. A breadcrumb trail shows the current path.
+- Click **"New Folder"** to create a subfolder — the browser immediately navigates into it so you can confirm the selection.
+- Click **"Select this folder"** to use the currently displayed folder.
 
 ### Conflict resolution
 
-When a file exists both locally and in iCloud Drive with different content (different size or the remote version is newer), a conflict is detected. You can configure how conflicts are handled:
+Applies when a file exists on **both sides with different content** and the newer side cannot be determined.
 
 | Strategy | Behavior |
 |----------|----------|
-| **Ask me (pause sync)** | The file is skipped and a conflict notification appears in the Admin UI. Open the Drive Sync tab to resolve it manually. |
-| **Always upload local version** | The local file always overwrites the remote version. |
-| **Skip conflicting files** | Conflicting files are silently skipped — neither version is changed. |
-| **Keep both versions** | The local file is uploaded with a modified name (e.g. `backup_local_1713500000000.tar.gz`), keeping both versions. |
+| **Ask me (pause sync)** | File is skipped; a conflict notification appears in the Admin UI. Open the Drive Sync tab to resolve it manually. |
+| **Always upload local version** | Local file overwrites the remote version. |
+| **Skip conflicting files** | File is silently skipped — neither side is changed. |
+| **Keep both versions** | Local file is uploaded with a timestamped name (e.g. `file_local_1713500000000.txt`), keeping both versions. |
 
 #### Resolving conflicts manually
 
-When conflicts are detected (with the "Ask me" strategy), the Drive Sync tab shows an **error banner** listing all conflicting files. Click on a file name to open the conflict resolution dialog, which shows:
+The Drive Sync tab shows an **error banner** listing conflicting files. Click a filename to open the resolution dialog, which shows both versions side-by-side (modification date and size). Options:
 
-- The **local version** (modification date and size)
-- The **iCloud version** (modification date and size)
-
-You can then choose to:
-- **Upload local version** — overwrite the remote file with your local copy
-- **Keep both** — upload the local file with a renamed filename
-- **Skip** — ignore this conflict (the file won't be synced until it changes again)
+- **Upload local version** — overwrite the remote file.
+- **Keep both** — upload the local file with a renamed filename.
+- **Skip** — ignore this conflict until the file changes again.
 
 ### Sync metadata
 
-Sync status (last sync time, number of files synced, total size, errors, and conflicts) is stored in the `drive` object's `native.syncMeta` property as a JSON string.
-
-### States
-
-| State | Type | Description |
-|-------|------|-------------|
-| `drive.lastSync` | `number` | Timestamp (ms) of the last Drive metadata refresh. |
+Sync status (last sync time, files synced, total size, errors, conflicts, and the list of known files for deletion tracking) is stored in the `drive` object's `native.syncMeta` property as a JSON string. This avoids ioBroker's deep-merge behavior for object natives.
 
 ---
 
@@ -1018,6 +1025,11 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (ticaki) Drive Sync: true bidirectional sync for directory entries (upload new/changed, download new/changed, propagate deletions on both sides)
+* (ticaki) Drive Sync: BackItUp entries are strictly upload-only — local backup files are never modified or deleted
+* (ticaki) FindMy: added manual refresh button in admin UI/states — cancels pending timeout and triggers an immediate refresh without interrupting any ongoing refresh
+
 ### 0.5.0 (2026-04-19)
 * (ticaki) Drive Sync added see Readme
 * (ticaki) Calendar sendTo() API: create, update and delete calendar events; new Blockly blocks for calendar actions

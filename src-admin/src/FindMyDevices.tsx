@@ -3,6 +3,7 @@ import {
     Box,
     Checkbox,
     CircularProgress,
+    IconButton,
     Table,
     TableBody,
     TableCell,
@@ -10,9 +11,11 @@ import {
     TableHead,
     TableRow,
     TableSortLabel,
+    Tooltip,
     Typography,
     Paper,
 } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { ConfigGeneric, type ConfigGenericProps, type ConfigGenericState } from '@iobroker/json-config';
 import { I18n } from '@iobroker/adapter-react-v5';
 
@@ -32,6 +35,7 @@ interface FindMyDevicesState extends ConfigGenericState {
     alive: boolean;
     devices: DeviceInfo[];
     loading: boolean;
+    refreshing: boolean;
     disabledDevices: string[];
     sortColumn: SortColumn | null;
     sortDir: SortDir | null;
@@ -52,6 +56,7 @@ class FindMyDevices extends ConfigGeneric<ConfigGenericProps, FindMyDevicesState
             alive: false,
             devices: [],
             loading: true,
+            refreshing: false,
             disabledDevices: (props.data?.findMyDisabledDevices as string[]) ?? [],
             sortColumn: null,
             sortDir: null,
@@ -225,6 +230,26 @@ class FindMyDevices extends ConfigGeneric<ConfigGenericProps, FindMyDevicesState
         return sorted;
     }
 
+    handleRefreshNow(): void {
+        if (this.state.refreshing) {
+            return;
+        }
+        this.setState({ refreshing: true });
+        const stateId = `icloud.${this.props.oContext.instance}.findme.refresh`;
+        void this.props.oContext.socket
+            .setState(stateId, { val: true, ack: false })
+            .then(() => {
+                // Give the adapter a moment to start the refresh, then poll
+                window.setTimeout(() => {
+                    this.setState({ refreshing: false });
+                    void this.fetchDevicesAndUpdate();
+                }, 1000);
+            })
+            .catch(() => {
+                this.setState({ refreshing: false });
+            });
+    }
+
     renderItem(): React.JSX.Element {
         if (this.state.loading) {
             return (
@@ -254,14 +279,28 @@ class FindMyDevices extends ConfigGeneric<ConfigGenericProps, FindMyDevicesState
         const devices = this.getSortedDevices();
 
         return (
-            <TableContainer
-                component={Paper}
-                sx={{ maxHeight: 500 }}
-            >
-                <Table
-                    stickyHeader
-                    size="small"
+            <Box>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+                    <Tooltip title={I18n.t('custom_findmy_refresh')}>
+                        <span>
+                            <IconButton
+                                size="small"
+                                onClick={() => this.handleRefreshNow()}
+                                disabled={this.state.refreshing}
+                            >
+                                {this.state.refreshing ? <CircularProgress size={18} /> : <RefreshIcon fontSize="small" />}
+                            </IconButton>
+                        </span>
+                    </Tooltip>
+                </Box>
+                <TableContainer
+                    component={Paper}
+                    sx={{ maxHeight: 500 }}
                 >
+                    <Table
+                        stickyHeader
+                        size="small"
+                    >
                     <TableHead>
                         <TableRow>
                             <TableCell padding="checkbox">
@@ -346,6 +385,7 @@ class FindMyDevices extends ConfigGeneric<ConfigGenericProps, FindMyDevicesState
                     </TableBody>
                 </Table>
             </TableContainer>
+            </Box>
         );
     }
 }

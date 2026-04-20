@@ -77,6 +77,8 @@ interface DriveSyncStatus {
         lastError: string;
         filesSynced: number;
         totalSizeMB: number;
+        remoteFileCount?: number;
+        remoteTotalSizeMB?: number;
     }>;
     conflicts: DriveSyncConflict[];
 }
@@ -320,7 +322,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                 { path: path || undefined },
             );
             if (result?.success && result.items) {
-                const folders = result.items.filter(i => i.type === 'FOLDER');
+                const folders = (result.items as DriveFolderItem[]).filter(i => i.type === 'FOLDER');
                 this.setState({ browseItems: folders, browseLoading: false });
             } else {
                 this.setState({ browseItems: [], browseLoading: false });
@@ -612,8 +614,15 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                             variant="caption"
                             color="text.secondary"
                         >
-                            {I18n.t('custom_drivesync_last_sync')}: {new Date(status.lastSync).toLocaleString()} —{' '}
-                            {status.filesSynced} {I18n.t('custom_drivesync_files')}, {status.totalSizeMB.toFixed(1)} MB
+                            {I18n.t('custom_drivesync_last_sync')}: {new Date(status.lastSync).toLocaleString()}
+                            {status.remoteFileCount != null && (
+                                <>
+                                    {' — '}
+                                    {I18n.t('custom_drivesync_remote_files')}:{' '}
+                                    {status.remoteFileCount} {I18n.t('custom_drivesync_files')},{' '}
+                                    {(status.remoteTotalSizeMB ?? 0).toFixed(1)} MB
+                                </>
+                            )}
                         </Typography>
                     )}
                 </CardContent>

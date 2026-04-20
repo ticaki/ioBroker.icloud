@@ -284,6 +284,10 @@ interface DriveSyncMeta {
         lastError: string;
         filesSynced: number;
         totalSizeMB: number;
+        /** Actual number of files currently in the remote iCloud Drive folder. */
+        remoteFileCount?: number;
+        /** Actual total size of files currently in the remote iCloud Drive folder (MB). */
+        remoteTotalSizeMB?: number;
         /** Files known from last successful sync — used to detect deletions in directory mode. */
         lastKnownFiles?: string[];
     }>;
@@ -293,6 +297,7 @@ interface DriveSyncMeta {
 class Icloud extends utils.Adapter {
     private icloud: iCloudService | null = null;
     private findMyRefreshTimer: ioBroker.Timeout | null | undefined = null;
+    private findMyRefreshing = false;
     private findMyCleanupDone = false;
     /** Serialized snapshot of last-seen findMyDisabledDevices — used to detect config changes at runtime */
     private findMyLastDisabledKey = '';
@@ -516,6 +521,7 @@ class Icloud extends utils.Adapter {
         this.subscribeStates('mfa.code');
         this.subscribeStates('mfa.requestSmsCode');
         this.subscribeStates('findme.*.ping');
+        this.subscribeStates('findme.refresh');
         this.subscribeStates('reminders.*.*.completed');
         this.log.debug('Subscribed to mfa.code');
 
@@ -872,6 +878,7 @@ class Icloud extends utils.Adapter {
         if (!this.icloud) {
             return;
         }
+        this.findMyRefreshing = true;
         try {
             const findMe = this.icloud.getService('findme');
             this.log.debug('FindMy: calling API refresh...');
@@ -927,6 +934,17 @@ class Icloud extends utils.Adapter {
                     role: 'value.time',
                     read: true,
                     write: false,
+                },
+                native: {},
+            });
+            await this.extendObject('findme.refresh', {
+                type: 'state',
+                common: {
+                    name: 'Refresh now',
+                    type: 'boolean',
+                    role: 'button',
+                    read: false,
+                    write: true,
                 },
                 native: {},
             });
@@ -1143,6 +1161,8 @@ class Icloud extends utils.Adapter {
             }
         } catch (err) {
             this.log.warn(`FindMy refresh failed: ${(err as Error)?.message ?? String(err)}`);
+        } finally {
+            this.findMyRefreshing = false;
         }
     }
 
@@ -2426,7 +2446,29 @@ class Icloud extends utils.Adapter {
             }
         } catch (err) {
             const msg = (err as Error)?.message ?? String(err);
-            this.log.warn(`Drive refresh failed: ${msg}`);
+            // "Missing PCS cookies" can happen on first start when the session cookies
+            // are not yet fully established. Retry once after refreshing PCS state.
+            if (msg.includes('Missing PCS cookies') || msg.includes('PCS')) {
+                this.log.info(`Drive refresh: PCS cookie issue detected, retrying after PCS refresh...`);
+                try {
+                    await this.icloud.requestServiceAccess('iclouddrive');
+                    const driveService = this.icloud.getService('drivews');
+                    const root = await driveService.getNode();
+                    await this.writeDriveStates(root);
+                    if (this.driveFirstLoad) {
+                        this.driveFirstLoad = false;
+                        this.log.info(
+                            `Drive ready (after PCS retry) — ${root.directChildrenCount ?? 0} root item(s), ${root.fileCount ?? 0} file(s) total`,
+                        );
+                    }
+                    return;
+                } catch (retryErr) {
+                    const retryMsg = (retryErr as Error)?.message ?? String(retryErr);
+                    this.log.warn(`Drive refresh failed after PCS retry: ${retryMsg}`);
+                }
+            } else {
+                this.log.warn(`Drive refresh failed: ${msg}`);
+            }
         }
     }
 
@@ -2814,6 +2856,28 @@ class Icloud extends utils.Adapter {
                 });
         }
 
+        // findme.refresh — manual trigger
+        if (id === `${this.namespace}.findme.refresh` && state.val === true) {
+            if (this.findMyRefreshing) {
+                this.log.debug('FindMy manual refresh requested but a refresh is already running — ignoring');
+                return;
+            }
+            this.log.info('FindMy manual refresh triggered via state');
+            if (this.findMyRefreshTimer) {
+                this.clearTimeout(this.findMyRefreshTimer);
+                this.findMyRefreshTimer = null;
+            }
+            this.resolveLocationPoints()
+                .then(async locationPoints => {
+                    await this.refreshFindMyDevices(locationPoints);
+                    this.scheduleFindMyRefresh(locationPoints);
+                })
+                .catch((err: unknown) => {
+                    this.log.error(`FindMy manual refresh failed: ${(err as Error)?.message ?? String(err)}`);
+                });
+            return;
+        }
+
         // reminders.*.XXXXXX.completed — toggle completed state
         const reminderCompletedMatch = id.match(/^[^.]+\.[^.]+\.reminders\.([^.]+)\.(\d{6})\.completed$/);
         if (reminderCompletedMatch) {
@@ -2942,6 +3006,8 @@ class Icloud extends utils.Adapter {
             this.handleResetRemindersSyncMap(obj);
         } else if (obj.command === 'getDevices') {
             this.handleGetDevices(obj);
+        } else if (obj.command === 'refreshFindMyNow') {
+            void this.handleRefreshFindMyNow(obj);
         } else if (obj.command === 'getCalendars') {
             this.handleGetCalendars(obj);
         } else if (obj.command === 'getCalendarEvents') {
@@ -3016,6 +3082,33 @@ class Icloud extends utils.Adapter {
             });
         }
         this.sendCallback(obj, { alive: true, devices: result });
+    }
+
+    /**
+     * Trigger an immediate FindMy refresh from the admin UI.
+     * Cancels any pending scheduled refresh and runs one now (unless a refresh
+     * is already in progress, in which case the request is ignored).
+     * After the refresh completes, the normal schedule resumes.
+     *
+     * @param obj The ioBroker message object from the message handler.
+     */
+    private async handleRefreshFindMyNow(obj: ioBroker.Message): Promise<void> {
+        if (!this.icloud || this.icloud.status !== iCloudServiceStatus.Ready) {
+            this.sendCallback(obj, { success: false, error: 'Adapter not connected to iCloud' });
+            return;
+        }
+        if (this.findMyRefreshing) {
+            this.sendCallback(obj, { success: false, busy: true });
+            return;
+        }
+        if (this.findMyRefreshTimer) {
+            this.clearTimeout(this.findMyRefreshTimer);
+            this.findMyRefreshTimer = null;
+        }
+        const locationPoints = await this.resolveLocationPoints();
+        await this.refreshFindMyDevices(locationPoints);
+        this.scheduleFindMyRefresh(locationPoints);
+        this.sendCallback(obj, { success: true });
     }
 
     // ── onMessage Reminder handlers ───────────────────────────────────────────
@@ -4196,6 +4289,17 @@ class Icloud extends utils.Adapter {
             await this.syncEntryUploadOnly(driveService, targetNode, entry, entryMeta, meta);
         } else {
             await this.syncEntryBidirectional(driveService, targetNode, entry, entryMeta, meta);
+        }
+
+        // Count actual files in the remote folder after all operations
+        try {
+            await targetNode.refresh();
+            const remoteChildren = await targetNode.getChildren();
+            const remoteFiles = remoteChildren.filter(c => c.type === 'FILE');
+            entryMeta.remoteFileCount = remoteFiles.length;
+            entryMeta.remoteTotalSizeMB = remoteFiles.reduce((s, c) => s + (c.size ?? 0), 0) / 1024 / 1024;
+        } catch {
+            // non-critical — just skip updating counts if the folder can't be read
         }
     }
 

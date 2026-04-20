@@ -22,6 +22,7 @@
     "custom_drivesync_edit": "Bearbeiten",
     "custom_drivesync_delete": "Löschen",
     "custom_drivesync_last_sync": "Letzte Synchronisierung",
+    "custom_drivesync_remote_files": "In iCloud",
     "custom_drivesync_files": "Datei(en)",
     "custom_drivesync_edit_entry": "Sync-Eintrag bearbeiten",
     "custom_drivesync_local_path": "Lokaler Pfad",
