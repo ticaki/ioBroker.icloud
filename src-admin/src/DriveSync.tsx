@@ -1031,7 +1031,10 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                             {I18n.t('custom_drivesync_no_folders')}
                         </Typography>
                     ) : (
-                        <List dense>
+                        <List
+                            dense
+                            sx={{ maxHeight: 300, overflow: 'auto' }}
+                        >
                             {localBrowseItems.map(item => (
                                 <ListItemButton
                                     key={item.path}
@@ -1088,7 +1091,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                         <Typography variant="h6">{I18n.t('custom_drivesync_select_folder')}</Typography>
                     </Stack>
                 </DialogTitle>
-                <DialogContent>
+                <DialogContent dividers>
                     {/* Breadcrumb navigation */}
                     <Breadcrumbs sx={{ mb: 1 }}>
                         <Link

@@ -46,6 +46,9 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.6.5 (2026-04-20)
+* (ticaki) Drive Sync admin UI: both the iCloud Drive folder browser and the local folder browser are now scrollable (list capped at 300 px height)
+
 ### 0.6.4 (2026-04-20)
 * (ticaki) Drive Sync: fixed
 * (ticaki) Drive Sync admin UI: added local folder browser for directory-type sync entries
