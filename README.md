@@ -46,6 +46,9 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (ticaki) Calendar: writing writable event states (title, startDate, endDate, allDay, location, description, url, alarms, json) now correctly triggers an update to iCloud — changes were silently ignored before due to a missing state subscription
+
 ### 0.6.2 (2026-04-20)
 * (ticaki) Auth: automatic one-shot retry after a stale-session HTTP 401 (e.g. after an adapter update); the trust token is preserved so MFA is not required again
 

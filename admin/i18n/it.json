@@ -14,6 +14,8 @@
 	"calendarEnabled": "Enable Calendar",
 	"calendarEventCount": "Number of upcoming events",
 	"calendarEventCountHelp": "Number of future events to fetch per calendar (1–50)",
+	"calendarMonths": "Months to fetch",
+	"calendarMonthsHelp": "How many months of events to fetch (1–12). Each month is a separate API call.",
 	"calendarInterval": "Refresh interval (minutes)",
 	"calendarIntervalHelp": "How often calendar events are fetched (5–1440 minutes)",
 	"remindersHeader": "Promemoria",

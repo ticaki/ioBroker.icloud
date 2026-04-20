@@ -715,20 +715,67 @@ You can list calendars, browse events, create new events, and delete events usin
 
 ### States
 
-| State | Type | Description |
-|-------|------|-------------|
-| `calendar.lastSync` | `number` | Timestamp (ms) of the last successful sync. |
-| `calendar.<name>.guid` | `string` | Calendar GUID. |
-| `calendar.<name>.color` | `string` | Calendar color. |
-| `calendar.<name>.enabled` | `boolean` | Whether the calendar is enabled. |
-| `calendar.<name>.readOnly` | `boolean` | Whether the calendar is read-only. |
-| `calendar.<name>.<slot>.title` | `string` | Event title. |
-| `calendar.<name>.<slot>.startDate` | `number` | Event start timestamp (ms). |
-| `calendar.<name>.<slot>.endDate` | `number` | Event end timestamp (ms). |
-| `calendar.<name>.<slot>.allDay` | `boolean` | Whether the event is all-day. |
-| `calendar.<name>.<slot>.duration` | `number` | Duration in minutes. |
+| State | Type | Writable | Description |
+|-------|------|:--------:|-------------|
+| `calendar.lastSync` | `number` | | Timestamp (ms) of the last successful sync. |
+| `calendar.<name>.guid` | `string` | | Calendar GUID. |
+| `calendar.<name>.color` | `string` | | Calendar color. |
+| `calendar.<name>.enabled` | `boolean` | | Whether the calendar is enabled. |
+| `calendar.<name>.readOnly` | `boolean` | | Whether the calendar is read-only. |
+| `calendar.<name>.<slot>.title` | `string` | ✓ | Event title. |
+| `calendar.<name>.<slot>.startDate` | `number` | ✓ | Event start timestamp (ms). |
+| `calendar.<name>.<slot>.endDate` | `number` | ✓ | Event end timestamp (ms). |
+| `calendar.<name>.<slot>.allDay` | `boolean` | ✓ | Whether the event is all-day. |
+| `calendar.<name>.<slot>.location` | `string` | ✓ | Event location. |
+| `calendar.<name>.<slot>.description` | `string` | ✓ | Event description / notes. |
+| `calendar.<name>.<slot>.url` | `string` | ✓ | Event URL. |
+| `calendar.<name>.<slot>.alarms` | `string` | ✓ | Alarm list as JSON array of `{before, hours, minutes, days, weeks, seconds}`. |
+| `calendar.<name>.<slot>.duration` | `number` | | Duration in minutes (computed from start/end). |
+| `calendar.<name>.<slot>.json` | `string` | ✓ | All editable fields as a single JSON object. |
 
 Upcoming events are automatically synced at the configured refresh interval.
+
+### Editing events via states
+
+All event states marked **✓** above are writable. Write a new value (without ack) to any of them.
+
+**Debounce rules:**
+- **Individual fields** (`title`, `startDate`, `endDate`, …): writes to the same event slot are collected for **5 seconds**. Once no new write arrives for that slot within the window, a single API call is sent to iCloud.
+- **`json` state**: fires almost immediately (100 ms delay). Use this when you want to update multiple fields atomically.
+- **One resync after all updates**: a calendar refresh is triggered only once, after *all* slots have been updated and no more writes are pending. If a script changes slot A, then 3 s later slot B, then 2 s later slot C, a single refresh fires after C completes.
+- States are not acknowledged (`ack`) until the API call succeeds.
+
+#### Individual fields
+
+```javascript
+// Update the title of the first event in calendar "Home"
+setState('icloud.0.calendar.Home.000001.title', 'Team Meeting (updated)', false);
+
+// Move event start and end by one hour
+const start = getState('icloud.0.calendar.Home.000001.startDate').val;
+const end   = getState('icloud.0.calendar.Home.000001.endDate').val;
+setState('icloud.0.calendar.Home.000001.startDate', start + 3600000, false);
+setState('icloud.0.calendar.Home.000001.endDate',   end   + 3600000, false);
+```
+
+#### Via the json state (update multiple fields at once)
+
+```javascript
+setState('icloud.0.calendar.Home.000001.json', JSON.stringify({
+    title:       'Team Meeting (updated)',
+    startDate:   new Date('2026-05-10T10:00:00').getTime(),
+    endDate:     new Date('2026-05-10T11:00:00').getTime(),
+    allDay:      false,
+    location:    'Conference Room 3',
+    description: 'Sprint review',
+    url:         '',
+    alarms:      [{ before: true, hours: 0, minutes: 15, days: 0, weeks: 0, seconds: 0 }],
+}), false);
+```
+
+Writes to individual fields within the same 5-second window are batched into one API call per slot.
+Writes via `json` are sent immediately and override individual field writes made at the same time.
+If both `json` and individual fields are written simultaneously, the individual fields take precedence.
 
 ### Get calendars
 

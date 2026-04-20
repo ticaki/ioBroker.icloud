@@ -169,6 +169,42 @@ class iCloudCalendarService {
   async events(from, to) {
     return this.fetchEndpoint("/events", this.defaultParams(from, to));
   }
+  /**
+   * Fetch events across multiple months by issuing one /events request per month,
+   * similar to timlaing/pyicloud's `refresh_client()` approach.
+   * Apple's API silently returns empty results when the date range exceeds ~30 days,
+   * so we chunk the request into individual calendar months.
+   *
+   * @param months Number of months to fetch (1 = current month only).
+   */
+  async eventsForMonths(months) {
+    var _a, _b, _c;
+    const allEvents = [];
+    const allAlarms = [];
+    const allRecurrences = [];
+    const seenGuids = /* @__PURE__ */ new Set();
+    const now = /* @__PURE__ */ new Date();
+    for (let i = 0; i < months; i++) {
+      const year = now.getFullYear();
+      const month = now.getMonth() + i;
+      const from = new Date(year, month, 1);
+      const to = new Date(year, month + 1, 0);
+      const resp = await this.events(from, to);
+      for (const ev of (_a = resp.Event) != null ? _a : []) {
+        if (!seenGuids.has(ev.guid)) {
+          seenGuids.add(ev.guid);
+          allEvents.push(ev);
+        }
+      }
+      for (const a of (_b = resp.Alarm) != null ? _b : []) {
+        allAlarms.push(a);
+      }
+      for (const r of (_c = resp.Recurrence) != null ? _c : []) {
+        allRecurrences.push(r);
+      }
+    }
+    return { Event: allEvents, Alarm: allAlarms, Recurrence: allRecurrences };
+  }
   async calendars(from, to) {
     const response = await this.fetchEndpoint(
       "/startup",

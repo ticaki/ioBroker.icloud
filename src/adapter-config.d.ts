@@ -22,6 +22,7 @@ declare global {
 			geocodingCacheSize: 'small' | 'medium' | 'large';
 			calendarEnabled: boolean;
 			calendarEventCount: number;
+			calendarMonths: number;
 			calendarInterval: number;
 			remindersEnabled: boolean;
 			remindersItemCount: number;

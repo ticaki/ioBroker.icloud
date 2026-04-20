@@ -644,20 +644,67 @@ Du kannst Kalender auflisten, Termine durchsuchen, neue Termine erstellen und Te
 
 ### States
 
-| State | Typ | Beschreibung |
-|-------|-----|-------------|
-| `calendar.lastSync` | `number` | Zeitstempel (ms) der letzten erfolgreichen Synchronisierung. |
-| `calendar.<name>.guid` | `string` | Kalender-GUID. |
-| `calendar.<name>.color` | `string` | Kalenderfarbe. |
-| `calendar.<name>.enabled` | `boolean` | Ob der Kalender aktiviert ist. |
-| `calendar.<name>.readOnly` | `boolean` | Ob der Kalender schreibgeschützt ist. |
-| `calendar.<name>.<slot>.title` | `string` | Terminbezeichnung. |
-| `calendar.<name>.<slot>.startDate` | `number` | Startzeit des Termins (ms). |
-| `calendar.<name>.<slot>.endDate` | `number` | Endzeit des Termins (ms). |
-| `calendar.<name>.<slot>.allDay` | `boolean` | Ob es ein Ganztagestermin ist. |
-| `calendar.<name>.<slot>.duration` | `number` | Dauer in Minuten. |
+| State | Typ | Schreibbar | Beschreibung |
+|-------|-----|:----------:|---------------|
+| `calendar.lastSync` | `number` | | Zeitstempel (ms) der letzten erfolgreichen Synchronisierung. |
+| `calendar.<name>.guid` | `string` | | Kalender-GUID. |
+| `calendar.<name>.color` | `string` | | Kalenderfarbe. |
+| `calendar.<name>.enabled` | `boolean` | | Ob der Kalender aktiviert ist. |
+| `calendar.<name>.readOnly` | `boolean` | | Ob der Kalender schreibgeschützt ist. |
+| `calendar.<name>.<slot>.title` | `string` | ✓ | Terminbezeichnung. |
+| `calendar.<name>.<slot>.startDate` | `number` | ✓ | Startzeit des Termins (ms). |
+| `calendar.<name>.<slot>.endDate` | `number` | ✓ | Endzeit des Termins (ms). |
+| `calendar.<name>.<slot>.allDay` | `boolean` | ✓ | Ob es ein Ganztagestermin ist. |
+| `calendar.<name>.<slot>.location` | `string` | ✓ | Ort des Termins. |
+| `calendar.<name>.<slot>.description` | `string` | ✓ | Beschreibung / Notizen des Termins. |
+| `calendar.<name>.<slot>.url` | `string` | ✓ | URL des Termins. |
+| `calendar.<name>.<slot>.alarms` | `string` | ✓ | Erinnerungen als JSON-Array mit `{before, hours, minutes, days, weeks, seconds}`. |
+| `calendar.<name>.<slot>.duration` | `number` | | Dauer in Minuten (berechnet aus Start/Ende). |
+| `calendar.<name>.<slot>.json` | `string` | ✓ | Alle editierbaren Felder als einzelnes JSON-Objekt. |
 
 Anstehende Termine werden automatisch im konfigurierten Aktualisierungsintervall synchronisiert.
+
+### Termine über States bearbeiten
+
+Alle mit **✓** markierten Event-States sind beschreibbar. Schreibe einen neuen Wert (ohne ack) in einen davon.
+
+**Debounce-Regeln:**
+- **Einzelne Felder** (`title`, `startDate`, `endDate`, …): Schreibzugriffe auf denselben Termins-Slot werden **5 Sekunden** lang gesammelt. Kommt innerhalb des Fensters kein weiterer Schreibzugriff auf diesen Slot, wird ein einzelner API-Aufruf an iCloud gesendet.
+- **`json`-State**: wird nahezu sofort ausgeführt (100 ms Verzögerung). Verwende diesen State, wenn mehrere Felder atomar geändert werden sollen.
+- **Ein Resync nach allen Updates**: Ein Kalender-Refresh wird erst ausgelöst, wenn *alle* Slots aktualisiert wurden und keine weiteren Schreibzugriffe mehr ausstehen. Ändert ein Skript Slot A, 3 Sekunden später Slot B und 2 Sekunden danach Slot C, wird einmalig nach dem Abschluss von C ein Refresh ausgelöst.
+- States werden erst nach erfolgreichem API-Aufruf bestätigt (`ack`).
+
+#### Einzelne Felder
+
+```javascript
+// Titel des ersten Termins im Kalender "Home" ändern
+setState('icloud.0.calendar.Home.000001.title', 'Teammeeting (geändert)', false);
+
+// Start- und Endzeit um eine Stunde nach vorne verschieben
+const start = getState('icloud.0.calendar.Home.000001.startDate').val;
+const end   = getState('icloud.0.calendar.Home.000001.endDate').val;
+setState('icloud.0.calendar.Home.000001.startDate', start + 3600000, false);
+setState('icloud.0.calendar.Home.000001.endDate',   end   + 3600000, false);
+```
+
+#### Über den json-State (mehrere Felder auf einmal ändern)
+
+```javascript
+setState('icloud.0.calendar.Home.000001.json', JSON.stringify({
+    title:       'Teammeeting (geändert)',
+    startDate:   new Date('2026-05-10T10:00:00').getTime(),
+    endDate:     new Date('2026-05-10T11:00:00').getTime(),
+    allDay:      false,
+    location:    'Konferenzraum 3',
+    description: 'Sprint-Review',
+    url:         '',
+    alarms:      [{ before: true, hours: 0, minutes: 15, days: 0, weeks: 0, seconds: 0 }],
+}), false);
+```
+
+Schreibzugriffe auf einzelne Felder innerhalb des 5-Sekunden-Fensters werden zu einem API-Aufruf pro Slot zusammengefasst.
+Schreibzugriffe über `json` werden sofort gesendet und überschreiben gleichzeitige Einzelfeldänderungen.
+Werden `json` und einzelne Felder gleichzeitig beschrieben, haben die Einzelfelder Vorrang.
 
 ### Kalender abrufen
 

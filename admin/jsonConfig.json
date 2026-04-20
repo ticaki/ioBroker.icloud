@@ -154,6 +154,22 @@
                     "default": 10,
                     "disabled": "!data.calendarEnabled"
                 },
+                "calendarMonths": {
+                    "type": "number",
+                    "label": "calendarMonths",
+                    "help": "calendarMonthsHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 1,
+                    "max": 12,
+                    "step": 1,
+                    "default": 2,
+                    "disabled": "!data.calendarEnabled"
+                },
                 "calendarInterval": {
                     "type": "number",
                     "label": "calendarInterval",

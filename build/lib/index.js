@@ -439,7 +439,8 @@ class iCloudService extends import_node_events.default {
         }
       } else {
         const body = (await authResponse.text()).slice(0, 300);
-        this._log(LogLevel.Error, "[auth] unexpected response body (truncated):", body);
+        const knownErrorStatus = authResponse.status === 401 || authResponse.status === 403 || authResponse.status === 503;
+        this._log(knownErrorStatus ? LogLevel.Debug : LogLevel.Error, "[auth] signin response body:", body);
         if (authResponse.status == 401 || authResponse.status == 403) {
           this.authStore.clearStaleSession(this.options.username);
           throw new Error(

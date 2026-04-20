@@ -586,7 +586,11 @@ export default class iCloudService extends EventEmitter {
                 }
             } else {
                 const body = (await authResponse.text()).slice(0, 300);
-                this._log(LogLevel.Error, '[auth] unexpected response body (truncated):', body);
+                // 401/403/503 are handled below — log at debug to avoid noise in the UI.
+                // Any other status is genuinely unexpected and warrants an error.
+                const knownErrorStatus =
+                    authResponse.status === 401 || authResponse.status === 403 || authResponse.status === 503;
+                this._log(knownErrorStatus ? LogLevel.Debug : LogLevel.Error, '[auth] signin response body:', body);
                 if (authResponse.status == 401 || authResponse.status == 403) {
                     // Clear the stale session (scnt, sessionToken, cookies) but preserve the
                     // trustToken so that a subsequent authenticate() call can skip MFA.

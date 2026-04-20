@@ -94,19 +94,21 @@ const FINDMY_DEVICE_STATES = [
   { id: "ownerName", name: "Owner Name", type: "string", role: "text" }
 ];
 const CALENDAR_EVENT_STATES = [
-  { id: "title", name: "Title", type: "string", role: "text" },
+  { id: "title", name: "Title", type: "string", role: "text", write: true },
   { id: "guid", name: "GUID", type: "string", role: "text" },
   { id: "etag", name: "ETag", type: "string", role: "text" },
   { id: "pGuid", name: "Calendar GUID", type: "string", role: "text" },
-  { id: "startDate", name: "Start Date", type: "number", role: "value.time" },
-  { id: "endDate", name: "End Date", type: "number", role: "value.time" },
+  { id: "startDate", name: "Start Date", type: "number", role: "value.time", write: true },
+  { id: "endDate", name: "End Date", type: "number", role: "value.time", write: true },
   { id: "masterStartDate", name: "Master Start Date", type: "number", role: "value.time" },
   { id: "masterEndDate", name: "Master End Date", type: "number", role: "value.time" },
   { id: "createdDate", name: "Created Date", type: "number", role: "value.time" },
   { id: "lastModifiedDate", name: "Last Modified Date", type: "number", role: "value.time" },
-  { id: "allDay", name: "All Day", type: "boolean", role: "indicator" },
+  { id: "allDay", name: "All Day", type: "boolean", role: "indicator", write: true },
   { id: "duration", name: "Duration", type: "number", role: "value.interval", unit: "min" },
-  { id: "url", name: "URL", type: "string", role: "url" },
+  { id: "location", name: "Location", type: "string", role: "text", write: true },
+  { id: "description", name: "Description", type: "string", role: "text", write: true },
+  { id: "url", name: "URL", type: "string", role: "url", write: true },
   { id: "tz", name: "Timezone", type: "string", role: "text" },
   { id: "tzname", name: "Timezone Name", type: "string", role: "text" },
   { id: "startDateTZOffset", name: "TZ Offset", type: "string", role: "text" },
@@ -120,7 +122,7 @@ const CALENDAR_EVENT_STATES = [
   { id: "birthdayShowAsCompany", name: "Birthday Show As Company", type: "boolean", role: "indicator" },
   { id: "extendedDetailsAreIncluded", name: "Extended Details Included", type: "boolean", role: "indicator" },
   { id: "shouldShowJunkUIWhenAppropriate", name: "Junk UI Flag", type: "boolean", role: "indicator" },
-  { id: "alarms", name: "Alarms (JSON)", type: "string", role: "json" }
+  { id: "alarms", name: "Alarms (JSON)", type: "string", role: "json", write: true }
 ];
 const CALENDAR_COLLECTION_STATES = [
   { id: "guid", name: "GUID", type: "string", role: "text" },
@@ -209,6 +211,7 @@ class Icloud extends utils.Adapter {
   findMyLastDisabledKey = "";
   /** Maps Apple device API id → 6-digit zero-padded folder id (e.g. '000001') */
   findMyIdMap = /* @__PURE__ */ new Map();
+  staleSessionRetryDone = false;
   calendarRefreshTimer = null;
   remindersRefreshTimer = null;
   remindersSyncMapLoaded = false;
@@ -225,6 +228,10 @@ class Icloud extends utils.Adapter {
   driveFirstLoad = true;
   driveSyncTimer = null;
   driveSyncConflicts = [];
+  calendarEventUpdateTimers = /* @__PURE__ */ new Map();
+  calendarEventPendingChanges = /* @__PURE__ */ new Map();
+  calendarEventUpdatesInFlight = 0;
+  calendarResyncTimer = null;
   accountStorageFirstLoad = true;
   geoLookup = new import_geo.GeoLookup();
   externalGeocoder = null;
@@ -405,6 +412,7 @@ class Icloud extends utils.Adapter {
     this.subscribeStates("findme.*.ping");
     this.subscribeStates("findme.refresh");
     this.subscribeStates("reminders.*.*.completed");
+    this.subscribeStates("calendar.*.*.*");
     this.log.debug("Subscribed to mfa.code");
     await this.connectToiCloud();
   }
@@ -459,8 +467,15 @@ class Icloud extends utils.Adapter {
     this.icloud.on("Error", (err) => {
       var _a2;
       const msg = (_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err);
-      this.log.error(`iCloud authentication error: ${msg}`);
-      this.log.debug(`iCloud error details: ${err instanceof Error ? err.stack : JSON.stringify(err)}`);
+      const isHandledRetry = msg.startsWith("STALE_SESSION_401") || msg.startsWith("RATE_LIMITED");
+      if (isHandledRetry) {
+        this.log.debug(
+          `iCloud error (will be retried): ${err instanceof Error ? err.stack : JSON.stringify(err)}`
+        );
+      } else {
+        this.log.error(`iCloud authentication error: ${msg}`);
+        this.log.debug(`iCloud error details: ${err instanceof Error ? err.stack : JSON.stringify(err)}`);
+      }
       void this.setState("info.connection", false, true);
     });
     this.icloud.awaitReady.catch(() => {
@@ -487,14 +502,21 @@ class Icloud extends utils.Adapter {
         );
       } else if (msg.startsWith("STALE_SESSION_401")) {
         const humanMsg = msg.replace(/^STALE_SESSION_401: /, "");
-        this.log.warn(
-          `Veraltete Session erkannt (HTTP 401) \u2014 starte automatischen Neuversuch in 10 s. (${humanMsg})`
-        );
-        this.setTimeout(() => {
-          this.log.info("Starte Neuversuch nach veralteter Session\u2026");
-          this.connectToiCloud().catch(() => {
-          });
-        }, 1e4);
+        if (this.staleSessionRetryDone) {
+          this.log.error(
+            `Neuversuch nach veralteter Session ebenfalls fehlgeschlagen \u2014 bitte Zugangsdaten pr\xFCfen. (${humanMsg})`
+          );
+        } else {
+          this.staleSessionRetryDone = true;
+          this.log.warn(
+            `Veraltete Session erkannt (HTTP 401) \u2014 starte automatischen Neuversuch in 10 s. (${humanMsg})`
+          );
+          this.setTimeout(() => {
+            this.log.info("Starte Neuversuch nach veralteter Session\u2026");
+            this.connectToiCloud().catch(() => {
+            });
+          }, 1e4);
+        }
       } else {
         this.log.error(`Failed to start iCloud authentication: ${msg}`);
         this.log.debug(`authenticate() exception stack: ${err instanceof Error ? err.stack : String(err)}`);
@@ -507,7 +529,8 @@ class Icloud extends utils.Adapter {
    * after account info, available services and FindMy devices have been collected.
    */
   async onICloudReady() {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f;
+    this.staleSessionRetryDone = false;
     const info = this.icloud.accountInfo;
     if (!(info == null ? void 0 : info.dsInfo)) {
       this.log.warn("iCloud Ready but accountInfo/dsInfo is unavailable");
@@ -592,22 +615,28 @@ class Icloud extends utils.Adapter {
       this.schedulePhotosRefresh();
     }
     if (activeServices.includes("drivews") && this.config.driveEnabled) {
-      try {
-        await this.icloud.requestServiceAccess("iclouddrive");
-      } catch (err) {
-        const msg = (_g = err == null ? void 0 : err.message) != null ? _g : String(err);
-        this.log.debug(`Drive PCS access skipped: ${msg}`);
-      }
-      await this.refreshDrive();
-      if (this.config.driveSyncEnabled) {
-        await this.loadDriveSyncMeta();
-        this.driveSyncTimer = this.setTimeout(async () => {
-          this.driveSyncTimer = null;
-          await this.executeDriveSync();
-          this.scheduleDriveSync();
-        }, 3e4);
-        this.log.info("Drive Sync enabled \u2014 initial sync in 30 seconds");
-      }
+      (async () => {
+        var _a2;
+        try {
+          await this.icloud.requestServiceAccess("iclouddrive");
+        } catch (err) {
+          const msg = (_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err);
+          this.log.debug(`Drive PCS access skipped: ${msg}`);
+        }
+        await this.refreshDrive();
+        if (this.config.driveSyncEnabled) {
+          await this.loadDriveSyncMeta();
+          this.driveSyncTimer = this.setTimeout(async () => {
+            this.driveSyncTimer = null;
+            await this.executeDriveSync();
+            this.scheduleDriveSync();
+          }, 3e4);
+          this.log.info("Drive Sync enabled \u2014 initial sync in 30 seconds");
+        }
+      })().catch((err) => {
+        var _a2;
+        this.log.warn(`Drive initial refresh failed: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
+      });
     }
     if (this.config.accountStorageEnabled) {
       await this.refreshAccountStorage();
@@ -1121,7 +1150,7 @@ class Icloud extends utils.Adapter {
     return new Date(arr[1], arr[2] - 1, arr[3], (_a = arr[4]) != null ? _a : 0, (_b = arr[5]) != null ? _b : 0, 0).getTime();
   }
   async refreshCalendarEvents() {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$, _aa, _ba, _ca, _da, _ea, _fa, _ga, _ha, _ia, _ja;
     if (!this.icloud) {
       return;
     }
@@ -1129,12 +1158,23 @@ class Icloud extends utils.Adapter {
       const calService = this.icloud.getService("calendar");
       const now = /* @__PURE__ */ new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      const startupResp = await calService.startup(monthStart, monthEnd);
+      const startupResp = await calService.startup();
       const collections = (_a = startupResp.Collection) != null ? _a : [];
-      const events = (_b = startupResp.Event) != null ? _b : [];
-      const maxCount = Math.max(1, Math.floor((_c = this.config.calendarEventCount) != null ? _c : 10));
+      const months = Math.max(1, Math.min(12, Math.floor((_b = this.config.calendarMonths) != null ? _b : 2)));
+      const eventsResp = await calService.eventsForMonths(months);
+      const events = (_c = eventsResp.Event) != null ? _c : [];
+      const maxCount = Math.max(1, Math.floor((_d = this.config.calendarEventCount) != null ? _d : 10));
+      const alarmsByGuid = /* @__PURE__ */ new Map();
+      for (const a of (_e = eventsResp.Alarm) != null ? _e : []) {
+        alarmsByGuid.set(a.guid, {
+          before: a.measurement.before,
+          hours: a.measurement.hours,
+          minutes: a.measurement.minutes,
+          seconds: a.measurement.seconds,
+          days: a.measurement.days,
+          weeks: a.measurement.weeks
+        });
+      }
       const eventsByCalendar = /* @__PURE__ */ new Map();
       for (const ev of events) {
         if (!ev.pGuid) {
@@ -1189,47 +1229,47 @@ class Icloud extends utils.Adapter {
             native: {}
           });
         }
-        await this.setStateIfChanged(`calendar.${calId}.guid`, (_d = col.guid) != null ? _d : "");
-        await this.setStateIfChanged(`calendar.${calId}.ctag`, (_e = col.ctag) != null ? _e : "");
-        await this.setStateIfChanged(`calendar.${calId}.etag`, (_f = col.etag) != null ? _f : "");
-        await this.setStateIfChanged(`calendar.${calId}.color`, (_g = col.color) != null ? _g : "");
-        await this.setStateIfChanged(`calendar.${calId}.symbolicColor`, (_h = col.symbolicColor) != null ? _h : "");
-        await this.setStateIfChanged(`calendar.${calId}.order`, (_i = col.order) != null ? _i : 0);
-        await this.setStateIfChanged(`calendar.${calId}.enabled`, (_j = col.enabled) != null ? _j : false);
-        await this.setStateIfChanged(`calendar.${calId}.visible`, (_k = col.visible) != null ? _k : false);
-        await this.setStateIfChanged(`calendar.${calId}.readOnly`, (_l = col.readOnly) != null ? _l : false);
-        await this.setStateIfChanged(`calendar.${calId}.isDefault`, (_m = col.isDefault) != null ? _m : false);
-        await this.setStateIfChanged(`calendar.${calId}.isFamily`, (_n = col.isFamily) != null ? _n : false);
-        await this.setStateIfChanged(`calendar.${calId}.isPublished`, (_o = col.isPublished) != null ? _o : false);
-        await this.setStateIfChanged(`calendar.${calId}.isPrivatelyShared`, (_p = col.isPrivatelyShared) != null ? _p : false);
+        await this.setStateIfChanged(`calendar.${calId}.guid`, (_f = col.guid) != null ? _f : "");
+        await this.setStateIfChanged(`calendar.${calId}.ctag`, (_g = col.ctag) != null ? _g : "");
+        await this.setStateIfChanged(`calendar.${calId}.etag`, (_h = col.etag) != null ? _h : "");
+        await this.setStateIfChanged(`calendar.${calId}.color`, (_i = col.color) != null ? _i : "");
+        await this.setStateIfChanged(`calendar.${calId}.symbolicColor`, (_j = col.symbolicColor) != null ? _j : "");
+        await this.setStateIfChanged(`calendar.${calId}.order`, (_k = col.order) != null ? _k : 0);
+        await this.setStateIfChanged(`calendar.${calId}.enabled`, (_l = col.enabled) != null ? _l : false);
+        await this.setStateIfChanged(`calendar.${calId}.visible`, (_m = col.visible) != null ? _m : false);
+        await this.setStateIfChanged(`calendar.${calId}.readOnly`, (_n = col.readOnly) != null ? _n : false);
+        await this.setStateIfChanged(`calendar.${calId}.isDefault`, (_o = col.isDefault) != null ? _o : false);
+        await this.setStateIfChanged(`calendar.${calId}.isFamily`, (_p = col.isFamily) != null ? _p : false);
+        await this.setStateIfChanged(`calendar.${calId}.isPublished`, (_q = col.isPublished) != null ? _q : false);
+        await this.setStateIfChanged(`calendar.${calId}.isPrivatelyShared`, (_r = col.isPrivatelyShared) != null ? _r : false);
         await this.setStateIfChanged(
           `calendar.${calId}.extendedDetailsAreIncluded`,
-          (_q = col.extendedDetailsAreIncluded) != null ? _q : false
+          (_s = col.extendedDetailsAreIncluded) != null ? _s : false
         );
         await this.setStateIfChanged(
           `calendar.${calId}.shouldShowJunkUIWhenAppropriate`,
-          (_r = col.shouldShowJunkUIWhenAppropriate) != null ? _r : false
+          (_t = col.shouldShowJunkUIWhenAppropriate) != null ? _t : false
         );
-        await this.setStateIfChanged(`calendar.${calId}.shareTitle`, (_s = col.shareTitle) != null ? _s : "");
-        await this.setStateIfChanged(`calendar.${calId}.prePublishedUrl`, (_t = col.prePublishedUrl) != null ? _t : "");
-        await this.setStateIfChanged(`calendar.${calId}.supportedType`, (_u = col.supportedType) != null ? _u : "");
-        await this.setStateIfChanged(`calendar.${calId}.objectType`, (_v = col.objectType) != null ? _v : "");
+        await this.setStateIfChanged(`calendar.${calId}.shareTitle`, (_u = col.shareTitle) != null ? _u : "");
+        await this.setStateIfChanged(`calendar.${calId}.prePublishedUrl`, (_v = col.prePublishedUrl) != null ? _v : "");
+        await this.setStateIfChanged(`calendar.${calId}.supportedType`, (_w = col.supportedType) != null ? _w : "");
+        await this.setStateIfChanged(`calendar.${calId}.objectType`, (_x = col.objectType) != null ? _x : "");
         await this.setStateIfChanged(
           `calendar.${calId}.createdDate`,
-          (_w = this.localDateArrayToTimestamp(col.createdDate)) != null ? _w : null
+          (_y = this.localDateArrayToTimestamp(col.createdDate)) != null ? _y : null
         );
         await this.setStateIfChanged(
           `calendar.${calId}.lastModifiedDate`,
-          (_x = this.localDateArrayToTimestamp(col.lastModifiedDate)) != null ? _x : null
+          (_z = this.localDateArrayToTimestamp(col.lastModifiedDate)) != null ? _z : null
         );
-        const calEvents = (_y = eventsByCalendar.get(col.guid)) != null ? _y : [];
+        const calEvents = (_A = eventsByCalendar.get(col.guid)) != null ? _A : [];
         for (let i = 1; i <= maxCount; i++) {
           const slotId = String(i).padStart(6, "0");
           const basePath = `calendar.${calId}.${slotId}`;
           const ev = calEvents[i - 1];
           await this.extendObject(basePath, {
             type: "folder",
-            common: { name: (_z = ev == null ? void 0 : ev.title) != null ? _z : `Event ${slotId}` },
+            common: { name: (_B = ev == null ? void 0 : ev.title) != null ? _B : `Event ${slotId}` },
             native: {}
           });
           for (const s of CALENDAR_EVENT_STATES) {
@@ -1240,77 +1280,105 @@ class Icloud extends utils.Adapter {
                 type: s.type,
                 role: s.role,
                 read: true,
-                write: false,
+                write: (_C = s.write) != null ? _C : false,
                 ...s.unit ? { unit: s.unit } : {}
               },
               native: {}
             });
           }
+          await this.extendObject(`${basePath}.json`, {
+            type: "state",
+            common: {
+              name: "Event JSON (editable)",
+              type: "string",
+              role: "json",
+              read: true,
+              write: true
+            },
+            native: {}
+          });
           if (ev) {
-            await this.setStateIfChanged(`${basePath}.title`, (_A = ev.title) != null ? _A : "");
-            await this.setStateIfChanged(`${basePath}.guid`, (_B = ev.guid) != null ? _B : "");
-            await this.setStateIfChanged(`${basePath}.etag`, (_C = ev.etag) != null ? _C : "");
-            await this.setStateIfChanged(`${basePath}.pGuid`, (_D = ev.pGuid) != null ? _D : "");
+            await this.setStateIfChanged(`${basePath}.title`, (_D = ev.title) != null ? _D : "");
+            await this.setStateIfChanged(`${basePath}.guid`, (_E = ev.guid) != null ? _E : "");
+            await this.setStateIfChanged(`${basePath}.etag`, (_F = ev.etag) != null ? _F : "");
+            await this.setStateIfChanged(`${basePath}.pGuid`, (_G = ev.pGuid) != null ? _G : "");
             await this.setStateIfChanged(
               `${basePath}.startDate`,
-              (_E = this.localDateArrayToTimestamp(ev.localStartDate)) != null ? _E : null
+              (_H = this.localDateArrayToTimestamp(ev.localStartDate)) != null ? _H : null
             );
             await this.setStateIfChanged(
               `${basePath}.endDate`,
-              (_F = this.localDateArrayToTimestamp(ev.localEndDate)) != null ? _F : null
+              (_I = this.localDateArrayToTimestamp(ev.localEndDate)) != null ? _I : null
             );
             await this.setStateIfChanged(
               `${basePath}.masterStartDate`,
-              (_G = this.localDateArrayToTimestamp(ev.masterStartDate)) != null ? _G : null
+              (_J = this.localDateArrayToTimestamp(ev.masterStartDate)) != null ? _J : null
             );
             await this.setStateIfChanged(
               `${basePath}.masterEndDate`,
-              (_H = this.localDateArrayToTimestamp(ev.masterEndDate)) != null ? _H : null
+              (_K = this.localDateArrayToTimestamp(ev.masterEndDate)) != null ? _K : null
             );
             await this.setStateIfChanged(
               `${basePath}.createdDate`,
-              (_I = this.localDateArrayToTimestamp(ev.createdDate)) != null ? _I : null
+              (_L = this.localDateArrayToTimestamp(ev.createdDate)) != null ? _L : null
             );
             await this.setStateIfChanged(
               `${basePath}.lastModifiedDate`,
-              (_J = this.localDateArrayToTimestamp(ev.lastModifiedDate)) != null ? _J : null
+              (_M = this.localDateArrayToTimestamp(ev.lastModifiedDate)) != null ? _M : null
             );
-            await this.setStateIfChanged(`${basePath}.allDay`, (_K = ev.allDay) != null ? _K : false);
-            await this.setStateIfChanged(`${basePath}.duration`, (_L = ev.duration) != null ? _L : null);
-            await this.setStateIfChanged(`${basePath}.url`, (_M = ev.url) != null ? _M : "");
-            await this.setStateIfChanged(`${basePath}.tz`, (_N = ev.tz) != null ? _N : "");
-            await this.setStateIfChanged(`${basePath}.tzname`, (_O = ev.tzname) != null ? _O : "");
-            await this.setStateIfChanged(`${basePath}.startDateTZOffset`, (_P = ev.startDateTZOffset) != null ? _P : "");
-            await this.setStateIfChanged(`${basePath}.icon`, (_Q = ev.icon) != null ? _Q : 0);
-            await this.setStateIfChanged(`${basePath}.readOnly`, (_R = ev.readOnly) != null ? _R : false);
-            await this.setStateIfChanged(`${basePath}.transparent`, (_S = ev.transparent) != null ? _S : false);
-            await this.setStateIfChanged(`${basePath}.hasAttachments`, (_T = ev.hasAttachments) != null ? _T : false);
+            await this.setStateIfChanged(`${basePath}.allDay`, (_N = ev.allDay) != null ? _N : false);
+            await this.setStateIfChanged(`${basePath}.duration`, (_O = ev.duration) != null ? _O : null);
+            await this.setStateIfChanged(`${basePath}.url`, (_P = ev.url) != null ? _P : "");
+            await this.setStateIfChanged(`${basePath}.tz`, (_Q = ev.tz) != null ? _Q : "");
+            await this.setStateIfChanged(`${basePath}.tzname`, (_R = ev.tzname) != null ? _R : "");
+            await this.setStateIfChanged(`${basePath}.startDateTZOffset`, (_S = ev.startDateTZOffset) != null ? _S : "");
+            await this.setStateIfChanged(`${basePath}.icon`, (_T = ev.icon) != null ? _T : 0);
+            await this.setStateIfChanged(`${basePath}.readOnly`, (_U = ev.readOnly) != null ? _U : false);
+            await this.setStateIfChanged(`${basePath}.transparent`, (_V = ev.transparent) != null ? _V : false);
+            await this.setStateIfChanged(`${basePath}.hasAttachments`, (_W = ev.hasAttachments) != null ? _W : false);
             await this.setStateIfChanged(
               `${basePath}.recurrenceException`,
-              (_U = ev.recurrenceException) != null ? _U : false
+              (_X = ev.recurrenceException) != null ? _X : false
             );
-            await this.setStateIfChanged(`${basePath}.recurrenceMaster`, (_V = ev.recurrenceMaster) != null ? _V : false);
+            await this.setStateIfChanged(`${basePath}.recurrenceMaster`, (_Y = ev.recurrenceMaster) != null ? _Y : false);
             await this.setStateIfChanged(
               `${basePath}.birthdayIsYearlessBday`,
-              (_W = ev.birthdayIsYearlessBday) != null ? _W : false
+              (_Z = ev.birthdayIsYearlessBday) != null ? _Z : false
             );
             await this.setStateIfChanged(
               `${basePath}.birthdayShowAsCompany`,
-              (_X = ev.birthdayShowAsCompany) != null ? _X : false
+              (__ = ev.birthdayShowAsCompany) != null ? __ : false
             );
             await this.setStateIfChanged(
               `${basePath}.extendedDetailsAreIncluded`,
-              (_Y = ev.extendedDetailsAreIncluded) != null ? _Y : false
+              (_$ = ev.extendedDetailsAreIncluded) != null ? _$ : false
             );
             await this.setStateIfChanged(
               `${basePath}.shouldShowJunkUIWhenAppropriate`,
-              (_Z = ev.shouldShowJunkUIWhenAppropriate) != null ? _Z : false
+              (_aa = ev.shouldShowJunkUIWhenAppropriate) != null ? _aa : false
             );
-            await this.setStateIfChanged(`${basePath}.alarms`, JSON.stringify((__ = ev.alarms) != null ? __ : []));
+            const alarmDetails = ((_ba = ev.alarms) != null ? _ba : []).map((guid) => alarmsByGuid.get(guid)).filter((m) => m !== void 0);
+            await this.setStateIfChanged(`${basePath}.alarms`, JSON.stringify(alarmDetails));
+            await this.setStateIfChanged(`${basePath}.location`, (_ca = ev.location) != null ? _ca : "");
+            await this.setStateIfChanged(`${basePath}.description`, (_da = ev.description) != null ? _da : "");
+            await this.setStateIfChanged(
+              `${basePath}.json`,
+              JSON.stringify({
+                title: (_ea = ev.title) != null ? _ea : "",
+                startDate: this.localDateArrayToTimestamp(ev.localStartDate),
+                endDate: this.localDateArrayToTimestamp(ev.localEndDate),
+                allDay: (_fa = ev.allDay) != null ? _fa : false,
+                location: (_ga = ev.location) != null ? _ga : "",
+                description: (_ha = ev.description) != null ? _ha : "",
+                url: (_ia = ev.url) != null ? _ia : "",
+                alarms: alarmDetails
+              })
+            );
           } else {
             for (const s of CALENDAR_EVENT_STATES) {
               await this.setStateIfChanged(`${basePath}.${s.id}`, null);
             }
+            await this.setStateIfChanged(`${basePath}.json`, null);
           }
         }
       }
@@ -1326,7 +1394,7 @@ class Icloud extends utils.Adapter {
         this.log.debug(`Calendar refresh done \u2014 ${collections.length} calendar(s), ${events.length} event(s)`);
       }
     } catch (err) {
-      const msg = (_$ = err == null ? void 0 : err.message) != null ? _$ : String(err);
+      const msg = (_ja = err == null ? void 0 : err.message) != null ? _ja : String(err);
       this.log.warn(`Calendar refresh failed: ${msg}`);
     }
   }
@@ -1383,6 +1451,126 @@ class Icloud extends utils.Adapter {
     };
     schedule();
     this.log.debug(`Calendar refresh scheduled every ${intervalMin} min`);
+  }
+  // ── Calendar event write helpers ──────────────────────────────────────────
+  async applyCalendarEventUpdate(calId, slotId) {
+    var _a, _b;
+    const pendingKey = `${calId}.${slotId}`;
+    const pending = this.calendarEventPendingChanges.get(pendingKey);
+    if (!pending) {
+      return;
+    }
+    this.calendarEventPendingChanges.delete(pendingKey);
+    if (!this.icloud) {
+      this.log.warn("Calendar event update: iCloud not initialized");
+      this.scheduleCalendarResyncIfIdle();
+      return;
+    }
+    const basePath = `calendar.${calId}.${slotId}`;
+    const [guidState, pGuidState, etagState] = await Promise.all([
+      this.getStateAsync(`${basePath}.guid`),
+      this.getStateAsync(`${basePath}.pGuid`),
+      this.getStateAsync(`${basePath}.etag`)
+    ]);
+    const eventGuid = guidState == null ? void 0 : guidState.val;
+    const calendarGuid = pGuidState == null ? void 0 : pGuidState.val;
+    const etag = etagState == null ? void 0 : etagState.val;
+    if (!eventGuid || !calendarGuid) {
+      this.log.warn(`Calendar event update: missing guid or pGuid for ${basePath} \u2014 slot may be empty`);
+      this.scheduleCalendarResyncIfIdle();
+      return;
+    }
+    const resolved = {};
+    const jsonVal = pending.fields.get("json");
+    if (jsonVal != null) {
+      try {
+        const parsed = JSON.parse(String(jsonVal));
+        const allowed = ["title", "startDate", "endDate", "allDay", "location", "description", "url", "alarms"];
+        for (const key of allowed) {
+          if (key in parsed) {
+            resolved[key] = parsed[key];
+          }
+        }
+      } catch {
+        this.log.warn(`Calendar event update: invalid JSON in ${basePath}.json \u2014 ignoring`);
+      }
+    }
+    for (const [field, val] of pending.fields.entries()) {
+      if (field !== "json") {
+        resolved[field] = val;
+      }
+    }
+    const opts = {
+      calendarGuid,
+      eventGuid,
+      etag: etag != null ? etag : void 0,
+      ...resolved.title !== void 0 ? { title: String(resolved.title) } : {},
+      ...resolved.startDate !== void 0 ? { startDate: new Date(Number(resolved.startDate)) } : {},
+      ...resolved.endDate !== void 0 ? { endDate: new Date(Number(resolved.endDate)) } : {},
+      ...resolved.allDay !== void 0 ? { allDay: Boolean(resolved.allDay) } : {},
+      ...resolved.url !== void 0 ? { url: String(resolved.url) } : {},
+      ...resolved.location !== void 0 ? { location: String(resolved.location) } : {},
+      ...resolved.description !== void 0 ? { description: String(resolved.description) } : {},
+      ...resolved.alarms !== void 0 ? { alarms: this.parseEventAlarmsJson(resolved.alarms) } : {}
+    };
+    this.log.info(`Updating calendar event ${eventGuid} in ${calendarGuid}\u2026`);
+    this.calendarEventUpdatesInFlight++;
+    try {
+      const calService = this.icloud.getService("calendar");
+      await calService.updateEvent(opts);
+      this.log.info(`Calendar event ${eventGuid} updated`);
+      for (const [field, stateId] of pending.stateIds.entries()) {
+        const relId = stateId.startsWith(`${this.namespace}.`) ? stateId.slice(this.namespace.length + 1) : stateId;
+        await this.setState(relId, (_a = pending.fields.get(field)) != null ? _a : null, true);
+      }
+    } catch (err) {
+      this.log.error(`Failed to update calendar event ${eventGuid}: ${(_b = err == null ? void 0 : err.message) != null ? _b : String(err)}`);
+    } finally {
+      this.calendarEventUpdatesInFlight--;
+      this.scheduleCalendarResyncIfIdle();
+    }
+  }
+  /**
+   * Schedules a calendar refresh only when no debounce timers, no in-flight API
+   * calls, and no pending changes remain.  This ensures exactly one resync fires
+   * after all batched event updates have been sent to Apple.
+   */
+  scheduleCalendarResyncIfIdle() {
+    if (this.calendarEventUpdateTimers.size > 0 || this.calendarEventPendingChanges.size > 0 || this.calendarEventUpdatesInFlight > 0) {
+      return;
+    }
+    if (this.calendarResyncTimer) {
+      this.clearTimeout(this.calendarResyncTimer);
+    }
+    this.calendarResyncTimer = this.setTimeout(() => {
+      this.calendarResyncTimer = null;
+      this.refreshCalendarEvents().catch((err) => {
+        var _a;
+        this.log.warn(`Calendar post-edit refresh failed: ${(_a = err == null ? void 0 : err.message) != null ? _a : String(err)}`);
+      });
+    }, 2e3);
+  }
+  parseEventAlarmsJson(val) {
+    try {
+      const arr = JSON.parse(String(val));
+      if (!Array.isArray(arr)) {
+        return [];
+      }
+      return arr.map((a) => {
+        var _a, _b, _c, _d, _e, _f;
+        const m = a;
+        return {
+          before: Boolean((_a = m.before) != null ? _a : true),
+          weeks: Number((_b = m.weeks) != null ? _b : 0),
+          days: Number((_c = m.days) != null ? _c : 0),
+          hours: Number((_d = m.hours) != null ? _d : 0),
+          minutes: Number((_e = m.minutes) != null ? _e : 0),
+          seconds: Number((_f = m.seconds) != null ? _f : 0)
+        };
+      });
+    } catch {
+      return [];
+    }
   }
   // ── Reminders helpers ─────────────────────────────────────────────────────
   async refreshReminders() {
@@ -2371,6 +2559,15 @@ class Icloud extends utils.Adapter {
           this.clearTimeout(this.calendarRefreshTimer);
           this.calendarRefreshTimer = null;
         }
+        for (const t of this.calendarEventUpdateTimers.values()) {
+          this.clearTimeout(t);
+        }
+        this.calendarEventUpdateTimers.clear();
+        this.calendarEventPendingChanges.clear();
+        if (this.calendarResyncTimer) {
+          this.clearTimeout(this.calendarResyncTimer);
+          this.calendarResyncTimer = null;
+        }
         if (this.remindersRefreshTimer) {
           this.clearTimeout(this.remindersRefreshTimer);
           this.remindersRefreshTimer = null;
@@ -2514,6 +2711,39 @@ class Icloud extends utils.Adapter {
         var _a2;
         this.log.error(`FindMy manual refresh failed: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
       });
+      return;
+    }
+    const calEventMatch = id.match(
+      /^[^.]+\.[^.]+\.calendar\.([^.]+)\.(\d{6})\.(title|startDate|endDate|allDay|url|location|description|alarms|json)$/
+    );
+    if (calEventMatch) {
+      const [, calId, slotId, field] = calEventMatch;
+      const pendingKey = `${calId}.${slotId}`;
+      if (!this.calendarEventPendingChanges.has(pendingKey)) {
+        this.calendarEventPendingChanges.set(pendingKey, { fields: /* @__PURE__ */ new Map(), stateIds: /* @__PURE__ */ new Map() });
+      }
+      const pending = this.calendarEventPendingChanges.get(pendingKey);
+      pending.fields.set(field, state.val);
+      pending.stateIds.set(field, id);
+      if (this.calendarResyncTimer) {
+        this.clearTimeout(this.calendarResyncTimer);
+        this.calendarResyncTimer = null;
+      }
+      const debounceMs = field === "json" ? 100 : 5e3;
+      const existing = this.calendarEventUpdateTimers.get(pendingKey);
+      if (existing) {
+        this.clearTimeout(existing);
+      }
+      const timer = this.setTimeout(() => {
+        this.calendarEventUpdateTimers.delete(pendingKey);
+        this.applyCalendarEventUpdate(calId, slotId).catch((err) => {
+          var _a2;
+          this.log.error(`Calendar event update failed: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
+        });
+      }, debounceMs);
+      if (timer !== void 0) {
+        this.calendarEventUpdateTimers.set(pendingKey, timer);
+      }
       return;
     }
     const reminderCompletedMatch = id.match(/^[^.]+\.[^.]+\.reminders\.([^.]+)\.(\d{6})\.completed$/);

@@ -100,20 +100,23 @@ const CALENDAR_EVENT_STATES: Array<{
     type: ioBroker.CommonType;
     role: string;
     unit?: string;
+    write?: boolean;
 }> = [
-    { id: 'title', name: 'Title', type: 'string', role: 'text' },
+    { id: 'title', name: 'Title', type: 'string', role: 'text', write: true },
     { id: 'guid', name: 'GUID', type: 'string', role: 'text' },
     { id: 'etag', name: 'ETag', type: 'string', role: 'text' },
     { id: 'pGuid', name: 'Calendar GUID', type: 'string', role: 'text' },
-    { id: 'startDate', name: 'Start Date', type: 'number', role: 'value.time' },
-    { id: 'endDate', name: 'End Date', type: 'number', role: 'value.time' },
+    { id: 'startDate', name: 'Start Date', type: 'number', role: 'value.time', write: true },
+    { id: 'endDate', name: 'End Date', type: 'number', role: 'value.time', write: true },
     { id: 'masterStartDate', name: 'Master Start Date', type: 'number', role: 'value.time' },
     { id: 'masterEndDate', name: 'Master End Date', type: 'number', role: 'value.time' },
     { id: 'createdDate', name: 'Created Date', type: 'number', role: 'value.time' },
     { id: 'lastModifiedDate', name: 'Last Modified Date', type: 'number', role: 'value.time' },
-    { id: 'allDay', name: 'All Day', type: 'boolean', role: 'indicator' },
+    { id: 'allDay', name: 'All Day', type: 'boolean', role: 'indicator', write: true },
     { id: 'duration', name: 'Duration', type: 'number', role: 'value.interval', unit: 'min' },
-    { id: 'url', name: 'URL', type: 'string', role: 'url' },
+    { id: 'location', name: 'Location', type: 'string', role: 'text', write: true },
+    { id: 'description', name: 'Description', type: 'string', role: 'text', write: true },
+    { id: 'url', name: 'URL', type: 'string', role: 'url', write: true },
     { id: 'tz', name: 'Timezone', type: 'string', role: 'text' },
     { id: 'tzname', name: 'Timezone Name', type: 'string', role: 'text' },
     { id: 'startDateTZOffset', name: 'TZ Offset', type: 'string', role: 'text' },
@@ -127,7 +130,7 @@ const CALENDAR_EVENT_STATES: Array<{
     { id: 'birthdayShowAsCompany', name: 'Birthday Show As Company', type: 'boolean', role: 'indicator' },
     { id: 'extendedDetailsAreIncluded', name: 'Extended Details Included', type: 'boolean', role: 'indicator' },
     { id: 'shouldShowJunkUIWhenAppropriate', name: 'Junk UI Flag', type: 'boolean', role: 'indicator' },
-    { id: 'alarms', name: 'Alarms (JSON)', type: 'string', role: 'json' },
+    { id: 'alarms', name: 'Alarms (JSON)', type: 'string', role: 'json', write: true },
 ];
 
 /** State definitions for a Calendar collection (calendar folder). */
@@ -303,6 +306,7 @@ class Icloud extends utils.Adapter {
     private findMyLastDisabledKey = '';
     /** Maps Apple device API id → 6-digit zero-padded folder id (e.g. '000001') */
     private findMyIdMap: Map<string, string> = new Map();
+    private staleSessionRetryDone = false;
     private calendarRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersSyncMapLoaded = false;
@@ -319,6 +323,13 @@ class Icloud extends utils.Adapter {
     private driveFirstLoad = true;
     private driveSyncTimer: ioBroker.Timeout | null | undefined = null;
     private driveSyncConflicts: DriveSyncConflict[] = [];
+    private calendarEventUpdateTimers: Map<string, ioBroker.Timeout> = new Map();
+    private calendarEventPendingChanges: Map<
+        string,
+        { fields: Map<string, ioBroker.StateValue>; stateIds: Map<string, string> }
+    > = new Map();
+    private calendarEventUpdatesInFlight = 0;
+    private calendarResyncTimer: ioBroker.Timeout | null | undefined = null;
     private accountStorageFirstLoad = true;
     private geoLookup: GeoLookup = new GeoLookup();
     private externalGeocoder: ExternalGeocoder | null = null;
@@ -523,6 +534,7 @@ class Icloud extends utils.Adapter {
         this.subscribeStates('findme.*.ping');
         this.subscribeStates('findme.refresh');
         this.subscribeStates('reminders.*.*.completed');
+        this.subscribeStates('calendar.*.*.*');
         this.log.debug('Subscribed to mfa.code');
 
         await this.connectToiCloud();
@@ -581,8 +593,17 @@ class Icloud extends utils.Adapter {
 
         this.icloud.on('Error', (err: unknown) => {
             const msg = (err as Error)?.message ?? String(err);
-            this.log.error(`iCloud authentication error: ${msg}`);
-            this.log.debug(`iCloud error details: ${err instanceof Error ? err.stack : JSON.stringify(err)}`);
+            // For handled retry cases the catch block already emits the appropriate warn/info log —
+            // suppress the redundant error log so the log stays clean on auto-recovery.
+            const isHandledRetry = msg.startsWith('STALE_SESSION_401') || msg.startsWith('RATE_LIMITED');
+            if (isHandledRetry) {
+                this.log.debug(
+                    `iCloud error (will be retried): ${err instanceof Error ? err.stack : JSON.stringify(err)}`,
+                );
+            } else {
+                this.log.error(`iCloud authentication error: ${msg}`);
+                this.log.debug(`iCloud error details: ${err instanceof Error ? err.stack : JSON.stringify(err)}`);
+            }
             void this.setState('info.connection', false, true);
         });
 
@@ -615,18 +636,25 @@ class Icloud extends utils.Adapter {
             } else if (msg.startsWith('STALE_SESSION_401')) {
                 // The session was stale (e.g. after an adapter update) — clearStaleSession()
                 // has already been called in index.ts, preserving the trustToken.
-                // Retry once after a short delay; the fresh attempt will succeed without MFA
-                // if the device is still trusted.
+                // Retry ONCE after a short delay; if the retry also fails we stop to avoid
+                // hammering Apple's login endpoint (which triggers security emails).
                 const humanMsg = msg.replace(/^STALE_SESSION_401: /, '');
-                this.log.warn(
-                    `Veraltete Session erkannt (HTTP 401) — starte automatischen Neuversuch in 10 s. (${humanMsg})`,
-                );
-                this.setTimeout(() => {
-                    this.log.info('Starte Neuversuch nach veralteter Session…');
-                    this.connectToiCloud().catch(() => {
-                        /* Error-Event wird ausgelöst */
-                    });
-                }, 10_000);
+                if (this.staleSessionRetryDone) {
+                    this.log.error(
+                        `Neuversuch nach veralteter Session ebenfalls fehlgeschlagen — bitte Zugangsdaten prüfen. (${humanMsg})`,
+                    );
+                } else {
+                    this.staleSessionRetryDone = true;
+                    this.log.warn(
+                        `Veraltete Session erkannt (HTTP 401) — starte automatischen Neuversuch in 10 s. (${humanMsg})`,
+                    );
+                    this.setTimeout(() => {
+                        this.log.info('Starte Neuversuch nach veralteter Session…');
+                        this.connectToiCloud().catch(() => {
+                            /* Error-Event wird ausgelöst */
+                        });
+                    }, 10_000);
+                }
             } else {
                 this.log.error(`Failed to start iCloud authentication: ${msg}`);
                 this.log.debug(`authenticate() exception stack: ${err instanceof Error ? err.stack : String(err)}`);
@@ -641,6 +669,10 @@ class Icloud extends utils.Adapter {
      * after account info, available services and FindMy devices have been collected.
      */
     private async onICloudReady(): Promise<void> {
+        // Reset the stale-session retry guard so that future session expirations
+        // (e.g. after days of uptime) can be retried again automatically.
+        this.staleSessionRetryDone = false;
+
         const info = this.icloud!.accountInfo;
         if (!info?.dsInfo) {
             this.log.warn('iCloud Ready but accountInfo/dsInfo is unavailable');
@@ -749,28 +781,32 @@ class Icloud extends utils.Adapter {
 
         // ── iCloud Drive ──────────────────────────────────────────────────────
         if (activeServices.includes('drivews') && this.config.driveEnabled) {
-            try {
-                await this.icloud!.requestServiceAccess('iclouddrive');
-            } catch (err) {
-                const msg = (err as Error)?.message ?? String(err);
-                // PCS failures are expected when Advanced Data Protection is enabled and the
-                // user's device cannot be reached for consent. Drive refresh continues anyway
-                // — states will show what was last cached. No warn needed; debug is sufficient.
-                this.log.debug(`Drive PCS access skipped: ${msg}`);
-            }
-            await this.refreshDrive();
+            // Run Drive (including Drive Sync setup) async so it doesn't block
+            // the rest of the startup sequence (FindMy, Calendar, etc. are already
+            // established by this point).
+            (async () => {
+                try {
+                    await this.icloud!.requestServiceAccess('iclouddrive');
+                } catch (err) {
+                    const msg = (err as Error)?.message ?? String(err);
+                    this.log.debug(`Drive PCS access skipped: ${msg}`);
+                }
+                await this.refreshDrive();
 
-            // Start Drive Sync if enabled
-            if (this.config.driveSyncEnabled) {
-                await this.loadDriveSyncMeta();
-                // Run initial sync quickly (30s) so users see it working right away
-                this.driveSyncTimer = this.setTimeout(async () => {
-                    this.driveSyncTimer = null;
-                    await this.executeDriveSync();
-                    this.scheduleDriveSync();
-                }, 30_000);
-                this.log.info('Drive Sync enabled — initial sync in 30 seconds');
-            }
+                // Start Drive Sync if enabled
+                if (this.config.driveSyncEnabled) {
+                    await this.loadDriveSyncMeta();
+                    // Run initial sync quickly (30s) so users see it working right away
+                    this.driveSyncTimer = this.setTimeout(async () => {
+                        this.driveSyncTimer = null;
+                        await this.executeDriveSync();
+                        this.scheduleDriveSync();
+                    }, 30_000);
+                    this.log.info('Drive Sync enabled — initial sync in 30 seconds');
+                }
+            })().catch((err: unknown) => {
+                this.log.warn(`Drive initial refresh failed: ${(err as Error)?.message ?? String(err)}`);
+            });
         }
 
         // ── Account Storage ───────────────────────────────────────────────────
@@ -1351,14 +1387,30 @@ class Icloud extends utils.Adapter {
             const now = new Date();
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
-            // pyicloud uses first..last day of current month for /startup
-            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-            const startupResp = await calService.startup(monthStart, monthEnd);
+            // Fetch collections via /startup (current month only — always works)
+            const startupResp = await calService.startup();
             const collections = startupResp.Collection ?? [];
-            const events = startupResp.Event ?? [];
+
+            // Fetch events month-by-month via /events (Apple silently returns empty
+            // results when the date range exceeds ~30 days, so we chunk by month).
+            const months = Math.max(1, Math.min(12, Math.floor(this.config.calendarMonths ?? 2)));
+            const eventsResp = await calService.eventsForMonths(months);
+            const events = eventsResp.Event ?? [];
             const maxCount = Math.max(1, Math.floor(this.config.calendarEventCount ?? 10));
+
+            // Build alarm measurement lookup from the API response so the alarms
+            // state contains human-readable measurements instead of raw GUID strings.
+            const alarmsByGuid = new Map<string, AlarmMeasurement>();
+            for (const a of eventsResp.Alarm ?? []) {
+                alarmsByGuid.set(a.guid, {
+                    before: a.measurement.before,
+                    hours: a.measurement.hours,
+                    minutes: a.measurement.minutes,
+                    seconds: a.measurement.seconds,
+                    days: a.measurement.days,
+                    weeks: a.measurement.weeks,
+                });
+            }
 
             // Group events by pGuid (calendar guid), skip already-ended events
             const eventsByCalendar = new Map<string, typeof events>();
@@ -1476,12 +1528,24 @@ class Icloud extends utils.Adapter {
                                 type: s.type,
                                 role: s.role,
                                 read: true,
-                                write: false,
+                                write: s.write ?? false,
                                 ...(s.unit ? { unit: s.unit } : {}),
                             },
                             native: {},
                         });
                     }
+                    // json state — single writable shortcut for updating all editable fields at once
+                    await this.extendObject(`${basePath}.json`, {
+                        type: 'state',
+                        common: {
+                            name: 'Event JSON (editable)',
+                            type: 'string',
+                            role: 'json',
+                            read: true,
+                            write: true,
+                        },
+                        native: {},
+                    });
 
                     if (ev) {
                         await this.setStateIfChanged(`${basePath}.title`, ev.title ?? '');
@@ -1543,11 +1607,30 @@ class Icloud extends utils.Adapter {
                             `${basePath}.shouldShowJunkUIWhenAppropriate`,
                             ev.shouldShowJunkUIWhenAppropriate ?? false,
                         );
-                        await this.setStateIfChanged(`${basePath}.alarms`, JSON.stringify(ev.alarms ?? []));
+                        const alarmDetails = (ev.alarms ?? [])
+                            .map(guid => alarmsByGuid.get(guid))
+                            .filter((m): m is AlarmMeasurement => m !== undefined);
+                        await this.setStateIfChanged(`${basePath}.alarms`, JSON.stringify(alarmDetails));
+                        await this.setStateIfChanged(`${basePath}.location`, ev.location ?? '');
+                        await this.setStateIfChanged(`${basePath}.description`, ev.description ?? '');
+                        await this.setStateIfChanged(
+                            `${basePath}.json`,
+                            JSON.stringify({
+                                title: ev.title ?? '',
+                                startDate: this.localDateArrayToTimestamp(ev.localStartDate),
+                                endDate: this.localDateArrayToTimestamp(ev.localEndDate),
+                                allDay: ev.allDay ?? false,
+                                location: ev.location ?? '',
+                                description: ev.description ?? '',
+                                url: ev.url ?? '',
+                                alarms: alarmDetails,
+                            }),
+                        );
                     } else {
                         for (const s of CALENDAR_EVENT_STATES) {
                             await this.setStateIfChanged(`${basePath}.${s.id}`, null);
                         }
+                        await this.setStateIfChanged(`${basePath}.json`, null);
                     }
                 }
             }
@@ -1624,6 +1707,144 @@ class Icloud extends utils.Adapter {
         };
         schedule();
         this.log.debug(`Calendar refresh scheduled every ${intervalMin} min`);
+    }
+
+    // ── Calendar event write helpers ──────────────────────────────────────────
+
+    private async applyCalendarEventUpdate(calId: string, slotId: string): Promise<void> {
+        const pendingKey = `${calId}.${slotId}`;
+        const pending = this.calendarEventPendingChanges.get(pendingKey);
+        if (!pending) {
+            return;
+        }
+        this.calendarEventPendingChanges.delete(pendingKey);
+
+        if (!this.icloud) {
+            this.log.warn('Calendar event update: iCloud not initialized');
+            this.scheduleCalendarResyncIfIdle();
+            return;
+        }
+
+        const basePath = `calendar.${calId}.${slotId}`;
+        const [guidState, pGuidState, etagState] = await Promise.all([
+            this.getStateAsync(`${basePath}.guid`),
+            this.getStateAsync(`${basePath}.pGuid`),
+            this.getStateAsync(`${basePath}.etag`),
+        ]);
+
+        const eventGuid = guidState?.val as string | undefined;
+        const calendarGuid = pGuidState?.val as string | undefined;
+        const etag = etagState?.val as string | undefined;
+
+        if (!eventGuid || !calendarGuid) {
+            this.log.warn(`Calendar event update: missing guid or pGuid for ${basePath} — slot may be empty`);
+            this.scheduleCalendarResyncIfIdle();
+            return;
+        }
+
+        // Merge: json fields first, individual field writes override
+        const resolved: Record<string, ioBroker.StateValue> = {};
+        const jsonVal = pending.fields.get('json');
+        if (jsonVal != null) {
+            try {
+                const parsed = JSON.parse(String(jsonVal)) as Record<string, unknown>;
+                const allowed = ['title', 'startDate', 'endDate', 'allDay', 'location', 'description', 'url', 'alarms'];
+                for (const key of allowed) {
+                    if (key in parsed) {
+                        resolved[key] = parsed[key] as ioBroker.StateValue;
+                    }
+                }
+            } catch {
+                this.log.warn(`Calendar event update: invalid JSON in ${basePath}.json — ignoring`);
+            }
+        }
+        for (const [field, val] of pending.fields.entries()) {
+            if (field !== 'json') {
+                resolved[field] = val;
+            }
+        }
+
+        const opts: UpdateEventOptions = {
+            calendarGuid,
+            eventGuid,
+            etag: etag ?? undefined,
+            ...(resolved.title !== undefined ? { title: String(resolved.title) } : {}),
+            ...(resolved.startDate !== undefined ? { startDate: new Date(Number(resolved.startDate)) } : {}),
+            ...(resolved.endDate !== undefined ? { endDate: new Date(Number(resolved.endDate)) } : {}),
+            ...(resolved.allDay !== undefined ? { allDay: Boolean(resolved.allDay) } : {}),
+            ...(resolved.url !== undefined ? { url: String(resolved.url) } : {}),
+            ...(resolved.location !== undefined ? { location: String(resolved.location) } : {}),
+            ...(resolved.description !== undefined ? { description: String(resolved.description) } : {}),
+            ...(resolved.alarms !== undefined ? { alarms: this.parseEventAlarmsJson(resolved.alarms) } : {}),
+        };
+
+        this.log.info(`Updating calendar event ${eventGuid} in ${calendarGuid}…`);
+        this.calendarEventUpdatesInFlight++;
+        try {
+            const calService = this.icloud.getService('calendar');
+            await calService.updateEvent(opts);
+            this.log.info(`Calendar event ${eventGuid} updated`);
+
+            // Ack all changed states with the value that was written
+            for (const [field, stateId] of pending.stateIds.entries()) {
+                const relId = stateId.startsWith(`${this.namespace}.`)
+                    ? stateId.slice(this.namespace.length + 1)
+                    : stateId;
+                await this.setState(relId, pending.fields.get(field) ?? null, true);
+            }
+        } catch (err) {
+            this.log.error(`Failed to update calendar event ${eventGuid}: ${(err as Error)?.message ?? String(err)}`);
+        } finally {
+            this.calendarEventUpdatesInFlight--;
+            // Schedule a single resync only when every pending slot and in-flight call is done
+            this.scheduleCalendarResyncIfIdle();
+        }
+    }
+
+    /**
+     * Schedules a calendar refresh only when no debounce timers, no in-flight API
+     * calls, and no pending changes remain.  This ensures exactly one resync fires
+     * after all batched event updates have been sent to Apple.
+     */
+    private scheduleCalendarResyncIfIdle(): void {
+        if (
+            this.calendarEventUpdateTimers.size > 0 ||
+            this.calendarEventPendingChanges.size > 0 ||
+            this.calendarEventUpdatesInFlight > 0
+        ) {
+            return;
+        }
+        if (this.calendarResyncTimer) {
+            this.clearTimeout(this.calendarResyncTimer);
+        }
+        this.calendarResyncTimer = this.setTimeout(() => {
+            this.calendarResyncTimer = null;
+            this.refreshCalendarEvents().catch((err: unknown) => {
+                this.log.warn(`Calendar post-edit refresh failed: ${(err as Error)?.message ?? String(err)}`);
+            });
+        }, 2000);
+    }
+
+    private parseEventAlarmsJson(val: ioBroker.StateValue): AlarmMeasurement[] {
+        try {
+            const arr = JSON.parse(String(val)) as unknown[];
+            if (!Array.isArray(arr)) {
+                return [];
+            }
+            return arr.map(a => {
+                const m = a as Record<string, unknown>;
+                return {
+                    before: Boolean(m.before ?? true),
+                    weeks: Number(m.weeks ?? 0),
+                    days: Number(m.days ?? 0),
+                    hours: Number(m.hours ?? 0),
+                    minutes: Number(m.minutes ?? 0),
+                    seconds: Number(m.seconds ?? 0),
+                };
+            });
+        } catch {
+            return [];
+        }
     }
 
     // ── Reminders helpers ─────────────────────────────────────────────────────
@@ -2731,6 +2952,15 @@ class Icloud extends utils.Adapter {
                         this.clearTimeout(this.calendarRefreshTimer);
                         this.calendarRefreshTimer = null;
                     }
+                    for (const t of this.calendarEventUpdateTimers.values()) {
+                        this.clearTimeout(t);
+                    }
+                    this.calendarEventUpdateTimers.clear();
+                    this.calendarEventPendingChanges.clear();
+                    if (this.calendarResyncTimer) {
+                        this.clearTimeout(this.calendarResyncTimer);
+                        this.calendarResyncTimer = null;
+                    }
                     if (this.remindersRefreshTimer) {
                         this.clearTimeout(this.remindersRefreshTimer);
                         this.remindersRefreshTimer = null;
@@ -2890,6 +3120,45 @@ class Icloud extends utils.Adapter {
                 .catch((err: unknown) => {
                     this.log.error(`FindMy manual refresh failed: ${(err as Error)?.message ?? String(err)}`);
                 });
+            return;
+        }
+
+        // calendar.<calId>.<slotId>.<field> — writable event state changed
+        const calEventMatch = id.match(
+            /^[^.]+\.[^.]+\.calendar\.([^.]+)\.(\d{6})\.(title|startDate|endDate|allDay|url|location|description|alarms|json)$/,
+        );
+        if (calEventMatch) {
+            const [, calId, slotId, field] = calEventMatch;
+            const pendingKey = `${calId}.${slotId}`;
+            if (!this.calendarEventPendingChanges.has(pendingKey)) {
+                this.calendarEventPendingChanges.set(pendingKey, { fields: new Map(), stateIds: new Map() });
+            }
+            const pending = this.calendarEventPendingChanges.get(pendingKey)!;
+            pending.fields.set(field, state.val);
+            pending.stateIds.set(field, id);
+
+            // Any new write cancels a pending global resync — it will be rescheduled
+            // once all updates are complete.
+            if (this.calendarResyncTimer) {
+                this.clearTimeout(this.calendarResyncTimer);
+                this.calendarResyncTimer = null;
+            }
+
+            // json → fire immediately (100 ms); individual fields → 5 s debounce
+            const debounceMs = field === 'json' ? 100 : 5000;
+            const existing = this.calendarEventUpdateTimers.get(pendingKey);
+            if (existing) {
+                this.clearTimeout(existing);
+            }
+            const timer = this.setTimeout(() => {
+                this.calendarEventUpdateTimers.delete(pendingKey);
+                this.applyCalendarEventUpdate(calId, slotId).catch((err: unknown) => {
+                    this.log.error(`Calendar event update failed: ${(err as Error)?.message ?? String(err)}`);
+                });
+            }, debounceMs);
+            if (timer !== undefined) {
+                this.calendarEventUpdateTimers.set(pendingKey, timer);
+            }
             return;
         }
 

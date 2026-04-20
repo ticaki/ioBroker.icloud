@@ -16,6 +16,8 @@
 	"calendarEnabled": "Kalender aktivieren",
 	"calendarEventCount": "Anzahl zukünftiger Ereignisse",
 	"calendarEventCountHelp": "Anzahl der zukünftigen Termine, die pro Kalender abgerufen werden (1–50)",
+	"calendarMonths": "Monate abrufen",
+	"calendarMonthsHelp": "Wie viele Monate an Terminen abgerufen werden (1–12). Jeder Monat ist ein separater API-Aufruf.",
 	"calendarInterval": "Aktualisierungsintervall (Minuten)",
 	"calendarIntervalHelp": "Wie oft Kalenderereignisse abgefragt werden (5–1440 Minuten)",
 	"remindersHeader": "Erinnerungen",
