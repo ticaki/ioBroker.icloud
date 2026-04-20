@@ -46,7 +46,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.6.2 (2026-04-20)
 * (ticaki) Auth: automatic one-shot retry after a stale-session HTTP 401 (e.g. after an adapter update); the trust token is preserved so MFA is not required again
 
 ### 0.6.1 (2026-04-20)

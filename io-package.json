@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.6.1",
+    "version": "0.6.2",
     "news": {
+      "0.6.2": {
+        "en": "Auth: automatic one-shot retry after a stale-session HTTP 401 (e.g. after an adapter update); the trust token is preserved so MFA is not required again",
+        "de": "Auth: automatisches Ein-Schuss-Retry nach einer Stale-session HTTP 401 (z.B. nach einem Adapter-Update); das Vertrauenstoken bleibt erhalten, so dass MFA nicht wieder benötigt wird",
+        "ru": "Auth: автоматическая однократная повторная запись после устаревшей сессии HTTP 401 (например, после обновления адаптера); токен доверия сохраняется, поэтому MFA не требуется снова",
+        "pt": "Auth: repetição automática de um tiro após um HTTP 401 de sessão lenta (por exemplo, após uma atualização do adaptador); o token de confiança é preservado para que MFA não seja necessário novamente",
+        "nl": "Auth: automatische one-shot retry na een oude sessie HTTP 401 (bijv. na een adapter-update); het vertrouwen token wordt bewaard zodat MFA niet opnieuw nodig is",
+        "fr": "Auth: réessayer automatiquement une capture après une session de blocage HTTP 401 (par exemple après une mise à jour de l'adaptateur); le jeton de confiance est conservé de sorte que MFA n'est plus nécessaire",
+        "it": "Auth: automatica retry one-shot dopo una stale-session HTTP 401 (ad esempio dopo un aggiornamento dell'adattatore); il token di fiducia viene conservato in modo che MFA non sia richiesto di nuovo",
+        "es": "Auth: retry automático de una sola instantánea después de una sesión HTTP 401 (por ejemplo, después de una actualización del adaptador); el token de confianza se conserva por lo que el MFA no es requerido de nuevo",
+        "pl": "Auth: automatyczne powtórowanie jednego ujęcia po sesji stale- session HTTP 401 (np. po aktualizacji adaptera); token zaufania jest zachowany, więc MFA nie jest wymagane ponownie",
+        "uk": "Аут: автоматична одноразова птиця після застібки HTTP 401 (наприклад, після оновлення адаптера); довірений токен зберігається, тому MFA не потрібно знову",
+        "zh-cn": "Auth: 在 stale- session HTTP 401( 例如在适配器更新后) 后自动重试一次; 信任符被保存, 因此不再需要 MFA"
+      },
       "0.6.1": {
         "en": "Drive Sync: BackItUp instance selection in the edit dialog — automatically updates the source path; item card shows matching instance chips or an error indicator when no instance matches",
         "de": "Drive Sync: BackItUp-Instanzauswahl im Bearbeitungsdialog — setzt den Quellpfad automatisch; Item-Karte zeigt passende Instanz-Chips oder einen Fehlerindikator, wenn keine Instanz übereinstimmt",
@@ -80,19 +93,6 @@
         "pl": "Fixed Drive and Reminders po cichu zawodzi, gdy włączona jest zaawansowana ochrona danych iCloud (ADP); wygasające żetony synchronizacji CloudKit są automatycznie resetowane\nDodano obsługę plików cookie PCS dla iCloud Drive z kontami ADP (lusterka Pyicloud '_ request _ pcs _ for _ service \")",
         "uk": "Виправлений привід і відмінники безшумно не вдається при включенні iCloud Advanced Data Protection (ADP); відхилені відмітки CloudKit тепер автоматично скидаються\nДодана обробка файлів cookie ПКС для iCloud Drive з обліковими записами ADP (mirrors pyicloud ` request pcs for service`)",
         "zh-cn": "启用 iCloud 高级数据保护( ADP) 时, 固定驱动器和提醒器会静悄悄的失败; 过期的 CloudKit 同步令牌现在自动重置\n用 ADP 启用的账户添加了 iCloud Drive 的 PCS cookie 处理( Mirrors pyicloud 请求 pcs  for  service )"
-      },
-      "0.2.0": {
-        "en": "iCloud Drive integration: browse folders, upload/download files, create folders, delete and rename items via sendTo()\nAdded Blockly blocks for uploading and downloading iCloud Drive files\nDrive root metadata exposed as states (drive.name, drive.fileCount, drive.rootItems, etc.)",
-        "de": "iCloud Drive-Integration: Ordner durchsuchen, Dateien hochladen/herunterladen, Ordner erstellen, Elemente löschen und umbenennen via sendTo()\nBlockly-Blöcke zum Hochladen und Herunterladen von iCloud Drive-Dateien hinzugefügt\nDrive-Root-Metadaten als Datenpunkte verfügbar (drive.name, drive.fileCount, drive.rootItems, etc.)",
-        "ru": "Интеграция iCloud Drive: просмотр папок, загрузка/скачивание файлов, создание папок, удаление и переименование элементов через sendTo()\nДобавлены блоки Blockly для загрузки и скачивания файлов iCloud Drive\nМетаданные корневого каталога Drive, доступные как состояния (drive.name, drive.fileCount, drive.rootItems и т.д.)",
-        "pt": "Integração do iCloud Drive: navegue por pastas, upload/download de arquivos, crie pastas, apague e renomeie itens via sendTo()\nAdicionados blocos Blockly para carregar e baixar arquivos do iCloud Drive\nMetadados raiz do Drive expostos como estados (drive.name, drive.fileCount, drive.rootItems, etc.)",
-        "nl": "iCloud Drive-integratie: blader door mappen, upload/download bestanden, maak mappen, verwijder en hernoem items via sendTo()\nBlockly-blokken toegevoegd voor het uploaden en downloaden van iCloud Drive-bestanden\nDrive-root-metadata beschikbaar als staten (drive.name, drive.fileCount, drive.rootItems, etc.)",
-        "fr": "Intégration iCloud Drive : parcourir les dossiers, charger/télécharger des fichiers, créer des dossiers, supprimer et renommer des éléments via sendTo()\nAjout de blocs Blockly pour le chargement et le téléchargement de fichiers iCloud Drive\nMétadonnées racine du Drive exposées comme états (drive.name, drive.fileCount, drive.rootItems, etc.)",
-        "it": "Integrazione iCloud Drive: sfogliare cartelle, caricare/scaricare file, creare cartelle, eliminare e rinominare gli elementi tramite sendTo()\nAggiunti blocchi Blockly per il caricamento e il download dei file iCloud Drive\nMetadati root del Drive esposti come stati (drive.name, drive.fileCount, drive.rootItems, ecc.)",
-        "es": "Integración de iCloud Drive: navegar por carpetas, subir/descargar archivos, crear carpetas, eliminar y cambiar el nombre de elementos mediante sendTo()\nBloques de Blockly añadidos para subir y descargar archivos de iCloud Drive\nMetadatos raíz del Drive expuestos como estados (drive.name, drive.fileCount, drive.rootItems, etc.)",
-        "pl": "Integracja iCloud Drive: przeglądaj foldery, wysyłaj/pobieraj pliki, twórz foldery, usuwaj i zmieniaj nazwy elementów przez sendTo()\nDodano bloki Blockly do wysyłania i pobierania plików iCloud Drive\nMetadane root dysku udostępnione jako stany (drive.name, drive.fileCount, drive.rootItems itp.)",
-        "uk": "Інтеграція iCloud Drive: перегляд папок, завантаження/вивантаження файлів, створення папок, видалення та перейменування елементів через sendTo()\nДодано блоки Blockly для завантаження та вивантаження файлів iCloud Drive\nКореневі метадані Drive доступні як стани (drive.name, drive.fileCount, drive.rootItems тощо)",
-        "zh-cn": "iCloud Drive 集成：浏览文件夹、上传/下载文件、创建文件夹、通过 sendTo() 删除和重命名项目\n已添加 Blockly 块用于上传和下载 iCloud Drive 文件\nDrive 根目录元数据作为状态公开（drive.name、drive.fileCount、drive.rootItems 等）"
       }
     },
     "titleLang": {
