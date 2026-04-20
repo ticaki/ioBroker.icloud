@@ -3914,7 +3914,7 @@ class Icloud extends utils.Adapter {
             return;
         }
         const name = msg.name as string | undefined;
-        const parentId = msg.parentId as string | undefined;
+        const parentId = (msg.parentId ?? msg.folderId) as string | undefined;
         const parentPath = msg.parentPath as string | undefined;
 
         if (!name) {
@@ -3942,7 +3942,9 @@ class Icloud extends utils.Adapter {
                 targetParentId = root.nodeId;
             }
             const result = await driveService.mkdir(targetParentId, name);
-            this.sendCallback(obj, { success: true, result });
+            const items = Array.isArray(result) ? result : ((result as any)?.folders ?? []);
+            const newDrivewsid = items[0]?.drivewsid ?? null;
+            this.sendCallback(obj, { success: true, drivewsid: newDrivewsid, result });
         })().catch((err: unknown) => {
             this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
         });

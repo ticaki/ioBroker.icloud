@@ -3434,6 +3434,7 @@ class Icloud extends utils.Adapter {
     });
   }
   handleDriveCreateFolder(obj) {
+    var _a;
     if (!this.config.driveEnabled) {
       this.sendCallback(obj, {
         success: false,
@@ -3447,7 +3448,7 @@ class Icloud extends utils.Adapter {
       return;
     }
     const name = msg.name;
-    const parentId = msg.parentId;
+    const parentId = (_a = msg.parentId) != null ? _a : msg.folderId;
     const parentPath = msg.parentPath;
     if (!name) {
       this.sendCallback(obj, { success: false, error: 'Required field missing: "name"' });
@@ -3461,6 +3462,7 @@ class Icloud extends utils.Adapter {
       return;
     }
     (async () => {
+      var _a2, _b, _c;
       let targetParentId;
       if (parentId) {
         targetParentId = parentId;
@@ -3472,10 +3474,12 @@ class Icloud extends utils.Adapter {
         targetParentId = root.nodeId;
       }
       const result = await driveService.mkdir(targetParentId, name);
-      this.sendCallback(obj, { success: true, result });
+      const items = Array.isArray(result) ? result : (_a2 = result == null ? void 0 : result.folders) != null ? _a2 : [];
+      const newDrivewsid = (_c = (_b = items[0]) == null ? void 0 : _b.drivewsid) != null ? _c : null;
+      this.sendCallback(obj, { success: true, drivewsid: newDrivewsid, result });
     })().catch((err) => {
-      var _a;
-      this.sendCallback(obj, { success: false, error: (_a = err == null ? void 0 : err.message) != null ? _a : String(err) });
+      var _a2;
+      this.sendCallback(obj, { success: false, error: (_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err) });
     });
   }
   handleDriveDeleteItem(obj) {

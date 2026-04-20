@@ -112,7 +112,7 @@ interface DriveSyncState extends ConfigGenericState {
     // folder browser
     browseDialogOpen: boolean;
     browseEntryId: string;
-    browsePath: string[];
+    browsePath: { name: string; drivewsid: string | null }[];
     browseItems: DriveFolderItem[];
     browseLoading: boolean;
     // local folder browser
@@ -171,7 +171,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
             syncStatus: null,
             browseDialogOpen: false,
             browseEntryId: '',
-            browsePath: [],
+            browsePath: [] as { name: string; drivewsid: string | null }[],
             browseItems: [],
             browseLoading: false,
             localBrowseDialogOpen: false,
@@ -372,16 +372,16 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
             browsePath: [],
             browseItems: [],
         });
-        void this.browseDriveFolder('');
+        void this.browseDriveFolder(null);
     }
 
-    private async browseDriveFolder(path: string): Promise<void> {
+    private async browseDriveFolder(folderId: string | null): Promise<void> {
         this.setState({ browseLoading: true });
         try {
             const result = await this.props.oContext.socket.sendTo(
                 `icloud.${this.props.oContext.instance}`,
                 'driveListFolder',
-                { path: path || undefined },
+                folderId ? { folderId } : {},
             );
             if (result?.success && result.items) {
                 const folders = (result.items as DriveFolderItem[]).filter(i => i.type === 'FOLDER');
@@ -394,27 +394,30 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
         }
     }
 
-    private navigateToFolder(folderName: string): void {
-        const newPath = [...this.state.browsePath, folderName];
+    private navigateToFolder(item: DriveFolderItem): void {
+        const newPath = [...this.state.browsePath, { name: item.name, drivewsid: item.drivewsid }];
         this.setState({ browsePath: newPath });
-        void this.browseDriveFolder(newPath.join('/'));
+        void this.browseDriveFolder(item.drivewsid);
     }
 
     private navigateUp(): void {
         const newPath = this.state.browsePath.slice(0, -1);
         this.setState({ browsePath: newPath });
-        void this.browseDriveFolder(newPath.join('/'));
+        const parentId = newPath.length > 0 ? newPath[newPath.length - 1].drivewsid : null;
+        void this.browseDriveFolder(parentId);
     }
 
     private navigateToBreadcrumb(index: number): void {
         const newPath = this.state.browsePath.slice(0, index + 1);
         this.setState({ browsePath: newPath });
-        void this.browseDriveFolder(newPath.join('/'));
+        const folderId = newPath[newPath.length - 1]?.drivewsid ?? null;
+        void this.browseDriveFolder(folderId);
     }
 
     private selectCurrentFolder(): void {
-        const selectedPath = this.state.browsePath.join('/') || '/';
-        const { editEntry } = this.state;
+        const { browsePath, editEntry } = this.state;
+        // Build slash-separated display path from breadcrumb names
+        const selectedPath = browsePath.map(p => p.name).join('/') || '/';
         if (editEntry) {
             this.setState({
                 editEntry: { ...editEntry, icloudFolder: selectedPath },
@@ -428,16 +431,19 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
         if (!createFolderName.trim()) {
             return;
         }
-        const parentPath = browsePath.join('/') || undefined;
+        const parentFolderId = browsePath.length > 0 ? browsePath[browsePath.length - 1].drivewsid : undefined;
+        const parentPath = browsePath.map(p => p.name).join('/') || undefined;
         try {
-            await this.props.oContext.socket.sendTo(`icloud.${this.props.oContext.instance}`, 'driveCreateFolder', {
-                name: createFolderName.trim(),
-                parentPath,
-            });
-            // Navigate into the newly created folder
-            const newPath = [...browsePath, createFolderName.trim()];
+            const result = await this.props.oContext.socket.sendTo(
+                `icloud.${this.props.oContext.instance}`,
+                'driveCreateFolder',
+                { name: createFolderName.trim(), folderId: parentFolderId, parentPath },
+            );
+            // Navigate into the newly created folder using returned drivewsid if available
+            const newDrivewsid = result?.drivewsid ?? null;
+            const newPath = [...browsePath, { name: createFolderName.trim(), drivewsid: newDrivewsid }];
             this.setState({ createFolderOpen: false, createFolderName: '', browsePath: newPath });
-            void this.browseDriveFolder(newPath.join('/'));
+            void this.browseDriveFolder(newDrivewsid);
         } catch {
             // ignore
         }
@@ -1099,7 +1105,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                             underline="hover"
                             onClick={() => {
                                 this.setState({ browsePath: [] });
-                                void this.browseDriveFolder('');
+                                void this.browseDriveFolder(null);
                             }}
                         >
                             iCloud Drive
@@ -1111,7 +1117,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                                 underline="hover"
                                 onClick={() => this.navigateToBreadcrumb(i)}
                             >
-                                {segment}
+                                {segment.name}
                             </Link>
                         ))}
                     </Breadcrumbs>
@@ -1136,7 +1142,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                             {browseItems.map(item => (
                                 <ListItemButton
                                     key={item.drivewsid}
-                                    onClick={() => this.navigateToFolder(item.name)}
+                                    onClick={() => this.navigateToFolder(item)}
                                 >
                                     <ListItemIcon>
                                         <FolderIcon />
@@ -1195,7 +1201,10 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                     </Button>
                     <Button
                         startIcon={<RefreshIcon />}
-                        onClick={() => void this.browseDriveFolder(browsePath.join('/'))}
+                        onClick={() => {
+                            const folderId = browsePath.length > 0 ? browsePath[browsePath.length - 1].drivewsid : null;
+                            void this.browseDriveFolder(folderId);
+                        }}
                     >
                         {I18n.t('custom_drivesync_refresh')}
                     </Button>
@@ -1208,7 +1217,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                         onClick={() => this.selectCurrentFolder()}
                     >
                         {I18n.t('custom_drivesync_select_this_folder')}
-                        {browsePath.length > 0 ? `: ${browsePath[browsePath.length - 1]}` : ': /'}
+                        {browsePath.length > 0 ? `: ${browsePath[browsePath.length - 1].name}` : ': /'}
                     </Button>
                 </DialogActions>
             </Dialog>
