@@ -279,24 +279,26 @@ export class iCloudContactsService {
         // This makes the URL user-specific and prevents Apple's CDN from serving a shared,
         // potentially stale, cached startup response.
         const startupParams = new URLSearchParams(this.service.getParams());
-        startupParams.set('locale', 'en_US');
+        startupParams.set('locale', 'de_DE');
         startupParams.set('order', 'last,first');
         startupParams.set('includePhoneNumbers', 'true');
         startupParams.set('includePhotos', 'true');
+        startupParams.set('clientVersion', '2.1');
 
         this.service._log(0, '[contacts] GET startup');
+
+        // startup only returns 500 contacts max, but includes prefToken + syncToken for the full list — so we fetch the full list in the next step using those tokens.
         const startupResp = await this.service.fetch(`${this.contactsEndpoint}/startup?${startupParams.toString()}`, {
             method: 'GET',
             headers: {
                 ...this.service.authStore.getHeaders(),
                 Accept: 'application/json',
-                'Cache-Control': 'no-cache, no-store',
-                Pragma: 'no-cache',
             },
         });
         if (!startupResp.ok) {
             throw new Error(`Contacts startup failed (HTTP ${startupResp.status})`);
         }
+        this.service._log(0, `[contacts] headers: ${JSON.stringify(Object.fromEntries(startupParams.entries()))}`);
         const startupData = (await startupResp.json()) as ContactsStartupResponse;
 
         // prefToken + syncToken from /startup are passed as-is to /contacts — mirroring
@@ -319,6 +321,7 @@ export class iCloudContactsService {
                 `[contacts] startup.headerPositions: ${JSON.stringify(startupData.headerPositions).slice(0, 600)}`,
             );
         }
+
         this.service._log(
             0,
             `[contacts] startup misc: meCardId=${startupData.meCardId ?? 'n/a'}, restricted=${startupData.restricted ?? 'n/a'}, isGuardianRestricted=${startupData.isGuardianRestricted ?? 'n/a'}`,
@@ -331,7 +334,8 @@ export class iCloudContactsService {
         contactsParams.set('syncToken', this._syncToken);
         contactsParams.set('limit', '0');
         contactsParams.set('offset', '0');
-        
+        contactsParams.set('clientVersion', '2.1');
+
         this.service._log(0, '[contacts] GET contacts');
         const contactsResp = await this.service.fetch(
             `${this.contactsEndpoint}/contacts?${contactsParams.toString()}`,
@@ -340,8 +344,6 @@ export class iCloudContactsService {
                 headers: {
                     ...this.service.authStore.getHeaders(),
                     Accept: 'application/json',
-                    'Cache-Control': 'no-cache, no-store',
-                    Pragma: 'no-cache',
                 },
             },
         );
@@ -354,34 +356,24 @@ export class iCloudContactsService {
 
         // Debug: log all top-level keys from contacts response
         this.service._log(0, `[contacts] contacts response keys: ${Object.keys(contactsData).join(', ')}`);
-        // Log all field names from the first contact
-        const firstContact = (contactsData.contacts ?? [])[0];
-        if (firstContact) {
-            this.service._log(
-                0,
-                `[contacts] contact field names (first record): ${Object.keys(firstContact).join(', ')}`,
-            );
-            // Log a sample record (redacted: only keys + types/lengths)
-            const shape: Record<string, string> = {};
-            for (const [k, v] of Object.entries(firstContact)) {
-                if (Array.isArray(v)) {
-                    shape[k] = `Array(${v.length})`;
-                } else if (v && typeof v === 'object') {
-                    shape[k] = `Object{${Object.keys(v).join(',')}}`;
-                } else {
-                    shape[k] = `${typeof v}`;
-                }
-            }
-            this.service._log(0, `[contacts] contact field shapes: ${JSON.stringify(shape).slice(0, 1200)}`);
-        }
-
         // Parse groups
+        // /co/startup reliably returns groups with their contactIds (member lists).
+        // /co/contacts may also return groups but typically without contactIds — it is
+        // used only as a fallback when startup returns nothing at all.
         this.groupsById.clear();
         const rawGroupsFromContacts = contactsData.groups ?? [];
         const rawGroupsFromStartup = startupData.groups ?? [];
-        const rawGroups: ContactsApiRawGroup[] = rawGroupsFromContacts.length
-            ? rawGroupsFromContacts
-            : rawGroupsFromStartup;
+        // Prefer startup groups when they carry contactIds; fall back to contacts groups
+        // only if startup returned nothing.
+        const startupHasMembership = rawGroupsFromStartup.some(
+            g => (g.contactIds ?? g.memberIds ?? g.members ?? []).length > 0,
+        );
+        const rawGroups: ContactsApiRawGroup[] =
+            rawGroupsFromStartup.length && startupHasMembership
+                ? rawGroupsFromStartup
+                : rawGroupsFromContacts.length
+                  ? rawGroupsFromContacts
+                  : rawGroupsFromStartup;
         for (const g of rawGroups) {
             const groupId = g.groupId ?? g.contactGroupId ?? g.id;
             if (!groupId) {
@@ -394,6 +386,11 @@ export class iCloudContactsService {
                 contactIds,
             });
         }
+        const groupSource = rawGroupsFromStartup.length && startupHasMembership ? 'startup' : 'contacts';
+        const groupSummary = [...this.groupsById.values()]
+            .map(g => `"${g.name}" (${g.contactIds.length} member(s))`)
+            .join(', ');
+        this.service._log(0, `[contacts] groups parsed (source: ${groupSource}): ${groupSummary}`);
 
         // Build contactId → group names mapping
         const contactGroupMap = new Map<string, string[]>();

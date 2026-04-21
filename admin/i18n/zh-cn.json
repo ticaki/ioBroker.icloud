@@ -46,6 +46,8 @@
 	"contactsWriteStatesHelp": "额外将联系人写为 ioBroker 状态。始终可通过 sendTo 使用。",
 	"contactsBirthdayStates": "写入生日状态",
 	"contactsBirthdayStatesHelp": "创建三个 JSON 状态，包含今天、明天或未杴7 天内生日的联系人（含计算年龄）。",
+	"contactsGroups": "筛选群组",
+	"contactsGroupsHelp": "只有属于这些群组的联系人才会写入状态。留空则写入所有联系人。",
 	"findMyTab": "FindMy",
 	"settingsTab": "设置",
 	"findMyDevicesHeader": "设备管理",

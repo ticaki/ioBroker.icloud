@@ -656,6 +656,26 @@ sendTo('icloud.0', 'getContacts', { groupName: 'Family' }, (result) => {
 | `isMe` | `boolean` | `true` if this is the "Me" card (the account owner). |
 | `raw` | `object` | Full raw JSON from iCloud for advanced use. |
 
+### Contacts — States
+
+In addition to the `sendTo()` API, the adapter can write contacts as ioBroker states. Two independent options are available in the adapter settings:
+
+**Write contacts to states** — Creates a folder per contact under `contacts.list.<contactId>.*`. If **Filter groups** is configured, only contacts that belong to at least one of the listed groups are written; leave it empty to write all contacts.
+
+**Write birthday states** — Creates three JSON states that are refreshed on every contacts sync:
+
+| State | Type | Description |
+|-------|------|-------------|
+| `contacts.count` | `number` | Total number of contacts in memory. |
+| `contacts.groupCount` | `number` | Number of contact groups. |
+| `contacts.lastSync` | `number` | Timestamp (ms) of the last successful sync. |
+| `contacts.list.<id>.<field>` | — | One folder per contact with all fields from the [contact field reference](#contact-field-reference) above. Only written when **Write contacts to states** is enabled. |
+| `contacts.birthdays.today` | `string` (JSON) | JSON array of contacts with a birthday today. Each entry includes all contact fields plus `age` (calculated age in full years, or `null` for year-less birthdays). |
+| `contacts.birthdays.tomorrow` | `string` (JSON) | JSON array of contacts with a birthday tomorrow. |
+| `contacts.birthdays.next7days` | `string` (JSON) | JSON array of contacts with a birthday in the next 7 days (includes today). |
+
+The birthday arrays are sorted in the order the contacts were returned by the API. Year-less birthdays (stored as `"--MM-DD"` in iCloud) are included with `age: null`.
+
 ---
 
 ## Notes — States

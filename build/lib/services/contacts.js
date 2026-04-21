@@ -99,25 +99,25 @@ class iCloudContactsService {
    * Reference: https://github.com/picklepete/pyicloud/blob/master/pyicloud/services/contacts.py
    */
   async refresh() {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F;
     const startupParams = new URLSearchParams(this.service.getParams());
-    startupParams.set("locale", "en_US");
+    startupParams.set("locale", "de_DE");
     startupParams.set("order", "last,first");
     startupParams.set("includePhoneNumbers", "true");
     startupParams.set("includePhotos", "true");
+    startupParams.set("clientVersion", "2.1");
     this.service._log(0, "[contacts] GET startup");
     const startupResp = await this.service.fetch(`${this.contactsEndpoint}/startup?${startupParams.toString()}`, {
       method: "GET",
       headers: {
         ...this.service.authStore.getHeaders(),
-        Accept: "application/json",
-        "Cache-Control": "no-cache, no-store",
-        Pragma: "no-cache"
+        Accept: "application/json"
       }
     });
     if (!startupResp.ok) {
       throw new Error(`Contacts startup failed (HTTP ${startupResp.status})`);
     }
+    this.service._log(0, `[contacts] headers: ${JSON.stringify(Object.fromEntries(startupParams.entries()))}`);
     const startupData = await startupResp.json();
     this._prefToken = startupData.prefToken;
     this._syncToken = startupData.syncToken;
@@ -144,6 +144,7 @@ class iCloudContactsService {
     contactsParams.set("syncToken", this._syncToken);
     contactsParams.set("limit", "0");
     contactsParams.set("offset", "0");
+    contactsParams.set("clientVersion", "2.1");
     this.service._log(0, "[contacts] GET contacts");
     const contactsResp = await this.service.fetch(
       `${this.contactsEndpoint}/contacts?${contactsParams.toString()}`,
@@ -151,9 +152,7 @@ class iCloudContactsService {
         method: "GET",
         headers: {
           ...this.service.authStore.getHeaders(),
-          Accept: "application/json",
-          "Cache-Control": "no-cache, no-store",
-          Pragma: "no-cache"
+          Accept: "application/json"
         }
       }
     );
@@ -163,40 +162,31 @@ class iCloudContactsService {
     const contactsData = await contactsResp.json();
     const meContactId = (_e = contactsData.meContactId) != null ? _e : startupData.meCardId;
     this.service._log(0, `[contacts] contacts response keys: ${Object.keys(contactsData).join(", ")}`);
-    const firstContact = ((_f = contactsData.contacts) != null ? _f : [])[0];
-    if (firstContact) {
-      this.service._log(
-        0,
-        `[contacts] contact field names (first record): ${Object.keys(firstContact).join(", ")}`
-      );
-      const shape = {};
-      for (const [k, v] of Object.entries(firstContact)) {
-        if (Array.isArray(v)) {
-          shape[k] = `Array(${v.length})`;
-        } else if (v && typeof v === "object") {
-          shape[k] = `Object{${Object.keys(v).join(",")}}`;
-        } else {
-          shape[k] = `${typeof v}`;
-        }
-      }
-      this.service._log(0, `[contacts] contact field shapes: ${JSON.stringify(shape).slice(0, 1200)}`);
-    }
     this.groupsById.clear();
-    const rawGroupsFromContacts = (_g = contactsData.groups) != null ? _g : [];
-    const rawGroupsFromStartup = (_h = startupData.groups) != null ? _h : [];
-    const rawGroups = rawGroupsFromContacts.length ? rawGroupsFromContacts : rawGroupsFromStartup;
+    const rawGroupsFromContacts = (_f = contactsData.groups) != null ? _f : [];
+    const rawGroupsFromStartup = (_g = startupData.groups) != null ? _g : [];
+    const startupHasMembership = rawGroupsFromStartup.some(
+      (g) => {
+        var _a2, _b2, _c2;
+        return ((_c2 = (_b2 = (_a2 = g.contactIds) != null ? _a2 : g.memberIds) != null ? _b2 : g.members) != null ? _c2 : []).length > 0;
+      }
+    );
+    const rawGroups = rawGroupsFromStartup.length && startupHasMembership ? rawGroupsFromStartup : rawGroupsFromContacts.length ? rawGroupsFromContacts : rawGroupsFromStartup;
     for (const g of rawGroups) {
-      const groupId = (_j = (_i = g.groupId) != null ? _i : g.contactGroupId) != null ? _j : g.id;
+      const groupId = (_i = (_h = g.groupId) != null ? _h : g.contactGroupId) != null ? _i : g.id;
       if (!groupId) {
         continue;
       }
-      const contactIds = (_m = (_l = (_k = g.contactIds) != null ? _k : g.memberIds) != null ? _l : g.members) != null ? _m : [];
+      const contactIds = (_l = (_k = (_j = g.contactIds) != null ? _j : g.memberIds) != null ? _k : g.members) != null ? _l : [];
       this.groupsById.set(groupId, {
         groupId,
-        name: (_o = (_n = g.name) != null ? _n : g.groupName) != null ? _o : "",
+        name: (_n = (_m = g.name) != null ? _m : g.groupName) != null ? _n : "",
         contactIds
       });
     }
+    const groupSource = rawGroupsFromStartup.length && startupHasMembership ? "startup" : "contacts";
+    const groupSummary = [...this.groupsById.values()].map((g) => `"${g.name}" (${g.contactIds.length} member(s))`).join(", ");
+    this.service._log(0, `[contacts] groups parsed (source: ${groupSource}): ${groupSummary}`);
     const contactGroupMap = /* @__PURE__ */ new Map();
     for (const grp of this.groupsById.values()) {
       for (const cid of grp.contactIds) {
@@ -209,36 +199,36 @@ class iCloudContactsService {
       }
     }
     this.contactsById.clear();
-    const rawContacts = (_p = contactsData.contacts) != null ? _p : [];
+    const rawContacts = (_o = contactsData.contacts) != null ? _o : [];
     for (const raw of rawContacts) {
       const contactId = raw.contactId;
       if (!contactId) {
         continue;
       }
-      const firstName = (_q = raw.firstName) != null ? _q : "";
-      const lastName = (_r = raw.lastName) != null ? _r : "";
-      const companyName = (_s = raw.companyName) != null ? _s : "";
-      const middleName = (_t = raw.middleName) != null ? _t : "";
-      const prefix = (_u = raw.prefix) != null ? _u : "";
-      const suffix = (_v = raw.suffix) != null ? _v : "";
-      const nickname = (_w = raw.nickName) != null ? _w : "";
+      const firstName = (_p = raw.firstName) != null ? _p : "";
+      const lastName = (_q = raw.lastName) != null ? _q : "";
+      const companyName = (_r = raw.companyName) != null ? _r : "";
+      const middleName = (_s = raw.middleName) != null ? _s : "";
+      const prefix = (_t = raw.prefix) != null ? _t : "";
+      const suffix = (_u = raw.suffix) != null ? _u : "";
+      const nickname = (_v = raw.nickName) != null ? _v : "";
       const nameParts = [firstName, middleName, lastName].filter(Boolean);
       const fullName = nameParts.join(" ") || companyName || "";
-      const phones = ((_x = raw.phones) != null ? _x : []).map((p) => {
+      const phones = ((_w = raw.phones) != null ? _w : []).map((p) => {
         var _a2, _b2;
         return {
           label: (_a2 = p.label) != null ? _a2 : "",
           field: (_b2 = p.field) != null ? _b2 : ""
         };
       });
-      const emails = ((_y = raw.emailAddresses) != null ? _y : []).map((e) => {
+      const emails = ((_x = raw.emailAddresses) != null ? _x : []).map((e) => {
         var _a2, _b2;
         return {
           label: (_a2 = e.label) != null ? _a2 : "",
           field: (_b2 = e.field) != null ? _b2 : ""
         };
       });
-      const streetAddresses = ((_z = raw.streetAddresses) != null ? _z : []).map((a) => {
+      const streetAddresses = ((_y = raw.streetAddresses) != null ? _y : []).map((a) => {
         var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2;
         return {
           label: (_a2 = a.label) != null ? _a2 : "",
@@ -250,10 +240,10 @@ class iCloudContactsService {
           countryCode: (_m2 = (_l2 = a.field) == null ? void 0 : _l2.countryCode) != null ? _m2 : ""
         };
       });
-      const city = (_B = (_A = streetAddresses[0]) == null ? void 0 : _A.city) != null ? _B : "";
+      const city = (_A = (_z = streetAddresses[0]) == null ? void 0 : _z.city) != null ? _A : "";
       const birthday = parseBirthday(raw.birthday);
-      const notes = (_C = raw.notes) != null ? _C : "";
-      const etag = (_D = raw.etag) != null ? _D : "";
+      const notes = (_B = raw.notes) != null ? _B : "";
+      const etag = (_C = raw.etag) != null ? _C : "";
       const contact = {
         contactId,
         firstName,
@@ -270,9 +260,9 @@ class iCloudContactsService {
         suffix,
         middleName,
         nickname,
-        jobTitle: (_E = raw.jobTitle) != null ? _E : "",
-        department: (_F = raw.department) != null ? _F : "",
-        groups: (_G = contactGroupMap.get(contactId)) != null ? _G : [],
+        jobTitle: (_D = raw.jobTitle) != null ? _D : "",
+        department: (_E = raw.department) != null ? _E : "",
+        groups: (_F = contactGroupMap.get(contactId)) != null ? _F : [],
         etag,
         isMe: contactId === meContactId,
         raw

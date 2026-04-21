@@ -48,6 +48,8 @@
 	"contactsWriteStatesHelp": "Additionally writes contacts as ioBroker states (folder per contact). Always available via sendTo.",
 	"contactsBirthdayStates": "Write birthday states",
 	"contactsBirthdayStatesHelp": "Creates three JSON states with contacts whose birthday is today, tomorrow, or within the next 7 days (including calculated age).",
+	"contactsGroups": "Filter groups",
+	"contactsGroupsHelp": "Only contacts belonging to these groups will be written as states. Leave empty to write all contacts.",
 	"findMyTab": "FindMy",
 	"settingsTab": "Settings",
 	"findMyDevicesHeader": "Device Management",

@@ -46,6 +46,8 @@
 	"contactsWriteStatesHelp": "Scrive i contatti anche come stati ioBroker. Sempre disponibile tramite sendTo.",
 	"contactsBirthdayStates": "Scrivi stati compleanno",
 	"contactsBirthdayStatesHelp": "Crea tre stati JSON con i contatti il cui compleanno è oggi, domani o nei prossimi 7 giorni (età calcolata inclusa).",
+	"contactsGroups": "Filtra gruppi",
+	"contactsGroupsHelp": "Solo i contatti appartenenti a questi gruppi verranno scritti come stati. Lasciare vuoto per scrivere tutti i contatti.",
 	"findMyTab": "FindMy",
 	"settingsTab": "Impostazioni",
 	"findMyDevicesHeader": "Gestione dispositivi",

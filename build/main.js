@@ -1887,7 +1887,14 @@ class Icloud extends utils.Adapter {
     await this.setState("contacts.lastSync", Date.now(), true);
   }
   async writeContactStates(contactsService) {
-    const contacts = contactsService.contacts;
+    const configuredGroups = Array.isArray(this.config.contactsGroups) ? this.config.contactsGroups.filter((g) => typeof g === "string" && g.trim() !== "") : [];
+    this.log.debug(
+      `Contacts writeStates: configuredGroups=${JSON.stringify(configuredGroups)}, available groups=${JSON.stringify(contactsService.groups.map((g) => `${g.name}(${g.contactIds.length})`))}, total contacts in memory=${contactsService.contacts.length}`
+    );
+    const contacts = configuredGroups.length ? contactsService.getContactsByGroups(configuredGroups) : contactsService.contacts;
+    this.log.debug(
+      `Contacts writeStates: ${contacts.length} contact(s) will be written to states${configuredGroups.length ? ` (filtered by groups: ${configuredGroups.join(", ")})` : " (no filter)"}`
+    );
     const activeContactIds = /* @__PURE__ */ new Set();
     for (const contact of contacts) {
       const safeId = this.sanitizeCalendarId(contact.contactId);

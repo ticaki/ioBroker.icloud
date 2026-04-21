@@ -48,6 +48,8 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 -->
 ### **WORK IN PROGRESS**
 * (ticaki) **BREAKING CHANGE** Contacts: contact detail states moved under a new `list` folder — state path changed from `contacts.<id>.<field>` to `contacts.list.<id>.<field>`; existing state objects are cleaned up automatically on the next adapter start
+* (ticaki) Contacts: new **Birthday states** option — creates `contacts.birthdays.today`, `.tomorrow` and `.next7days` JSON states; each entry includes all contact fields plus calculated `age` (or `null` for year-less birthdays)
+* (ticaki) Contacts: new **Filter groups** chips field — when filled, only contacts belonging to at least one of the listed groups are written as states; leave empty to write all contacts
 * (ticaki) Drive Sync: both sync modes (directory & BackItUp) are now fully recursive — subdirectories are synced, created and deleted on both sides automatically
 * (ticaki) Fix SMS MFA 412 error: `X-Apple-Auth-Attributes` response header is now captured and round-tripped in all subsequent MFA requests; added `X-Apple-OAuth-State`, `X-Apple-Frame-Id` and corrected `Referer` to `getMfaHeaders()`
 

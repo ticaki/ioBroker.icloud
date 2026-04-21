@@ -583,6 +583,26 @@ sendTo('icloud.0', 'getContacts', { groupName: 'Familie' }, (result) => {
 | `isMe` | `boolean` | `true` wenn dies die "Ich"-Karte ist (der Kontoinhaber). |
 | `raw` | `object` | Vollständiges Roh-JSON von iCloud für fortgeschrittene Nutzung. |
 
+### Kontakte — States
+
+Zusätzlich zur `sendTo()`-API kann der Adapter Kontakte als ioBroker-States schreiben. In den Adaptereinstellungen gibt es dafür zwei unabhängige Optionen:
+
+**Kontakte in States schreiben** — Erstellt pro Kontakt einen Ordner unter `contacts.list.<contactId>.*`. Wenn **Gruppen filtern** konfiguriert ist, werden nur Kontakte geschrieben, die mindestens einer der eingetragenen Gruppen angehören; leer lassen, um alle Kontakte zu schreiben.
+
+**Geburtstags-States schreiben** — Erstellt drei JSON-States, die bei jedem Kontakt-Sync aktualisiert werden:
+
+| State | Typ | Beschreibung |
+|-------|-----|-------------|
+| `contacts.count` | `number` | Gesamtanzahl der Kontakte im Speicher. |
+| `contacts.groupCount` | `number` | Anzahl der Kontaktgruppen. |
+| `contacts.lastSync` | `number` | Zeitstempel (ms) des letzten erfolgreichen Syncs. |
+| `contacts.list.<id>.<feld>` | — | Ein Ordner pro Kontakt mit allen Feldern aus der [Kontakt-Feldreferenz](#kontakt-feldreferenz) oben. Wird nur geschrieben, wenn **Kontakte in States schreiben** aktiviert ist. |
+| `contacts.birthdays.today` | `string` (JSON) | JSON-Array der Kontakte mit Geburtstag heute. Jeder Eintrag enthält alle Kontaktfelder plus `age` (berechnetes Alter in vollen Jahren, oder `null` bei jahrlosen Geburtstagen). |
+| `contacts.birthdays.tomorrow` | `string` (JSON) | JSON-Array der Kontakte mit Geburtstag morgen. |
+| `contacts.birthdays.next7days` | `string` (JSON) | JSON-Array der Kontakte mit Geburtstag in den nächsten 7 Tagen (inkl. heute). |
+
+Die Geburtstags-Arrays sind in der Reihenfolge sortiert, in der die Kontakte von der API zurückgegeben wurden. Jahrlose Geburtstage (in iCloud als `"--MM-DD"` gespeichert) werden mit `age: null` eingeschlossen.
+
 ---
 
 ## Notizen — States

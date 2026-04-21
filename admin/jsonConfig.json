@@ -345,6 +345,18 @@
                     "default": false,
                     "disabled": "!data.contactsEnabled"
                 },
+                "contactsGroups": {
+                    "type": "chips",
+                    "label": "contactsGroups",
+                    "help": "contactsGroupsHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 8,
+                    "lg": 6,
+                    "xl": 6,
+                    "disabled": "!data.contactsEnabled || !data.contactsWriteStates"
+                },
                 "_notesHeader": {
                     "type": "header",
                     "text": "notesHeader",

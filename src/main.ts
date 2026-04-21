@@ -2211,7 +2211,24 @@ class Icloud extends utils.Adapter {
     }
 
     private async writeContactStates(contactsService: iCloudContactsService): Promise<void> {
-        const contacts = contactsService.contacts;
+        const configuredGroups: string[] = Array.isArray(this.config.contactsGroups)
+            ? this.config.contactsGroups.filter(g => typeof g === 'string' && g.trim() !== '')
+            : [];
+
+        this.log.debug(
+            `Contacts writeStates: configuredGroups=${JSON.stringify(configuredGroups)}, ` +
+                `available groups=${JSON.stringify(contactsService.groups.map(g => `${g.name}(${g.contactIds.length})`))}, ` +
+                `total contacts in memory=${contactsService.contacts.length}`,
+        );
+
+        const contacts = configuredGroups.length
+            ? contactsService.getContactsByGroups(configuredGroups)
+            : contactsService.contacts;
+
+        this.log.debug(
+            `Contacts writeStates: ${contacts.length} contact(s) will be written to states` +
+                `${configuredGroups.length ? ` (filtered by groups: ${configuredGroups.join(', ')})` : ' (no filter)'}`,
+        );
 
         // Stable ID: use contactId directly (sanitized)
         const activeContactIds = new Set<string>();
