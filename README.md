@@ -46,6 +46,9 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.7.1 (2026-04-21)
+* (ticaki) Calendar: new `queryCalendarEvents` sendTo command — fetches events for an arbitrary date range (including past dates); automatically splits requests into one-month chunks to comply with Apple's API limit; all raw Apple fields are included in the response; results are also written to `calendar.query` (role=json, q=0x01)
+
 ### 0.7.0 (2026-04-21)
 * (ticaki) **BREAKING CHANGE** Contacts: contact detail states moved under a new `list` folder — state path changed from `contacts.<id>.<field>` to `contacts.list.<id>.<field>`; existing state objects are cleaned up automatically on the next adapter start
 * (ticaki) Contacts: new **Birthday states** option — creates `contacts.birthdays.today`, `.tomorrow` and `.next7days` JSON states; each entry includes all contact fields plus calculated `age` (or `null` for year-less birthdays)

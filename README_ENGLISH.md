@@ -740,6 +740,7 @@ You can list calendars, browse events, create new events, and delete events usin
 | State | Type | Writable | Description |
 |-------|------|:--------:|-------------|
 | `calendar.lastSync` | `number` | | Timestamp (ms) of the last successful sync. |
+| `calendar.query` | `string` | | Cache for the last `queryCalendarEvents` result (JSON). **Not updated automatically** — quality is set to `0x01` (bad) to indicate stale data. Updated only when `queryCalendarEvents` is called. |
 | `calendar.<name>.guid` | `string` | | Calendar GUID. |
 | `calendar.<name>.color` | `string` | | Calendar color. |
 | `calendar.<name>.enabled` | `boolean` | | Whether the calendar is enabled. |
@@ -941,6 +942,40 @@ sendTo('icloud.0', 'deleteCalendarEvent', {
 | `days` | `number` | Days component of the offset. |
 | `weeks` | `number` | Weeks component of the offset. |
 | `seconds` | `number` | Seconds component of the offset. |
+
+> **Tip:** Use `getCalendars` to discover the `calendarGuid`, then `getCalendarEvents` to discover event GUIDs and etags.
+
+### Query events for an arbitrary date range
+
+Unlike `getCalendarEvents`, this command supports **any date range** — including past dates — and is not limited to the current month. Apple's API silently returns empty results when the query window exceeds ~30 days, so the adapter automatically splits the request into **one-month chunks** and merges the results.
+
+The result is also stored in the `calendar.query` state (role: `json`). Because this state is only a cache and is **not refreshed automatically**, its quality is set to **`0x01` (bad)**. This signals to ioBroker and connected visualizations that the data may be out of date. The state is updated (and quality reset to `0x01` again) every time `queryCalendarEvents` is called.
+
+All raw Apple API fields are included in the response — no field mapping is applied.
+
+Required fields: `from` and `to` (both Unix timestamps in milliseconds).
+
+```javascript
+sendTo('icloud.0', 'queryCalendarEvents', {
+    from: new Date('2025-01-01').getTime(),  // required — start timestamp (ms)
+    to:   new Date('2025-06-30').getTime(),  // required — end timestamp (ms)
+}, (result) => {
+    if (result.success) {
+        // result.from        — queried start timestamp (ms)
+        // result.to          — queried end timestamp (ms)
+        // result.count       — number of matching events
+        // result.events      — array of raw Apple event objects (sorted by startDate)
+        // result.alarms      — array of raw Apple alarm objects for those events
+        // result.recurrences — array of raw Apple recurrence objects
+        console.log('Found ' + result.count + ' events');
+        result.events.forEach(e => {
+            console.log(e.title);
+        });
+    } else {
+        console.error(result.error);
+    }
+});
+```
 
 > **Tip:** Use `getCalendars` to discover the `calendarGuid`, then `getCalendarEvents` to discover event GUIDs and etags.
 

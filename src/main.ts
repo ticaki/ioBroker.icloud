@@ -3360,6 +3360,8 @@ class Icloud extends utils.Adapter {
             this.handleUpdateCalendarEvent(obj);
         } else if (obj.command === 'deleteCalendarEvent') {
             this.handleDeleteCalendarEvent(obj);
+        } else if (obj.command === 'queryCalendarEvents') {
+            this.handleQueryCalendarEvents(obj);
         } else if (obj.command === 'listLocalFolder') {
             this.handleListLocalFolder(obj);
         } else if (obj.command === 'driveSyncGetBackitupInfo') {
@@ -4389,6 +4391,126 @@ class Icloud extends utils.Adapter {
             .catch((err: unknown) => {
                 this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
             });
+    }
+
+    /**
+     * Fetches calendar events for a user-defined time range from iCloud, splitting the
+     * request into one-month chunks to respect Apple's per-query limit.
+     * Results are filtered to the exact requested range, written to `calendar.query`
+     * (role=json, q=0x01) and sent back as the sendTo response.
+     *
+     * @param obj — The ioBroker message; `obj.message.from` and `obj.message.to` must be
+     *   Unix timestamps in milliseconds defining the desired date range.
+     */
+    private handleQueryCalendarEvents(obj: ioBroker.Message): void {
+        if (!this.config.calendarEnabled) {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Calendar is disabled — enable it in the adapter settings first',
+            });
+            return;
+        }
+        if (!this.icloud) {
+            this.sendCallback(obj, { success: false, error: 'iCloud not connected' });
+            return;
+        }
+        const msg = (obj.message as Record<string, unknown>) ?? {};
+        const fromTs = msg.from as number | undefined;
+        const toTs = msg.to as number | undefined;
+        if (typeof fromTs !== 'number' || typeof toTs !== 'number') {
+            this.sendCallback(obj, {
+                success: false,
+                error: 'Required fields: "from" (timestamp ms) and "to" (timestamp ms)',
+            });
+            return;
+        }
+        if (toTs <= fromTs) {
+            this.sendCallback(obj, { success: false, error: '"to" must be after "from"' });
+            return;
+        }
+
+        const fromDate = new Date(fromTs);
+        const toDate = new Date(toTs);
+        const calService = this.icloud.getService('calendar');
+
+        // Build one-month-wide chunks — Apple silently returns empty results for
+        // ranges longer than ~30 days, so we issue one /events request per calendar month.
+        const chunks: Array<{ start: Date; end: Date }> = [];
+        const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
+        const lastMonth = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
+        while (cursor <= lastMonth) {
+            chunks.push({
+                start: new Date(cursor.getFullYear(), cursor.getMonth(), 1),
+                end: new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59),
+            });
+            cursor.setMonth(cursor.getMonth() + 1);
+        }
+
+        const fetchAll = async (): Promise<void> => {
+            const allEvents: Record<string, unknown>[] = [];
+            const allAlarms: Record<string, unknown>[] = [];
+            const allRecurrences: Record<string, unknown>[] = [];
+            const seenGuids = new Set<string>();
+
+            for (const chunk of chunks) {
+                const resp = await calService.events(chunk.start, chunk.end);
+                for (const ev of resp.Event ?? []) {
+                    if (!seenGuids.has(ev.guid)) {
+                        seenGuids.add(ev.guid);
+                        allEvents.push(ev as unknown as Record<string, unknown>);
+                    }
+                }
+                for (const a of resp.Alarm ?? []) {
+                    allAlarms.push(a as unknown as Record<string, unknown>);
+                }
+                for (const r of resp.Recurrence ?? []) {
+                    allRecurrences.push(r as unknown as Record<string, unknown>);
+                }
+            }
+
+            // Keep only events whose local start is before `to` and local end is after `from`
+            const filtered = allEvents.filter(ev => {
+                const startTs = this.localDateArrayToTimestamp(ev.localStartDate as number[]);
+                const endTs = this.localDateArrayToTimestamp(ev.localEndDate as number[]);
+                if (startTs === null) {
+                    return false;
+                }
+                return startTs < toTs && (endTs === null || endTs > fromTs);
+            });
+
+            filtered.sort((a, b) => {
+                const ta = this.localDateArrayToTimestamp(a.localStartDate as number[]) ?? 0;
+                const tb = this.localDateArrayToTimestamp(b.localStartDate as number[]) ?? 0;
+                return ta - tb;
+            });
+
+            const result = {
+                from: fromTs,
+                to: toTs,
+                count: filtered.length,
+                events: filtered,
+                alarms: allAlarms,
+                recurrences: allRecurrences,
+            };
+
+            await this.extendObjectAsync('calendar.query', {
+                type: 'state',
+                common: {
+                    name: 'Calendar Query Result',
+                    type: 'string',
+                    role: 'json',
+                    read: true,
+                    write: false,
+                },
+                native: {},
+            });
+            await this.setStateAsync('calendar.query', { val: JSON.stringify(result), q: 0x01, ack: true });
+            this.sendCallback(obj, { success: true, ...result });
+        };
+
+        fetchAll().catch((err: unknown) => {
+            this.sendCallback(obj, { success: false, error: (err as Error)?.message ?? String(err) });
+        });
     }
 
     // ── onMessage Photos handlers ─────────────────────────────────────────────

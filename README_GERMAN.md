@@ -667,6 +667,7 @@ Du kannst Kalender auflisten, Termine durchsuchen, neue Termine erstellen und Te
 | State | Typ | Schreibbar | Beschreibung |
 |-------|-----|:----------:|---------------|
 | `calendar.lastSync` | `number` | | Zeitstempel (ms) der letzten erfolgreichen Synchronisierung. |
+| `calendar.query` | `string` | | Cache für das letzte `queryCalendarEvents`-Ergebnis (JSON). **Wird nicht automatisch aktualisiert** — die Qualität wird auf `0x01` (schlecht) gesetzt, um veraltete Daten anzuzeigen. Wird nur beim Aufruf von `queryCalendarEvents` aktualisiert. |
 | `calendar.<name>.guid` | `string` | | Kalender-GUID. |
 | `calendar.<name>.color` | `string` | | Kalenderfarbe. |
 | `calendar.<name>.enabled` | `boolean` | | Ob der Kalender aktiviert ist. |
@@ -835,6 +836,40 @@ sendTo('icloud.0', 'deleteCalendarEvent', {
 | `days` | `number` | Tage-Komponente des Zeitversatzes. |
 | `weeks` | `number` | Wochen-Komponente des Zeitversatzes. |
 | `seconds` | `number` | Sekunden-Komponente des Zeitversatzes. |
+
+> **Tipp:** Verwende `getCalendars` um die `calendarGuid` zu ermitteln, dann `getCalendarEvents` um Termin-GUIDs und ETags zu erhalten.
+
+### Termine für einen beliebigen Zeitraum abfragen
+
+Im Gegensatz zu `getCalendarEvents` unterstützt dieser Befehl **beliebige Zeiträume** — auch in der Vergangenheit — und ist nicht auf den aktuellen Monat beschränkt. Apples API liefert bei Zeiträumen von mehr als ~30 Tagen stillschweigend leere Ergebnisse; der Adapter teilt die Anfrage daher automatisch in **Einmonats-Blöcke** auf und fasst die Ergebnisse zusammen.
+
+Das Ergebnis wird außerdem im State `calendar.query` (Role: `json`) gespeichert. Da dieser State nur ein **Cache** ist und **nicht automatisch aktualisiert** wird, wird seine Qualität auf **`0x01` (schlecht)** gesetzt. Dies signalisiert ioBroker und angebundenen Visualisierungen, dass die Daten möglicherweise nicht mehr aktuell sind. Der State wird — und die Qualität auf `0x01` zurückgesetzt — jedes Mal aktualisiert, wenn `queryCalendarEvents` aufgerufen wird.
+
+Alle Rohfelder der Apple-API sind in der Antwort enthalten — es findet keine Feld-Umbennenung statt.
+
+Pflichtfelder: `from` und `to` (beide als Unix-Zeitstempel in Millisekunden).
+
+```javascript
+sendTo('icloud.0', 'queryCalendarEvents', {
+    from: new Date('2025-01-01').getTime(),  // Pflicht — Startzeitstempel (ms)
+    to:   new Date('2025-06-30').getTime(),  // Pflicht — Endzeitstempel (ms)
+}, (result) => {
+    if (result.success) {
+        // result.from        — angefragter Startzeitstempel (ms)
+        // result.to          — angefragter Endzeitstempel (ms)
+        // result.count       — Anzahl gefundener Termine
+        // result.events      — Array der Termin-Rohobjekte (sortiert nach startDate)
+        // result.alarms      — Array der Alarm-Rohobjekte zu den Terminen
+        // result.recurrences — Array der Wiederholungs-Rohobjekte
+        console.log('Gefunden: ' + result.count + ' Termine');
+        result.events.forEach(e => {
+            console.log(e.title);
+        });
+    } else {
+        console.error(result.error);
+    }
+});
+```
 
 > **Tipp:** Verwende `getCalendars` um die `calendarGuid` zu ermitteln, dann `getCalendarEvents` um Termin-GUIDs und ETags zu erhalten.
 
