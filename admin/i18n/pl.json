@@ -44,6 +44,8 @@
 	"contactsIntervalHelp": "Jak często pobierane są kontakty (30–1440 minut)",
 	"contactsWriteStates": "Zapisz kontakty do stanów",
 	"contactsWriteStatesHelp": "Dodatkowo zapisuje kontakty jako stany ioBroker. Zawsze dostępne przez sendTo.",
+	"contactsBirthdayStates": "Zapisz stany urodzin",
+	"contactsBirthdayStatesHelp": "Tworzy trzy stany JSON z kontaktami, których urodziny są dzisiaj, jutro lub w ciągu najbliższych 7 dni (w tym obliczony wiek).",
 	"findMyTab": "FindMy",
 	"settingsTab": "Ustawienia",
 	"findMyDevicesHeader": "Zarządzanie urządzeniami",

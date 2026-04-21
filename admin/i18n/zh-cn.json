@@ -44,6 +44,8 @@
 	"contactsIntervalHelp": "获取联系人的频率（30–1440 分钟）",
 	"contactsWriteStates": "将联系人写入状态",
 	"contactsWriteStatesHelp": "额外将联系人写为 ioBroker 状态。始终可通过 sendTo 使用。",
+	"contactsBirthdayStates": "写入生日状态",
+	"contactsBirthdayStatesHelp": "创建三个 JSON 状态，包含今天、明天或未杴7 天内生日的联系人（含计算年龄）。",
 	"findMyTab": "FindMy",
 	"settingsTab": "设置",
 	"findMyDevicesHeader": "设备管理",

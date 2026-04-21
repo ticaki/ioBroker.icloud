@@ -216,7 +216,6 @@ class Icloud extends utils.Adapter {
   remindersRefreshTimer = null;
   remindersSyncMapLoaded = false;
   contactsRefreshTimer = null;
-  contactsSyncMapLoaded = false;
   notesRefreshTimer = null;
   notesSyncMapLoaded = false;
   photosRefreshTimer = null;
@@ -1835,78 +1834,37 @@ class Icloud extends utils.Adapter {
   }
   // ── Contacts helpers ──────────────────────────────────────────────────────
   async refreshContacts() {
-    var _a, _b, _c;
+    var _a;
     if (!this.icloud) {
       return;
     }
     try {
       const contactsService = this.icloud.getService("contacts");
-      const isFirstCall = !this.contactsSyncMapLoaded;
-      if (isFirstCall) {
-        this.contactsSyncMapLoaded = true;
-        try {
-          const obj = await this.getObjectAsync("contacts");
-          const syncMap = (_a = obj == null ? void 0 : obj.native) == null ? void 0 : _a.syncMap;
-          if (syncMap && typeof syncMap === "object" && syncMap.syncToken) {
-            contactsService.loadSyncMap(syncMap);
-            this.log.debug(
-              `Contacts: restored syncMap (${contactsService.contacts.length} contact(s), syncToken present)`
-            );
-          }
-        } catch {
-        }
-      }
-      const changed = await contactsService.refresh();
-      if (changed) {
-        const contactsObj = await this.getObjectAsync("contacts");
-        await this.setObject("contacts", {
-          ...contactsObj != null ? contactsObj : {},
-          type: "folder",
-          common: { ...(_b = contactsObj == null ? void 0 : contactsObj.common) != null ? _b : {}, name: "Contacts" },
-          native: { syncMap: contactsService.exportSyncMap() }
-        });
-      }
-      if (!changed && !isFirstCall) {
-        this.log.debug("Contacts refresh: no changes, skipping state updates");
-        return;
-      }
+      await contactsService.refresh();
       await this.writeContactsMetaStates(contactsService);
       if (this.config.contactsWriteStates) {
         await this.writeContactStates(contactsService);
-      } else if (isFirstCall) {
-        await this.cleanupContactsObjects(/* @__PURE__ */ new Set());
       }
-      if (isFirstCall) {
-        this.log.info(
-          `Contacts ready \u2014 ${contactsService.contacts.length} contact(s), ${contactsService.groups.length} group(s)`
-        );
+      if (this.config.contactsBirthdayStates) {
+        await this.writeBirthdayStates(contactsService);
       }
+      this.log.debug(
+        `Contacts refresh done \u2014 ${contactsService.contacts.length} contact(s), ${contactsService.groups.length} group(s)`
+      );
     } catch (err) {
-      const msg = (_c = err == null ? void 0 : err.message) != null ? _c : String(err);
+      const msg = (_a = err == null ? void 0 : err.message) != null ? _a : String(err);
       this.log.warn(`Contacts refresh failed: ${msg}`);
-    }
-  }
-  async persistContactsSyncMap() {
-    var _a;
-    if (!this.icloud || !this.contactsSyncMapLoaded) {
-      return;
-    }
-    try {
-      const contactsService = this.icloud.getService("contacts");
-      const contactsObj = await this.getObjectAsync("contacts");
-      await this.setObject("contacts", {
-        ...contactsObj != null ? contactsObj : {},
-        type: "folder",
-        common: { ...(_a = contactsObj == null ? void 0 : contactsObj.common) != null ? _a : {}, name: "Contacts" },
-        native: { syncMap: contactsService.exportSyncMap() }
-      });
-    } catch {
     }
   }
   async writeContactsMetaStates(contactsService) {
     await this.extendObject("contacts", {
       type: "folder",
       common: { name: "Contacts" },
+      native: {}
+    });
+    await this.extendObject("contacts.list", {
+      type: "folder",
+      common: { name: "Contact list" },
       native: {}
     });
     await this.extendObject("contacts.count", {
@@ -1936,34 +1894,37 @@ class Icloud extends utils.Adapter {
       activeContactIds.add(safeId);
       const displayCity = contact.city ? ` (${contact.city})` : "";
       const displayName = `${contact.fullName || contact.companyName || contact.contactId}${displayCity}`;
-      await this.extendObject(`contacts.${safeId}`, {
+      await this.extendObject(`contacts.list.${safeId}`, {
         type: "folder",
         common: { name: displayName },
         native: { contactId: contact.contactId }
       });
       for (const s of CONTACT_ITEM_STATES) {
-        await this.extendObject(`contacts.${safeId}.${s.id}`, {
+        await this.extendObject(`contacts.list.${safeId}.${s.id}`, {
           type: "state",
           common: { name: s.name, type: s.type, role: s.role, read: true, write: false },
           native: {}
         });
       }
-      await this.setStateIfChanged(`contacts.${safeId}.contactId`, contact.contactId);
-      await this.setStateIfChanged(`contacts.${safeId}.fullName`, contact.fullName);
-      await this.setStateIfChanged(`contacts.${safeId}.firstName`, contact.firstName);
-      await this.setStateIfChanged(`contacts.${safeId}.lastName`, contact.lastName);
-      await this.setStateIfChanged(`contacts.${safeId}.companyName`, contact.companyName);
-      await this.setStateIfChanged(`contacts.${safeId}.nickname`, contact.nickname);
-      await this.setStateIfChanged(`contacts.${safeId}.birthday`, contact.birthday);
-      await this.setStateIfChanged(`contacts.${safeId}.jobTitle`, contact.jobTitle);
-      await this.setStateIfChanged(`contacts.${safeId}.department`, contact.department);
-      await this.setStateIfChanged(`contacts.${safeId}.city`, contact.city);
-      await this.setStateIfChanged(`contacts.${safeId}.phones`, JSON.stringify(contact.phones));
-      await this.setStateIfChanged(`contacts.${safeId}.emails`, JSON.stringify(contact.emails));
-      await this.setStateIfChanged(`contacts.${safeId}.streetAddresses`, JSON.stringify(contact.streetAddresses));
-      await this.setStateIfChanged(`contacts.${safeId}.notes`, contact.notes);
-      await this.setStateIfChanged(`contacts.${safeId}.groups`, JSON.stringify(contact.groups));
-      await this.setStateIfChanged(`contacts.${safeId}.isMe`, contact.isMe);
+      await this.setStateIfChanged(`contacts.list.${safeId}.contactId`, contact.contactId);
+      await this.setStateIfChanged(`contacts.list.${safeId}.fullName`, contact.fullName);
+      await this.setStateIfChanged(`contacts.list.${safeId}.firstName`, contact.firstName);
+      await this.setStateIfChanged(`contacts.list.${safeId}.lastName`, contact.lastName);
+      await this.setStateIfChanged(`contacts.list.${safeId}.companyName`, contact.companyName);
+      await this.setStateIfChanged(`contacts.list.${safeId}.nickname`, contact.nickname);
+      await this.setStateIfChanged(`contacts.list.${safeId}.birthday`, contact.birthday);
+      await this.setStateIfChanged(`contacts.list.${safeId}.jobTitle`, contact.jobTitle);
+      await this.setStateIfChanged(`contacts.list.${safeId}.department`, contact.department);
+      await this.setStateIfChanged(`contacts.list.${safeId}.city`, contact.city);
+      await this.setStateIfChanged(`contacts.list.${safeId}.phones`, JSON.stringify(contact.phones));
+      await this.setStateIfChanged(`contacts.list.${safeId}.emails`, JSON.stringify(contact.emails));
+      await this.setStateIfChanged(
+        `contacts.list.${safeId}.streetAddresses`,
+        JSON.stringify(contact.streetAddresses)
+      );
+      await this.setStateIfChanged(`contacts.list.${safeId}.notes`, contact.notes);
+      await this.setStateIfChanged(`contacts.list.${safeId}.groups`, JSON.stringify(contact.groups));
+      await this.setStateIfChanged(`contacts.list.${safeId}.isMe`, contact.isMe);
     }
     await this.cleanupContactsObjects(activeContactIds);
     this.log.debug(`Contacts refresh done \u2014 ${contacts.length} contact(s) written to states`);
@@ -1977,13 +1938,89 @@ class Icloud extends utils.Adapter {
     for (const row of existing.rows) {
       const suffix = row.id.slice(prefix.length);
       const parts = suffix.split(".");
-      const META_IDS = /* @__PURE__ */ new Set(["lastSync", "count", "groupCount"]);
-      if (parts.length === 1 && !META_IDS.has(parts[0])) {
-        if (!activeContactIds.has(parts[0])) {
-          this.log.info(`Contacts cleanup: removing contact "${parts[0]}"`);
+      if (parts.length === 2 && parts[0] === "list") {
+        if (!activeContactIds.has(parts[1])) {
+          this.log.info(`Contacts cleanup: removing contact "${parts[1]}"`);
           await this.delObjectAsync(row.id, { recursive: true });
         }
       }
+    }
+  }
+  async writeBirthdayStates(contactsService) {
+    const now = /* @__PURE__ */ new Date();
+    const year = now.getFullYear();
+    const todayStart = new Date(year, now.getMonth(), now.getDate());
+    const tomorrowStart = new Date(year, now.getMonth(), now.getDate() + 1);
+    const sevenDaysEnd = new Date(year, now.getMonth(), now.getDate() + 7);
+    const todayList = [];
+    const tomorrowList = [];
+    const next7List = [];
+    for (const contact of contactsService.contacts) {
+      if (!contact.birthday) {
+        continue;
+      }
+      const withYear = /^(\d{4})-(\d{2})-(\d{2})/.exec(contact.birthday);
+      const yearless = /^--(\d{2})-(\d{2})$/.exec(contact.birthday);
+      let birthYear;
+      let birthMonth;
+      let birthDay;
+      if (withYear) {
+        birthYear = parseInt(withYear[1], 10);
+        birthMonth = parseInt(withYear[2], 10) - 1;
+        birthDay = parseInt(withYear[3], 10);
+      } else if (yearless) {
+        birthYear = 0;
+        birthMonth = parseInt(yearless[1], 10) - 1;
+        birthDay = parseInt(yearless[2], 10);
+      } else {
+        continue;
+      }
+      let birthdayDate = new Date(year, birthMonth, birthDay);
+      if (birthdayDate < todayStart) {
+        birthdayDate = new Date(year + 1, birthMonth, birthDay);
+      }
+      const effectiveYear = birthdayDate.getFullYear();
+      const age = birthYear > 1 ? effectiveYear - birthYear : null;
+      const entry = { ...contact, age };
+      const ts = birthdayDate.getTime();
+      if (ts === todayStart.getTime()) {
+        todayList.push(entry);
+      }
+      if (ts === tomorrowStart.getTime()) {
+        tomorrowList.push(entry);
+      }
+      if (birthdayDate >= todayStart && birthdayDate < sevenDaysEnd) {
+        next7List.push(entry);
+      }
+    }
+    await this.extendObject("contacts.birthdays", {
+      type: "folder",
+      common: { name: "Birthdays" },
+      native: {}
+    });
+    await this.extendObject("contacts.birthdays.today", {
+      type: "state",
+      common: { name: "Birthdays today", type: "string", role: "json", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("contacts.birthdays.tomorrow", {
+      type: "state",
+      common: { name: "Birthdays tomorrow", type: "string", role: "json", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("contacts.birthdays.next7days", {
+      type: "state",
+      common: { name: "Birthdays next 7 days", type: "string", role: "json", read: true, write: false },
+      native: {}
+    });
+    await this.setStateIfChanged("contacts.birthdays.today", JSON.stringify(todayList));
+    await this.setStateIfChanged("contacts.birthdays.tomorrow", JSON.stringify(tomorrowList));
+    await this.setStateIfChanged("contacts.birthdays.next7days", JSON.stringify(next7List));
+  }
+  async cleanupBirthdayStates() {
+    const obj = await this.getObjectAsync("contacts.birthdays");
+    if (obj) {
+      await this.delObjectAsync("contacts.birthdays", { recursive: true });
     }
   }
   scheduleContactsRefresh() {
@@ -2545,7 +2582,6 @@ class Icloud extends utils.Adapter {
   onUnload(callback) {
     const persistAndCleanup = async () => {
       await this.persistRemindersSyncMap();
-      await this.persistContactsSyncMap();
       await this.persistNotesSyncMap();
     };
     persistAndCleanup().catch(() => {

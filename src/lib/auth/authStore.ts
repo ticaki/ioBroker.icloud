@@ -12,6 +12,7 @@ import { LogLevel } from '../index';
 const SESSION_HEADER_MAP: Record<string, keyof iCloudAuthenticationStore> = {
     'x-apple-id-account-country': 'accountCountry',
     'x-apple-id-session-id': 'sessionId',
+    'x-apple-auth-attributes': 'authAttributes',
     'x-apple-session-token': 'sessionToken',
     'x-apple-twosv-trust-token': 'trustToken',
     scnt: 'scnt',
@@ -35,6 +36,13 @@ export class iCloudAuthenticationStore {
     sessionToken?: string;
     scnt?: string;
     accountCountry?: string;
+    /**
+     * Round-tripped Apple auth state token (X-Apple-Auth-Attributes).
+     * Apple sends this in GET /appleauth/auth responses and expects it back
+     * in all subsequent MFA requests (verify/phone, verify/trusteddevice, …).
+     * Mirrors pyiCloud's HEADER_DATA["X-Apple-Auth-Attributes"] → auth_attributes.
+     */
+    authAttributes?: string;
     /** Persisted client_id (reused across sessions, like pyicloud) */
     clientId?: string;
 
@@ -48,6 +56,7 @@ export class iCloudAuthenticationStore {
         Object.defineProperty(this, 'sessionId', { enumerable: false });
         Object.defineProperty(this, 'sessionToken', { enumerable: false });
         Object.defineProperty(this, 'scnt', { enumerable: false });
+        Object.defineProperty(this, 'authAttributes', { enumerable: false });
         Object.defineProperty(this, 'cookieJar', { enumerable: false });
     }
 
@@ -72,7 +81,7 @@ export class iCloudAuthenticationStore {
 
     /**
      * Load session data from disk.
-     * Populates scnt, sessionId, sessionToken, accountCountry, trustToken, clientId.
+     * Populates scnt, sessionId, sessionToken, accountCountry, trustToken, clientId, authAttributes.
      * Returns the raw JSON object so the caller can read client_id etc.
      *
      * @param account - The iCloud account identifier (e.g. email address).
@@ -97,6 +106,9 @@ export class iCloudAuthenticationStore {
             }
             if (data.client_id) {
                 this.clientId = data.client_id;
+            }
+            if (data.auth_attributes) {
+                this.authAttributes = data.auth_attributes;
             }
             this._log(LogLevel.Debug, '[authStore] Session loaded from disk');
             return data;
@@ -131,6 +143,9 @@ export class iCloudAuthenticationStore {
             }
             if (this.clientId) {
                 data.client_id = this.clientId;
+            }
+            if (this.authAttributes) {
+                data.auth_attributes = this.authAttributes;
             }
             if (!fs.existsSync(this.options.dataDirectory!)) {
                 fs.mkdirSync(this.options.dataDirectory!);
@@ -280,6 +295,7 @@ export class iCloudAuthenticationStore {
         this.scnt = undefined;
         this.sessionId = undefined;
         this.accountCountry = undefined;
+        this.authAttributes = undefined;
         try {
             fs.unlinkSync(this._sessionPath(account));
         } catch {
@@ -307,6 +323,7 @@ export class iCloudAuthenticationStore {
         this.sessionToken = undefined;
         this.sessionId = undefined;
         this.accountCountry = undefined;
+        this.authAttributes = undefined;
         // Remove all stale cookies from the shared jar in-place so that the
         // fetch-cookie wrapper (which holds a reference to the same object) also
         // sees an empty jar on the next request.
@@ -380,8 +397,14 @@ export class iCloudAuthenticationStore {
         // aasp cookie is sent automatically by fetch-cookie (domain: idmsa.apple.com)
         return {
             ...AUTH_HEADERS,
+            // Referer for idmsa.apple.com endpoints, overrides the icloud.com default in AUTH_HEADERS
+            Referer: 'https://idmsa.apple.com',
+            ...(this.clientId ? { 'X-Apple-OAuth-State': this.clientId } : {}),
+            ...(this.clientId ? { 'X-Apple-Frame-Id': this.clientId } : {}),
             ...(this.scnt ? { scnt: this.scnt } : {}),
             ...(this.sessionId ? { 'X-Apple-ID-Session-Id': this.sessionId } : {}),
+            // Round-tripped Apple auth-state token — pyiCloud: auth_attributes
+            ...(this.authAttributes ? { 'X-Apple-Auth-Attributes': this.authAttributes } : {}),
         };
     }
 

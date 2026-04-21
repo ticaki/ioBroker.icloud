@@ -20,7 +20,7 @@ Dieser Adapter integriert dein Apple iCloud-Konto mit ioBroker. Er bietet Zugrif
 - [Erinnerungen](#erinnerungen--sendto-api) — Lesen, Erstellen, Bearbeiten, Abschließen und Löschen von iCloud-Erinnerungen per `sendTo()`; Listen und einzelne Erinnerungen werden auch als ioBroker-States unter `reminders.*` geschrieben
 - [iCloud Drive](#icloud-drive--sendto-api) — Ordner durchsuchen, Dateien hoch-/herunterladen, erstellen, löschen und umbenennen per `sendTo()`
 - [iCloud Drive Sync](#icloud-drive-sync) — automatische geplante Synchronisierung lokaler Verzeichnisse mit iCloud Drive; BackItUp-Integration; echte bidirektionale Synchronisierung für eigene Verzeichnisse
-- [Kontakte](#kontakte--sendto-api) — Kontakte und Kontaktgruppen lesen per `sendTo()`; optional werden einzelne Kontaktfelder auch als ioBroker-States unter `contacts.*` geschrieben
+- [Kontakte](#kontakte--sendto-api) — Kontakte und Kontaktgruppen lesen per `sendTo()`; optional werden einzelne Kontaktfelder auch als ioBroker-States unter `contacts.list.<id>.*` geschrieben
 - [Notizen](#notizen--states) — iCloud-Notizen als ioBroker-States (`notes.list`, `notes.textList`)
 - [Kalender](#kalender--sendto-api) — anstehende Kalendertermine als ioBroker-States; Termine erstellen und löschen per `sendTo()`
 - [Fotos](#icloud-fotos--sendto-api) — Alben durchsuchen, Fotos auflisten, herunterladen und löschen per `sendTo()`; Metadaten-Zähler als ioBroker-States
@@ -411,7 +411,7 @@ Die Drive Sync-Funktion hält lokale Verzeichnisse automatisch nach einem konfig
 |-------|-----------|--------------------------|
 | **Nur-Upload** | BackItUp-Einträge | **Nie** — lokale Backup-Dateien sind schreibgeschützt |
 | **Bidirektional** | Verzeichnis-Einträge | Ja — neue Remote-Dateien werden heruntergeladen; entfernt gelöschte Dateien werden lokal entfernt |
-
+Beide Modi sind **vollständig rekursiv**: Unterordner werden automatisch synchronisiert, erstellt und auf beiden Seiten gelöscht.
 > **Hinweis:** Aktiviere zuerst **iCloud Drive** im Einstellungen-Tab. Der **Drive Sync**-Tab erscheint erst, wenn iCloud Drive aktiviert ist.
 
 > **Hinweis:** Die erste Synchronisierung läuft **30 Sekunden** nach dem Adapterstart. Folgende Syncs folgen dem konfigurierten Intervall.

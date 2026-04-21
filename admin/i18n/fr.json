@@ -44,6 +44,8 @@
 	"contactsIntervalHelp": "Fréquence de récupération des contacts (30–1440 minutes)",
 	"contactsWriteStates": "Écrire les contacts dans les états",
 	"contactsWriteStatesHelp": "Écrit les contacts en tant qu'états ioBroker. Toujours disponible via sendTo.",
+	"contactsBirthdayStates": "Écrire les états d'anniversaire",
+	"contactsBirthdayStatesHelp": "Crée trois états JSON avec les contacts dont l'anniversaire est aujourd'hui, demain ou dans les 7 prochains jours (âge calculé inclus).",
 	"findMyTab": "FindMy",
 	"settingsTab": "Paramètres",
 	"findMyDevicesHeader": "Gestion des appareils",

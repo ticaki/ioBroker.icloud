@@ -14,6 +14,19 @@ npm run build:admin # mandatory when any file under src-admin/ was changed
 - `npm run build:admin` — Vite + tsc build of the React admin component; **must be run and must succeed whenever src-admin/ is touched** — no exceptions
 - `npm run lint` — ESLint + Prettier; no errors allowed (warnings are acceptable)
 
+## JSDoc — mandatory for all non-trivial methods
+
+Every non-trivial `private`, `protected`, and `public` method **must** have a JSDoc comment with:
+
+- A one-sentence summary describing **what** the method does (not how).
+- A `@param name — description` line for **every** parameter, with a meaningful description (not just the type or name repeated).
+- A `@returns description` line when the return value is not obvious from the method name alone.
+
+Rules:
+- `@param` entries without a description are **not acceptable** — always write a short but meaningful description after the param name.
+- Trivial one-liner getters/setters and pure delegating wrappers are exempt, but anything with business logic must be documented.
+- JSDoc on newly added or modified methods must be complete before a session ends — no half-filled `@param name` stubs.
+
 Alle während einer Sitzung eingeführten Lint-Fehler und -Warnungen **müssen vor Ende der Sitzung behoben sein** — die Anzahl der Fehler und Warnungen darf nie größer werden als zu Beginn.
 Bereits vorher existierende Fehler und Warnungen **müssen ebenfalls behoben werden**, sofern sie im Rahmen der aktuellen Änderungen berührt werden oder ohne großen Aufwand behebbar sind.
 

@@ -44,6 +44,8 @@
 	"contactsIntervalHelp": "Як часто отримувати контакти (30–1440 хвилин)",
 	"contactsWriteStates": "Записувати контакти в стани",
 	"contactsWriteStatesHelp": "Додатково записує контакти як стани ioBroker. Завжди доступно через sendTo.",
+	"contactsBirthdayStates": "Записувати стани днів народження",
+	"contactsBirthdayStatesHelp": "Створює три JSON-стани з контактами, у яких день народження сьогодні, завтра або протягом наступних 7 днів (вкл. обчислений вік).",
 	"findMyTab": "FindMy",
 	"settingsTab": "Налаштування",
 	"findMyDevicesHeader": "Керування пристроями",

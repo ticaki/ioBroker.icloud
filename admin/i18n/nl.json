@@ -44,6 +44,8 @@
 	"contactsIntervalHelp": "Hoe vaak contacten worden opgehaald (30–1440 minuten)",
 	"contactsWriteStates": "Contacten naar staten schrijven",
 	"contactsWriteStatesHelp": "Schrijft contacten ook als ioBroker-staten. Altijd beschikbaar via sendTo.",
+	"contactsBirthdayStates": "Verjaardagsstaten schrijven",
+	"contactsBirthdayStatesHelp": "Maakt drie JSON-staten aan met contacten wier verjaardag vandaag, morgen of binnen de komende 7 dagen is (inclusief berekende leeftijd).",
 	"findMyTab": "FindMy",
 	"settingsTab": "Instellingen",
 	"findMyDevicesHeader": "Apparaatbeheer",

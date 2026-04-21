@@ -46,6 +46,11 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (ticaki) **BREAKING CHANGE** Contacts: contact detail states moved under a new `list` folder — state path changed from `contacts.<id>.<field>` to `contacts.list.<id>.<field>`; existing state objects are cleaned up automatically on the next adapter start
+* (ticaki) Drive Sync: both sync modes (directory & BackItUp) are now fully recursive — subdirectories are synced, created and deleted on both sides automatically
+* (ticaki) Fix SMS MFA 412 error: `X-Apple-Auth-Attributes` response header is now captured and round-tripped in all subsequent MFA requests; added `X-Apple-OAuth-State`, `X-Apple-Frame-Id` and corrected `Referer` to `getMfaHeaders()`
+
 ### 0.6.5 (2026-04-20)
 * (ticaki) Drive Sync admin UI: both the iCloud Drive folder browser and the local folder browser are now scrollable (list capped at 300 px height)
 

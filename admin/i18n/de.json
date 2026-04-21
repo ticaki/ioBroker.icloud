@@ -46,6 +46,8 @@
 	"contactsIntervalHelp": "Wie oft Kontakte abgefragt werden (30–1440 Minuten)",
 	"contactsWriteStates": "Kontakte in States schreiben",
 	"contactsWriteStatesHelp": "Schreibt Kontakte zusätzlich als ioBroker-States (Ordner pro Kontakt). Über sendTo immer verfügbar.",
+	"contactsBirthdayStates": "Geburtstags-States schreiben",
+	"contactsBirthdayStatesHelp": "Erstellt drei JSON-States mit Kontakten, deren Geburtstag heute, morgen oder in den nächsten 7 Tagen liegt (inkl. berechnetem Alter).",
 	"findMyTab": "FindMy",
 	"settingsTab": "Einstellungen",
 	"findMyDevicesHeader": "Geräteverwaltung",

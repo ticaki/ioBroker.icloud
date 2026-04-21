@@ -22,7 +22,12 @@ export interface ContactsApiRawContact {
     companyName?: string;
     jobTitle?: string;
     department?: string;
-    birthday?: string;
+    /**
+     * Birthday as returned by the Apple Contacts API.
+     * Can be a string ("YYYY-MM-DD" or "--MM-DD" for yearless birthdays in vCard style)
+     * or a structured object `{ year?: number, month: number, day: number }`.
+     */
+    birthday?: string | { year?: number; month?: number; day?: number };
     notes?: string;
     /** Change-tracking tag — NOT a group reference. */
     etag?: string;
@@ -161,11 +166,47 @@ export interface Contact {
     raw: Record<string, unknown>;
 }
 
-export interface ContactsSyncMap {
-    syncToken: string;
-    prefToken: string;
-    contacts: Record<string, Contact>;
-    groups: Record<string, ContactGroup>;
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Normalise the birthday value returned by the Apple Contacts API into a
+ * canonical string so all downstream code deals with one consistent format.
+ *
+ * Apple may return birthday as:
+ *   - `"YYYY-MM-DD"` — ISO date string with year
+ *   - `"--MM-DD"` — vCard-style yearless birthday
+ *   - `{ year?: number, month: number, day: number }` — structured object
+ *
+ * @param raw — The raw birthday value from the API response.
+ * @returns A normalised `"YYYY-MM-DD"` or `"--MM-DD"` string, or `""` when the
+ *          value cannot be interpreted.
+ */
+export function parseBirthday(
+    raw: string | { year?: number; month?: number; day?: number } | undefined | null,
+): string {
+    if (!raw) {
+        return '';
+    }
+
+    // Structured-object format: { year?, month, day }
+    if (typeof raw === 'object') {
+        const month = typeof raw.month === 'number' ? raw.month : null;
+        const day = typeof raw.day === 'number' ? raw.day : null;
+        if (month === null || day === null) {
+            return '';
+        }
+        const mm = String(month).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        const hasYear = typeof raw.year === 'number' && raw.year > 1;
+        if (hasYear) {
+            const yyyy = String(raw.year!).padStart(4, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+        return `--${mm}-${dd}`;
+    }
+
+    // String — pass through as-is (already "YYYY-MM-DD" or "--MM-DD")
+    return raw;
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -193,7 +234,7 @@ export class iCloudContactsService {
     /**
      * Get a contact by contactId.
      *
-     * @param contactId The unique identifier of the contact to retrieve.
+     * @param contactId — The unique identifier of the contact to retrieve.
      */
     getContact(contactId: string): Contact | undefined {
         return this.contactsById.get(contactId);
@@ -202,7 +243,7 @@ export class iCloudContactsService {
     /**
      * Get contacts filtered by group name(s).
      *
-     * @param groupNames List of group names to filter by.
+     * @param groupNames — List of group names to filter by.
      */
     getContactsByGroups(groupNames: string[]): Contact[] {
         if (!groupNames.length) {
@@ -212,34 +253,6 @@ export class iCloudContactsService {
         return this.contacts.filter(c => c.groups.some(gName => lowerNames.has(gName.toLowerCase().trim())));
     }
 
-    /**
-     * Restore in-memory state from a persisted syncMap.
-     *
-     * @param map The persisted sync map to restore state from.
-     */
-    loadSyncMap(map: ContactsSyncMap): void {
-        this._syncToken = map.syncToken || undefined;
-        this._prefToken = map.prefToken || undefined;
-        this.contactsById.clear();
-        for (const [id, c] of Object.entries(map.contacts)) {
-            this.contactsById.set(id, c);
-        }
-        this.groupsById.clear();
-        for (const [id, g] of Object.entries(map.groups ?? {})) {
-            this.groupsById.set(id, g);
-        }
-    }
-
-    /** Export current state for persistence. */
-    exportSyncMap(): ContactsSyncMap {
-        return {
-            syncToken: this._syncToken ?? '',
-            prefToken: this._prefToken ?? '',
-            contacts: Object.fromEntries(this.contactsById),
-            groups: Object.fromEntries(this.groupsById),
-        };
-    }
-
     constructor(service: iCloudService, serviceUri: string) {
         this.service = service;
         this.serviceUri = serviceUri;
@@ -247,25 +260,38 @@ export class iCloudContactsService {
     }
 
     /**
-     * Fetch all contacts from the iCloud Contacts API.
+     * Fetch all contacts from the iCloud Contacts API and update the in-memory store.
      *
-     * Reference: pyicloud ContactsService.refresh_client()
+     * Mirrors pyicloud ContactsService.refresh_client(): two sequential GET requests
+     * (/co/startup then /co/contacts) with no server-side change detection — Apple
+     * provides no reliable "changed" flag for contacts, so a full fetch is performed
+     * on every call.
      *
-     * @returns true if contacts data changed, false otherwise
+     * Base query parameters include `dsid`, `clientBuildNumber`, `clientMasteringNumber`,
+     * and `clientId` (via `service.getParams()`) — mirroring pyicloud's `self.params`
+     * so that Apple's CDN caches responses per-user rather than globally.
+     *
+     * Reference: https://github.com/picklepete/pyicloud/blob/master/pyicloud/services/contacts.py
      */
-    async refresh(): Promise<boolean> {
-        // Step 1: startup — get prefToken + syncToken
-        const startupParams = new URLSearchParams({
-            clientVersion: '2.1',
-            locale: 'en_US',
-            order: 'last,first',
-        });
+    async refresh(): Promise<void> {
+        // Step 1: startup — get prefToken + syncToken.
+        // Base params include dsid + clientBuildNumber etc., matching pyicloud's self.params.
+        // This makes the URL user-specific and prevents Apple's CDN from serving a shared,
+        // potentially stale, cached startup response.
+        const startupParams = new URLSearchParams(this.service.getParams());
+        startupParams.set('locale', 'en_US');
+        startupParams.set('order', 'last,first');
+        startupParams.set('includePhoneNumbers', 'true');
+        startupParams.set('includePhotos', 'true');
+
         this.service._log(0, '[contacts] GET startup');
         const startupResp = await this.service.fetch(`${this.contactsEndpoint}/startup?${startupParams.toString()}`, {
             method: 'GET',
             headers: {
                 ...this.service.authStore.getHeaders(),
                 Accept: 'application/json',
+                'Cache-Control': 'no-cache, no-store',
+                Pragma: 'no-cache',
             },
         });
         if (!startupResp.ok) {
@@ -273,12 +299,14 @@ export class iCloudContactsService {
         }
         const startupData = (await startupResp.json()) as ContactsStartupResponse;
 
-        const prevSyncToken = this._syncToken;
+        // prefToken + syncToken from /startup are passed as-is to /contacts — mirroring
+        // pyicloud's dict(params_contacts).update({prefToken, syncToken}).
         this._prefToken = startupData.prefToken;
         this._syncToken = startupData.syncToken;
 
         // Debug: log all top-level keys from startup response
         this.service._log(0, `[contacts] startup response keys: ${Object.keys(startupData).join(', ')}`);
+        this.service._log(0, `[contacts] startup syncToken: ${startupData.syncToken ?? 'n/a'}`);
         if (startupData.collections) {
             this.service._log(
                 0,
@@ -291,27 +319,19 @@ export class iCloudContactsService {
                 `[contacts] startup.headerPositions: ${JSON.stringify(startupData.headerPositions).slice(0, 600)}`,
             );
         }
-        if (startupData.contactsOrder) {
-            this.service._log(
-                0,
-                `[contacts] startup.contactsOrder: ${JSON.stringify(startupData.contactsOrder).slice(0, 400)}`,
-            );
-        }
         this.service._log(
             0,
             `[contacts] startup misc: meCardId=${startupData.meCardId ?? 'n/a'}, restricted=${startupData.restricted ?? 'n/a'}, isGuardianRestricted=${startupData.isGuardianRestricted ?? 'n/a'}`,
         );
 
-        // Step 2: fetch full contact list using prefToken + syncToken
-        const contactsParams = new URLSearchParams({
-            clientVersion: '2.1',
-            locale: 'en_US',
-            order: 'last,first',
-            prefToken: this._prefToken,
-            syncToken: this._syncToken,
-            limit: '0',
-            offset: '0',
-        });
+        // Step 2: fetch full contact list using prefToken + syncToken.
+        // Start from the same base params as startup (incl. dsid), then add token + pagination.
+        const contactsParams = new URLSearchParams(startupParams);
+        contactsParams.set('prefToken', this._prefToken);
+        contactsParams.set('syncToken', this._syncToken);
+        contactsParams.set('limit', '0');
+        contactsParams.set('offset', '0');
+        
         this.service._log(0, '[contacts] GET contacts');
         const contactsResp = await this.service.fetch(
             `${this.contactsEndpoint}/contacts?${contactsParams.toString()}`,
@@ -320,6 +340,8 @@ export class iCloudContactsService {
                 headers: {
                     ...this.service.authStore.getHeaders(),
                     Accept: 'application/json',
+                    'Cache-Control': 'no-cache, no-store',
+                    Pragma: 'no-cache',
                 },
             },
         );
@@ -327,10 +349,6 @@ export class iCloudContactsService {
             throw new Error(`Contacts fetch failed (HTTP ${contactsResp.status})`);
         }
         const contactsData = (await contactsResp.json()) as ContactsContactsResponse;
-
-        if (contactsData.syncToken) {
-            this._syncToken = contactsData.syncToken;
-        }
 
         const meContactId = contactsData.meContactId ?? startupData.meCardId;
 
@@ -436,8 +454,8 @@ export class iCloudContactsService {
 
             const city = streetAddresses[0]?.city ?? '';
 
-            // Birthday
-            const birthday = raw.birthday ?? '';
+            // Birthday — normalise to "YYYY-MM-DD" or "--MM-DD" regardless of API format
+            const birthday = parseBirthday(raw.birthday);
 
             // Notes
             const notes = raw.notes ?? '';
@@ -471,14 +489,24 @@ export class iCloudContactsService {
             this.contactsById.set(contactId, contact);
         }
 
-        const changed = this._syncToken !== prevSyncToken || !prevSyncToken;
+        this.service._log(0, `[contacts] refresh: ${rawContacts.length} contact(s), ${rawGroups.length} group(s)`);
 
-        this.service._log(
-            0,
-            `[contacts] refresh: ${rawContacts.length} contact(s), ${rawGroups.length} group(s), ` +
-                `syncToken ${changed ? 'changed' : 'unchanged'}`,
-        );
-
-        return changed;
+        // ── Diagnostic: log the 5 most recently modified contacts ─────────────
+        // Helps detect whether Apple's API is returning stale snapshots: if all
+        // dateModified values pre-date recent changes, the syncToken or CDN cache
+        // is returning an old snapshot.
+        const recentlyModified = [...this.contactsById.values()]
+            .filter(c => typeof c.raw.dateModified === 'string' && c.raw.dateModified !== '')
+            .sort((a, b) => String(b.raw.dateModified).localeCompare(String(a.raw.dateModified)))
+            .slice(0, 5);
+        if (recentlyModified.length > 0) {
+            this.service._log(0, '[contacts] 5 most recently modified contacts (newest first):');
+            for (const c of recentlyModified) {
+                this.service._log(
+                    0,
+                    `  contactId=${c.contactId} firstName="${c.firstName}" lastName="${c.lastName}" dateModified="${String(c.raw.dateModified)}" etag="${c.etag}"`,
+                );
+            }
+        }
     }
 }

@@ -20,7 +20,7 @@ This adapter integrates your Apple iCloud account with ioBroker. It gives you ac
 - [Reminders](#reminders--sendto-api) — read, create, edit, complete and delete iCloud Reminders via `sendTo()`; lists and individual reminders are also written as ioBroker states under `reminders.*`
 - [iCloud Drive](#icloud-drive--sendto-api) — browse, upload, download, create, delete and rename files via `sendTo()`
 - [iCloud Drive Sync](#icloud-drive-sync) — automatic scheduled sync of local directories to iCloud Drive; BackItUp integration; true bidirectional sync for custom directories
-- [Contacts](#contacts--sendto-api) — read contacts and contact groups via `sendTo()`; optionally also writes individual contact fields as ioBroker states under `contacts.*`
+- [Contacts](#contacts--sendto-api) — read contacts and contact groups via `sendTo()`; optionally also writes individual contact fields as ioBroker states under `contacts.list.<id>.*`
 - [Notes](#notes--states) — iCloud Notes as ioBroker states (`notes.list`, `notes.textList`)
 - [Calendar](#calendar--sendto-api) — upcoming calendar events as ioBroker states; create and delete events via `sendTo()`
 - [Photos](#icloud-photos--sendto-api) — browse albums, list photos, download and delete items via `sendTo()`; metadata counters as ioBroker states
@@ -471,6 +471,8 @@ The Drive Sync feature automatically keeps local directories in sync with iCloud
 |------|-----------|----------------------|
 | **Upload-only** | BackItUp entries | **Never** — local backup files are read-only |
 | **Bidirectional** | Directory entries | Yes — new remote files are downloaded; remotely deleted files are removed locally |
+
+Both modes are **fully recursive**: subdirectories are automatically synced, created, and deleted on both sides.
 
 > **Note:** Enable **iCloud Drive** in the Settings tab first. The **Drive Sync** tab only appears when iCloud Drive is enabled.
 

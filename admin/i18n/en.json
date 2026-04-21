@@ -46,6 +46,8 @@
 	"contactsIntervalHelp": "How often contacts are fetched (30–1440 minutes)",
 	"contactsWriteStates": "Write contacts to states",
 	"contactsWriteStatesHelp": "Additionally writes contacts as ioBroker states (folder per contact). Always available via sendTo.",
+	"contactsBirthdayStates": "Write birthday states",
+	"contactsBirthdayStatesHelp": "Creates three JSON states with contacts whose birthday is today, tomorrow, or within the next 7 days (including calculated age).",
 	"findMyTab": "FindMy",
 	"settingsTab": "Settings",
 	"findMyDevicesHeader": "Device Management",
