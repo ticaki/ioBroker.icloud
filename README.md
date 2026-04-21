@@ -46,7 +46,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.7.0 (2026-04-21)
 * (ticaki) **BREAKING CHANGE** Contacts: contact detail states moved under a new `list` folder — state path changed from `contacts.<id>.<field>` to `contacts.list.<id>.<field>`; existing state objects are cleaned up automatically on the next adapter start
 * (ticaki) Contacts: new **Birthday states** option — creates `contacts.birthdays.today`, `.tomorrow` and `.next7days` JSON states; each entry includes all contact fields plus calculated `age` (or `null` for year-less birthdays)
 * (ticaki) Contacts: new **Filter groups** chips field — when filled, only contacts belonging to at least one of the listed groups are written as states; leave empty to write all contacts
