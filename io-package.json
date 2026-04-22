@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.7.1",
+    "version": "0.7.2",
     "news": {
+      "0.7.2": {
+        "en": "fixed: sms 2fa",
+        "de": "fixiert: sms 2fa",
+        "ru": "разработчик: sms 2fa",
+        "pt": "fixo: sms 2fa",
+        "nl": "vast: sms 2fa",
+        "fr": "fixe: sms 2fa",
+        "it": "fisso: sms 2fa",
+        "es": "fija: sms 2fa",
+        "pl": "stałe: sms 2fa",
+        "uk": "фіксована: смс 2fa",
+        "zh-cn": "固定数:sms 2fa"
+      },
       "0.7.1": {
         "en": "Calendar: new `queryCalendarEvents` sendTo command — fetches events for an arbitrary date range (including past dates); automatically splits requests into one-month chunks to comply with Apple's API limit; all raw Apple fields are included in the response; results are also written to `calendar.query` (role=json, q=0x01)",
         "de": "Kalender: neue `queryCalendarEvents` sendTo-Befehl — fragt Ereignisse für einen beliebigen Datumsbereich ab (einschließlich vergangener Termine); teilt Anfragen automatisch in einmonatige Abschnitte, um die API-Grenze von Apple einzuhalten; alle rohen Apple-Felder sind in der Antwort enthalten; Ergebnisse werden auch in `calendar.query` geschrieben (role=json, q=0x01)",
@@ -80,19 +93,6 @@
         "pl": "Auth: automatyczne powtórowanie jednego ujęcia po sesji stale- session HTTP 401 (np. po aktualizacji adaptera); token zaufania jest zachowany, więc MFA nie jest wymagane ponownie",
         "uk": "Аут: автоматична одноразова птиця після застібки HTTP 401 (наприклад, після оновлення адаптера); довірений токен зберігається, тому MFA не потрібно знову",
         "zh-cn": "Auth: 在 stale- session HTTP 401( 例如在适配器更新后) 后自动重试一次; 信任符被保存, 因此不再需要 MFA"
-      },
-      "0.6.1": {
-        "en": "Drive Sync: BackItUp instance selection in the edit dialog — automatically updates the source path; item card shows matching instance chips or an error indicator when no instance matches",
-        "de": "Drive Sync: BackItUp-Instanzauswahl im Bearbeitungsdialog — setzt den Quellpfad automatisch; Item-Karte zeigt passende Instanz-Chips oder einen Fehlerindikator, wenn keine Instanz übereinstimmt",
-        "ru": "Drive Sync: выбор экземпляра BackItUp в диалоге редактирования — автоматически обновляет путь источника; карточка элемента показывает соответствующие метки экземпляра или индикатор ошибки, если ни один экземпляр не совпадает",
-        "pt": "Drive Sync: seleção de instância BackItUp no diálogo de edição — atualiza automaticamente o caminho de origem; o cartão do item mostra chips de instância correspondentes ou um indicador de erro quando nenhuma instância corresponde",
-        "nl": "Drive Sync: BackItUp-instantieselectie in het bewerkingsdialoogvenster — werkt het bronpad automatisch bij; itemkaart toont overeenkomende instantiechips of een foutindicator als geen instantie overeenkomt",
-        "fr": "Drive Sync : sélection de l'instance BackItUp dans le dialogue d'édition — met à jour automatiquement le chemin source ; la carte d'élément affiche les puces d'instance correspondantes ou un indicateur d'erreur si aucune instance ne correspond",
-        "it": "Drive Sync: selezione dell'istanza BackItUp nella finestra di dialogo di modifica — aggiorna automaticamente il percorso sorgente; la scheda elemento mostra chip di istanza corrispondenti o un indicatore di errore quando nessuna istanza corrisponde",
-        "es": "Drive Sync: selección de instancia BackItUp en el diálogo de edición — actualiza automáticamente la ruta de origen; la tarjeta de elemento muestra chips de instancia coincidentes o un indicador de error cuando ninguna instancia coincide",
-        "pl": "Drive Sync: wybór instancji BackItUp w oknie dialogowym edycji — automatycznie aktualizuje ścieżkę źródłową; karta elementu pokazuje pasujące chipy instancji lub wskaźnik błędu, gdy żadna instancja nie pasuje",
-        "uk": "Drive Sync: вибір екземпляра BackItUp у діалозі редагування — автоматично оновлює шлях джерела; картка елемента показує відповідні мітки екземпляра або індикатор помилки, якщо жоден екземпляр не збігається",
-        "zh-cn": "Drive Sync：编辑对话框中的 BackItUp 实例选择 — 自动更新源路径；当没有实例匹配时，条目卡片显示匹配的实例标签或错误指示器"
       }
     },
     "titleLang": {
