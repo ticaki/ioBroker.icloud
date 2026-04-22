@@ -762,6 +762,43 @@ class iCloudService extends import_node_events.default {
     return this._serviceCache[service];
   }
   /**
+   * Validates the current session against Apple's /validate endpoint without triggering
+   * a full re-authentication. Mirrors pyicloud's `_validate_token()`: sends a lightweight
+   * POST /setup/ws/1/validate to check whether the existing session token is still accepted.
+   * Updates accountInfo with the returned data when the session is valid.
+   *
+   * @returns true when Apple accepts the current session, false when it has expired or the call fails.
+   */
+  async validateSession() {
+    if (!this.authStore.sessionToken) {
+      return false;
+    }
+    try {
+      const resp = await this.fetch("https://setup.icloud.com/setup/ws/1/validate", {
+        headers: this.authStore.getHeaders(),
+        method: "POST",
+        body: "null"
+      });
+      this.authStore.extractSessionHeaders(resp);
+      if (resp.status === 200) {
+        try {
+          this.accountInfo = await resp.json();
+        } catch {
+        }
+        if (this.options.username) {
+          this.authStore.saveSession(this.options.username);
+        }
+        this._log(LogLevel.Debug, "[keepalive] /validate \u2192 session still valid");
+        return true;
+      }
+      this._log(LogLevel.Debug, `[keepalive] /validate \u2192 HTTP ${resp.status} \u2014 session expired`);
+      return false;
+    } catch (e) {
+      this._log(LogLevel.Debug, "[keepalive] /validate \u2192 request failed:", String(e));
+      return false;
+    }
+  }
+  /**
    * Re-fetch iCloud webservices (accountLogin) using the current session token.
    * Mirrors pyicloud's _authenticate_with_credentials_service("find") pattern:
    * called automatically when FindMy returns 421/450/500 to get fresh service URLs.

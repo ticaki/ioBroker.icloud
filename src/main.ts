@@ -307,6 +307,7 @@ class Icloud extends utils.Adapter {
     /** Maps Apple device API id → 6-digit zero-padded folder id (e.g. '000001') */
     private findMyIdMap: Map<string, string> = new Map();
     private staleSessionRetryDone = false;
+    private sessionRecoveryInProgress = false;
     private calendarRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersSyncMapLoaded = false;
@@ -317,6 +318,7 @@ class Icloud extends utils.Adapter {
     private photosFirstLoad = true;
     private driveRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private accountStorageRefreshTimer: ioBroker.Timeout | null | undefined = null;
+    private sessionKeepAliveTimer: ioBroker.Timeout | null | undefined = null;
     private findMyFirstLoad = true;
     private calendarFirstLoad = true;
     private driveFirstLoad = true;
@@ -663,6 +665,64 @@ class Icloud extends utils.Adapter {
     }
 
     /**
+     * Triggers a full re-authentication when the iCloud session is permanently dead.
+     * Called when a service (FindMy, Reminders, …) detects that refreshWebservices()
+     * could not recover the session. Prevents duplicate concurrent recovery attempts.
+     *
+     * @param reason - Short description of the error that triggered recovery, for logging.
+     */
+    private triggerSessionRecovery(reason: string): void {
+        if (this.sessionRecoveryInProgress) {
+            return;
+        }
+        this.sessionRecoveryInProgress = true;
+        this.log.warn(`iCloud session permanently expired (${reason}) — triggering full re-authentication in 10 s`);
+        void this.setState('info.connection', false, true);
+
+        // Null out the iCloud instance so pending refresh callbacks bail out early
+        // (they all guard with `if (!this.icloud) return`).
+        this.icloud = null;
+
+        // Clear all periodic refresh timers — onICloudReady() will reinstate them.
+        if (this.findMyRefreshTimer) {
+            this.clearTimeout(this.findMyRefreshTimer);
+            this.findMyRefreshTimer = null;
+        }
+        if (this.calendarRefreshTimer) {
+            this.clearTimeout(this.calendarRefreshTimer);
+            this.calendarRefreshTimer = null;
+        }
+        if (this.remindersRefreshTimer) {
+            this.clearTimeout(this.remindersRefreshTimer);
+            this.remindersRefreshTimer = null;
+        }
+        if (this.contactsRefreshTimer) {
+            this.clearTimeout(this.contactsRefreshTimer);
+            this.contactsRefreshTimer = null;
+        }
+        if (this.notesRefreshTimer) {
+            this.clearTimeout(this.notesRefreshTimer);
+            this.notesRefreshTimer = null;
+        }
+        if (this.accountStorageRefreshTimer) {
+            this.clearTimeout(this.accountStorageRefreshTimer);
+            this.accountStorageRefreshTimer = null;
+        }
+        if (this.sessionKeepAliveTimer) {
+            this.clearTimeout(this.sessionKeepAliveTimer);
+            this.sessionKeepAliveTimer = null;
+        }
+
+        this.setTimeout(() => {
+            this.sessionRecoveryInProgress = false;
+            this.log.info('Session recovery: re-authenticating with iCloud now');
+            this.connectToiCloud().catch((err: unknown) => {
+                this.log.error(`Session recovery re-auth failed: ${(err as Error)?.message ?? String(err)}`);
+            });
+        }, 10_000);
+    }
+
+    /**
      * Called after the iCloud session reaches Ready state.
      * All post-login data fetching happens here — info.connection is set true only
      * after account info, available services and FindMy devices have been collected.
@@ -788,6 +848,11 @@ class Icloud extends utils.Adapter {
         this.log.info('iCloud connection established successfully');
         await this.setState('info.connection', true, true);
         await this.setState('mfa.required', false, true);
+
+        // ── Session keep-alive ────────────────────────────────────────────────
+        // Mirrors pyicloud's background monitor: periodically calls /validate to keep
+        // the Apple session alive and detect expiry before a service call fails.
+        this.scheduleSessionKeepAlive();
 
         // ── iCloud Drive ──────────────────────────────────────────────────────
         // Started async after startup is fully complete so that info.connection
@@ -1210,6 +1275,11 @@ class Icloud extends utils.Adapter {
             }
         } catch (err) {
             this.log.warn(`FindMy refresh failed: ${(err as Error)?.message ?? String(err)}`);
+            // HTTP 450/421 propagates here only when refreshWebservices() also failed,
+            // meaning the session token itself is dead — trigger full re-authentication.
+            if (err instanceof Error && /HTTP (421|450)/.test(err.message)) {
+                this.triggerSessionRecovery(err.message);
+            }
         } finally {
             this.findMyRefreshing = false;
         }
@@ -1905,6 +1975,10 @@ class Icloud extends utils.Adapter {
         } catch (err) {
             const msg = (err as Error)?.message ?? String(err);
             this.log.warn(`Reminders refresh failed: ${msg}`);
+            // "Invalid global session" means the CloudKit/iCloud session is dead.
+            if (msg.includes('Invalid global session') || msg.includes('INVALID_GLOBAL_SESSION')) {
+                this.triggerSessionRecovery(msg);
+            }
         }
     }
 
@@ -2984,6 +3058,39 @@ class Icloud extends utils.Adapter {
     }
 
     /**
+     * Schedules a periodic lightweight session keep-alive call to Apple's /validate endpoint.
+     * Mirrors the background-monitor pattern from pyicloud's FindMyiPhoneServiceManager:
+     * periodically confirms the session is still accepted by Apple and triggers a full
+     * re-authentication if it has expired — before any actual service call fails.
+     */
+    private scheduleSessionKeepAlive(): void {
+        if (this.sessionKeepAliveTimer) {
+            this.clearTimeout(this.sessionKeepAliveTimer);
+            this.sessionKeepAliveTimer = null;
+        }
+        const INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+        const schedule = (): void => {
+            this.sessionKeepAliveTimer = this.setTimeout(async () => {
+                this.sessionKeepAliveTimer = null;
+                if (!this.icloud) {
+                    return;
+                }
+                this.log.debug('[session keepalive] Validating iCloud session...');
+                const valid = await this.icloud.validateSession();
+                if (valid) {
+                    this.log.debug('[session keepalive] Session is still valid');
+                    schedule();
+                } else {
+                    this.log.warn('[session keepalive] Session validation failed — triggering re-authentication');
+                    this.triggerSessionRecovery('session keepalive: /validate returned non-200');
+                }
+            }, INTERVAL_MS);
+        };
+        schedule();
+        this.log.debug('Session keep-alive scheduled every 6 hours');
+    }
+
+    /**
      * Is called when adapter shuts down - callback has to be called under any circumstances!
      *
      * @param callback - Callback function
@@ -3046,6 +3153,10 @@ class Icloud extends utils.Adapter {
                     if (this.accountStorageRefreshTimer) {
                         this.clearTimeout(this.accountStorageRefreshTimer);
                         this.accountStorageRefreshTimer = null;
+                    }
+                    if (this.sessionKeepAliveTimer) {
+                        this.clearTimeout(this.sessionKeepAliveTimer);
+                        this.sessionKeepAliveTimer = null;
                     }
                     if (this.icloud) {
                         this.icloud.removeAllListeners();
