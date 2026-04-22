@@ -46,6 +46,9 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (ticaki) New: SMS MFA panel in the General admin tab — appears automatically below the login fields when the adapter requests MFA; lets you request an SMS code and submit the 6-digit code directly from the admin UI without touching ioBroker states; visibility is driven by an internal adapter variable (not the `mfa.required` state) so the panel only appears once the adapter is ready to accept the code
+
 ### 0.7.3 (2026-04-22)
 * (ticaki) Fix: persistent HTTP 450 (session expired) on FindMy / Reminders now triggers automatic full re-authentication instead of looping indefinitely
 * (ticaki) New: session keep-alive — every 6 hours a lightweight POST /validate is sent to Apple to keep the session alive and detect expiry before any service call fails

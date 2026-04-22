@@ -108,5 +108,15 @@
 	"custom_drivesync_modified": "Modified",
 	"custom_drivesync_size": "Size",
 	"custom_drivesync_conflict_upload_local": "Upload local version",
-	"custom_drivesync_backitup_no_match": "Geen overeenkomende BackItUp-instantie gevonden voor dit pad"
+	"custom_drivesync_backitup_no_match": "Geen overeenkomende BackItUp-instantie gevonden voor dit pad",
+	"custom_mfa_title": "MFA-authenticatie vereist",
+	"custom_mfa_description": "Apple vereist een 6-cijferige code om uw identiteit te verifiëren. U kunt een code via SMS aanvragen of de code van de Authenticator-app gebruiken.",
+	"custom_mfa_request_sms": "SMS-code aanvragen",
+	"custom_mfa_code_label": "6-cijferige code",
+	"custom_mfa_submit": "Code verzenden",
+	"custom_mfa_sms_sent": "SMS-code aangevraagd — controleer uw apparaat",
+	"custom_mfa_success": "Code geaccepteerd — authenticatie geslaagd",
+	"custom_mfa_error_invalid": "Ongeldige code — moet exact 6 cijfers bevatten",
+	"custom_mfa_error_sms_failed": "Kan SMS-code niet aanvragen",
+	"custom_mfa_error_submit_failed": "Kan code niet verzenden"
 }

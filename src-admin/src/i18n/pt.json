@@ -108,5 +108,15 @@
 	"custom_drivesync_modified": "Modified",
 	"custom_drivesync_size": "Size",
 	"custom_drivesync_conflict_upload_local": "Upload local version",
-	"custom_drivesync_backitup_no_match": "Nenhuma instância BackItUp correspondante encontrada para este caminho"
+	"custom_drivesync_backitup_no_match": "Nenhuma instância BackItUp correspondante encontrada para este caminho",
+	"custom_mfa_title": "Autenticação MFA necessária",
+	"custom_mfa_description": "A Apple requer um código de 6 dígitos para verificar a sua identidade. Pode solicitar um código por SMS ou usar o código da aplicação Authenticator.",
+	"custom_mfa_request_sms": "Solicitar código SMS",
+	"custom_mfa_code_label": "Código de 6 dígitos",
+	"custom_mfa_submit": "Enviar código",
+	"custom_mfa_sms_sent": "Código SMS solicitado — verifique o seu dispositivo",
+	"custom_mfa_success": "Código aceite — autenticação bem-sucedida",
+	"custom_mfa_error_invalid": "Código inválido — deve ter exatamente 6 dígitos",
+	"custom_mfa_error_sms_failed": "Falha ao solicitar código SMS",
+	"custom_mfa_error_submit_failed": "Falha ao enviar código"
 }

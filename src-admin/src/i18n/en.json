@@ -108,5 +108,15 @@
 	"custom_drivesync_conflict_upload_local": "Upload local version",
 	"custom_drivesync_backitup_no_match": "No matching BackItUp instance found for this path",
 	"custom_drivesync_backitup_no_usable": "BackItUp is installed but no instance has CIFS backup with connection type \"Copy\" enabled. Configure it in BackItUp settings.",
-	"custom_drivesync_backitup_select": "Select BackItUp instance"
+	"custom_drivesync_backitup_select": "Select BackItUp instance",
+	"custom_mfa_title": "MFA Authentication Required",
+	"custom_mfa_description": "Apple requires a 6-digit code to verify your identity. You can request a code via SMS or use the code from the Authenticator app.",
+	"custom_mfa_request_sms": "Request SMS Code",
+	"custom_mfa_code_label": "6-digit Code",
+	"custom_mfa_submit": "Submit Code",
+	"custom_mfa_sms_sent": "SMS code requested — check your device",
+	"custom_mfa_success": "Code accepted — authentication successful",
+	"custom_mfa_error_invalid": "Invalid code — must be exactly 6 digits",
+	"custom_mfa_error_sms_failed": "Failed to request SMS code",
+	"custom_mfa_error_submit_failed": "Failed to submit code"
 }

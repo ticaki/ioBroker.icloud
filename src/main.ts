@@ -3481,7 +3481,59 @@ class Icloud extends utils.Adapter {
             this.handleDriveSyncGetStatus(obj);
         } else if (obj.command === 'driveSyncResolveConflict') {
             this.handleDriveSyncResolveConflict(obj);
+        } else if (obj.command === 'getMfaStatus') {
+            this.handleGetMfaStatus(obj);
+        } else if (obj.command === 'requestSmsMfa') {
+            this.handleRequestSmsMfa(obj);
         }
+    }
+
+    // ── onMessage MFA admin UI handlers ──────────────────────────────────────
+
+    /**
+     * Returns the current MFA status so the admin UI can decide whether to show the MFA panel.
+     * Uses the adapter's internal iCloud service status — never reads the `mfa.required` state —
+     * so the response is only possible when the adapter is actually running and ready.
+     *
+     * @param obj - The incoming ioBroker message object.
+     */
+    private handleGetMfaStatus(obj: ioBroker.Message): void {
+        if (obj.callback) {
+            this.sendTo(obj.from, obj.command, { mfaRequested: this.icloud?.status === 'MfaRequested' }, obj.callback);
+        }
+    }
+
+    /**
+     * Triggers an SMS MFA code request on behalf of the admin UI.
+     *
+     * @param obj - The incoming ioBroker message object.
+     */
+    private handleRequestSmsMfa(obj: ioBroker.Message): void {
+        if (!this.icloud || this.icloud.status !== 'MfaRequested') {
+            if (obj.callback) {
+                this.sendTo(obj.from, obj.command, { success: false, error: 'Not in MFA state' }, obj.callback);
+            }
+            return;
+        }
+        this.log.info('Admin UI: requesting MFA code via SMS');
+        this.icloud
+            .requestSmsMfaCode()
+            .then(() => {
+                if (obj.callback) {
+                    this.sendTo(obj.from, obj.command, { success: true }, obj.callback);
+                }
+            })
+            .catch((err: unknown) => {
+                this.log.error(`Admin UI: failed to request SMS code: ${(err as Error)?.message ?? String(err)}`);
+                if (obj.callback) {
+                    this.sendTo(
+                        obj.from,
+                        obj.command,
+                        { success: false, error: (err as Error)?.message ?? String(err) },
+                        obj.callback,
+                    );
+                }
+            });
     }
 
     // ── onMessage FindMy handlers ────────────────────────────────────────────

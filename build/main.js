@@ -3025,7 +3025,55 @@ class Icloud extends utils.Adapter {
       this.handleDriveSyncGetStatus(obj);
     } else if (obj.command === "driveSyncResolveConflict") {
       this.handleDriveSyncResolveConflict(obj);
+    } else if (obj.command === "getMfaStatus") {
+      this.handleGetMfaStatus(obj);
+    } else if (obj.command === "requestSmsMfa") {
+      this.handleRequestSmsMfa(obj);
     }
+  }
+  // ── onMessage MFA admin UI handlers ──────────────────────────────────────
+  /**
+   * Returns the current MFA status so the admin UI can decide whether to show the MFA panel.
+   * Uses the adapter's internal iCloud service status — never reads the `mfa.required` state —
+   * so the response is only possible when the adapter is actually running and ready.
+   *
+   * @param obj - The incoming ioBroker message object.
+   */
+  handleGetMfaStatus(obj) {
+    var _a;
+    if (obj.callback) {
+      this.sendTo(obj.from, obj.command, { mfaRequested: ((_a = this.icloud) == null ? void 0 : _a.status) === "MfaRequested" }, obj.callback);
+    }
+  }
+  /**
+   * Triggers an SMS MFA code request on behalf of the admin UI.
+   *
+   * @param obj - The incoming ioBroker message object.
+   */
+  handleRequestSmsMfa(obj) {
+    if (!this.icloud || this.icloud.status !== "MfaRequested") {
+      if (obj.callback) {
+        this.sendTo(obj.from, obj.command, { success: false, error: "Not in MFA state" }, obj.callback);
+      }
+      return;
+    }
+    this.log.info("Admin UI: requesting MFA code via SMS");
+    this.icloud.requestSmsMfaCode().then(() => {
+      if (obj.callback) {
+        this.sendTo(obj.from, obj.command, { success: true }, obj.callback);
+      }
+    }).catch((err) => {
+      var _a, _b;
+      this.log.error(`Admin UI: failed to request SMS code: ${(_a = err == null ? void 0 : err.message) != null ? _a : String(err)}`);
+      if (obj.callback) {
+        this.sendTo(
+          obj.from,
+          obj.command,
+          { success: false, error: (_b = err == null ? void 0 : err.message) != null ? _b : String(err) },
+          obj.callback
+        );
+      }
+    });
   }
   // ── onMessage FindMy handlers ────────────────────────────────────────────
   /**

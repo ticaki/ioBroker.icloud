@@ -108,5 +108,15 @@
 	"custom_drivesync_conflict_upload_local": "Lokale Version hochladen",
 	"custom_drivesync_backitup_no_match": "Keine passende BackItUp-Instanz für diesen Pfad gefunden",
 	"custom_drivesync_backitup_no_usable": "BackItUp ist installiert, aber keine Instanz hat CIFS-Backup mit Verbindungstyp „Copy\" aktiviert. Konfigurieren Sie dies in den BackItUp-Einstellungen.",
-	"custom_drivesync_backitup_select": "BackItUp-Instanz auswählen"
+	"custom_drivesync_backitup_select": "BackItUp-Instanz auswählen",
+	"custom_mfa_title": "MFA-Authentifizierung erforderlich",
+	"custom_mfa_description": "Apple benötigt einen 6-stelligen Code zur Identitätsbestätigung. Sie können einen Code per SMS anfordern oder den Code aus der Authenticator-App verwenden.",
+	"custom_mfa_request_sms": "SMS-Code anfordern",
+	"custom_mfa_code_label": "6-stelliger Code",
+	"custom_mfa_submit": "Code senden",
+	"custom_mfa_sms_sent": "SMS-Code angefordert — prüfen Sie Ihr Gerät",
+	"custom_mfa_success": "Code akzeptiert — Authentifizierung erfolgreich",
+	"custom_mfa_error_invalid": "Ungültiger Code — muss genau 6 Ziffern enthalten",
+	"custom_mfa_error_sms_failed": "SMS-Code konnte nicht angefordert werden",
+	"custom_mfa_error_submit_failed": "Code konnte nicht übermittelt werden"
 }

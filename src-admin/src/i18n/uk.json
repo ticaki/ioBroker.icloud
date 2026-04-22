@@ -108,5 +108,15 @@
 	"custom_drivesync_modified": "Modified",
 	"custom_drivesync_size": "Size",
 	"custom_drivesync_conflict_upload_local": "Upload local version",
-	"custom_drivesync_backitup_no_match": "Не знайдено відповідного екземпляра BackItUp для цього шляху"
+	"custom_drivesync_backitup_no_match": "Не знайдено відповідного екземпляра BackItUp для цього шляху",
+	"custom_mfa_title": "Потрібна аутентифікація MFA",
+	"custom_mfa_description": "Apple потребує 6-значний код для підтвердження особи. Ви можете запросити код через SMS або використати код з програми Authenticator.",
+	"custom_mfa_request_sms": "Запросити код через SMS",
+	"custom_mfa_code_label": "6-значний код",
+	"custom_mfa_submit": "Надіслати код",
+	"custom_mfa_sms_sent": "Код SMS запитано — перевірте ваш пристрій",
+	"custom_mfa_success": "Код прийнято — аутентифікацію успішно виконано",
+	"custom_mfa_error_invalid": "Неприпустимий код — повинен містити рівно 6 цифр",
+	"custom_mfa_error_sms_failed": "Не вдалося запросити код SMS",
+	"custom_mfa_error_submit_failed": "Не вдалося надіслати код"
 }

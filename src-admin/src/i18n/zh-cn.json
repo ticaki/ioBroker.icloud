@@ -108,5 +108,15 @@
 	"custom_drivesync_modified": "Modified",
 	"custom_drivesync_size": "Size",
 	"custom_drivesync_conflict_upload_local": "Upload local version",
-	"custom_drivesync_backitup_no_match": "未找到与此路径匹配的 BackItUp 实例"
+	"custom_drivesync_backitup_no_match": "未找到与此路径匹配的 BackItUp 实例",
+	"custom_mfa_title": "需要MFA身份验证",
+	"custom_mfa_description": "Apple需要6位数字代码来验证您的身份。您可以通过短信请求代码或使用验证器应用中的代码。",
+	"custom_mfa_request_sms": "请求短信验证码",
+	"custom_mfa_code_label": "6位数字验证码",
+	"custom_mfa_submit": "提交验证码",
+	"custom_mfa_sms_sent": "已请求短信验证码 — 请检查您的设备",
+	"custom_mfa_success": "代码已接受 — 身份验证成功",
+	"custom_mfa_error_invalid": "无效代码 — 必须恰好是6位数字",
+	"custom_mfa_error_sms_failed": "请求短信验证码失败",
+	"custom_mfa_error_submit_failed": "提交代码失败"
 }

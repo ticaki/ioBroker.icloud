@@ -25,6 +25,19 @@
                     "md": 6,
                     "lg": 6,
                     "xl": 6
+                },
+                "_smsMfaPanel": {
+                    "type": "custom",
+                    "name": "ConfigCustomIcloudSet/Components/SmsMfaPanel",
+                    "url": "custom/customComponents.js",
+                    "i18n": true,
+                    "bundlerType": "module",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12
                 }
             }
         },
