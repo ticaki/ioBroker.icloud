@@ -540,10 +540,19 @@ export default class iCloudService extends EventEmitter {
                             // Parse trusted phone number from auth options (pyiCloud: _get_mfa_auth_options)
                             try {
                                 const authOptions = JSON.parse(authRespText) as Record<string, unknown>;
-                                // Apple returns either trustedPhoneNumber (single) or trustedPhoneNumbers (list)
+                                // Apple may nest phone data under "phoneNumberVerification" (modern flow,
+                                // as seen in pyiCloud's PhoneNumberVerification.from_mapping) or expose it
+                                // at the top level. Check both.
+                                const phoneVerification = authOptions?.phoneNumberVerification as
+                                    | Record<string, unknown>
+                                    | undefined;
                                 const phoneData =
                                     (authOptions?.trustedPhoneNumber as Record<string, unknown> | undefined) ??
-                                    (authOptions?.trustedPhoneNumbers as Record<string, unknown>[] | undefined)?.[0];
+                                    (phoneVerification?.trustedPhoneNumber as Record<string, unknown> | undefined) ??
+                                    (authOptions?.trustedPhoneNumbers as Record<string, unknown>[] | undefined)?.[0] ??
+                                    (
+                                        phoneVerification?.trustedPhoneNumbers as Record<string, unknown>[] | undefined
+                                    )?.[0];
                                 if (phoneData?.id !== undefined) {
                                     this._trustedPhone = {
                                         id: phoneData.id as number | string,
@@ -557,7 +566,7 @@ export default class iCloudService extends EventEmitter {
                                     );
                                 }
                             } catch {
-                                /* JSON parse failed — non-fatal, SMS will fall back to id=1 */
+                                /* JSON parse failed — non-fatal; _trustedPhone stays undefined */
                             }
 
                             // After GET /appleauth/auth, explicitly request Apple to push the code
@@ -622,13 +631,17 @@ export default class iCloudService extends EventEmitter {
     /**
      * Request Apple to send a 2FA code via SMS to the trusted phone number.
      * Use this when no push notification arrives on trusted devices.
-     * phoneNumberId defaults to 1 (the first trusted phone number).
+     * Mirrors pyiCloud's `_request_sms_2fa_code`: throws if no trusted phone number is available.
      *
-     * @param phoneNumberId - Optional phone number ID for SMS delivery. Defaults to 1 (first trusted phone).
+     * @param phoneNumberId - Optional explicit phone number ID. When omitted, the ID from Apple's auth response is used.
      */
     async requestSmsMfaCode(phoneNumberId?: number | string): Promise<void> {
-        // Use explicit ID, then the one from Apple's auth options, then fall back to 1
-        const id = phoneNumberId ?? this._trustedPhone?.id ?? 1;
+        // pyiCloud raises PyiCloudNoTrustedNumberAvailable when no phone number is known.
+        // Mirror that behaviour: require either an explicit id or a parsed _trustedPhone.
+        if (phoneNumberId === undefined && this._trustedPhone === undefined) {
+            throw new Error('No trusted phone number available — cannot request SMS 2FA code');
+        }
+        const id = phoneNumberId ?? this._trustedPhone!.id;
 
         // Build phoneNumber payload like pyiCloud's as_phone_number_payload()
         const phonePayload: Record<string, unknown> = { id };

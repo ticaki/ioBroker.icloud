@@ -171,7 +171,7 @@ class iCloudService extends import_node_events.default {
    * @param password The password to use instead of the one provided in this iCloudService's options
    */
   async authenticate(username, password) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     username = username || this.options.username;
     password = password || this.options.password;
     if (!username) {
@@ -402,7 +402,8 @@ class iCloudService extends import_node_events.default {
               );
               try {
                 const authOptions = JSON.parse(authRespText);
-                const phoneData = (_e = authOptions == null ? void 0 : authOptions.trustedPhoneNumber) != null ? _e : (_d = authOptions == null ? void 0 : authOptions.trustedPhoneNumbers) == null ? void 0 : _d[0];
+                const phoneVerification = authOptions == null ? void 0 : authOptions.phoneNumberVerification;
+                const phoneData = (_h = (_f = (_d = authOptions == null ? void 0 : authOptions.trustedPhoneNumber) != null ? _d : phoneVerification == null ? void 0 : phoneVerification.trustedPhoneNumber) != null ? _f : (_e = authOptions == null ? void 0 : authOptions.trustedPhoneNumbers) == null ? void 0 : _e[0]) != null ? _h : (_g = phoneVerification == null ? void 0 : phoneVerification.trustedPhoneNumbers) == null ? void 0 : _g[0];
                 if ((phoneData == null ? void 0 : phoneData.id) !== void 0) {
                   this._trustedPhone = {
                     id: phoneData.id,
@@ -464,15 +465,18 @@ class iCloudService extends import_node_events.default {
   /**
    * Request Apple to send a 2FA code via SMS to the trusted phone number.
    * Use this when no push notification arrives on trusted devices.
-   * phoneNumberId defaults to 1 (the first trusted phone number).
+   * Mirrors pyiCloud's `_request_sms_2fa_code`: throws if no trusted phone number is available.
    *
-   * @param phoneNumberId - Optional phone number ID for SMS delivery. Defaults to 1 (first trusted phone).
+   * @param phoneNumberId - Optional explicit phone number ID. When omitted, the ID from Apple's auth response is used.
    */
   async requestSmsMfaCode(phoneNumberId) {
-    var _a, _b, _c;
-    const id = (_b = phoneNumberId != null ? phoneNumberId : (_a = this._trustedPhone) == null ? void 0 : _a.id) != null ? _b : 1;
+    var _a;
+    if (phoneNumberId === void 0 && this._trustedPhone === void 0) {
+      throw new Error("No trusted phone number available \u2014 cannot request SMS 2FA code");
+    }
+    const id = phoneNumberId != null ? phoneNumberId : this._trustedPhone.id;
     const phonePayload = { id };
-    if (((_c = this._trustedPhone) == null ? void 0 : _c.nonFTEU) !== void 0) {
+    if (((_a = this._trustedPhone) == null ? void 0 : _a.nonFTEU) !== void 0) {
       phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
     }
     this._log(LogLevel.Debug, `[auth] PUT /appleauth/auth/verify/phone \u2014 requesting SMS code to phone id ${id}`);
