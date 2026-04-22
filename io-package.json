@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.7.2",
+    "version": "0.7.3",
     "news": {
+      "0.7.3": {
+        "en": "Fix: persistent HTTP 450 (session expired) on FindMy / Reminders now triggers automatic full re-authentication instead of looping indefinitely\nNew: session keep-alive — every 6 hours a lightweight POST /validate is sent to Apple to keep the session alive and detect expiry before any service call fails",
+        "de": "Fix: persistent HTTP 450 (Session abgelaufen) auf FindMy / Reminders löst jetzt automatische vollständige Wieder-Authentisierung statt Schlaufen unbestimmt\nNeu: Sitzung halten-alive - alle 6 Stunden ein leichtes POST /validate wird an Apple gesendet, um die Sitzung am Leben zu halten und das Auslaufen zu erkennen, bevor ein Dienstruf ausfällt",
+        "ru": "Постоянный HTTP 450 (сессия истекла) на FindMy / Reminders теперь запускает автоматическую полную повторную аутентификацию вместо бесконечной петли\nНовый: сеанс Keep-alive — каждые 6 часов легкий POST /validate отправляется в Apple, чтобы сохранить сеанс живым и обнаружить истечение срока действия до того, как какой-либо вызов службы выйдет из строя",
+        "pt": "Corrigir: HTTP 450 persistente (sessão expirada) no FindMy / Lembretes agora desencadeia re-autenticação automática completa em vez de loop indefinidamente\nNovo: sessão manter-vivo — a cada 6 horas um POST /validate leve é enviado para a Apple para manter a sessão viva e detectar a expiração antes de qualquer chamada de serviço falhar",
+        "nl": "Fix: persistente HTTP 450 (sessie verlopen) op FindMy / Herinneringen nu activeert automatische volledige herauthenticatie in plaats van oneindig loopen\nNieuw: Session keep-alive ",
+        "fr": "Correction: HTTP 450 (session expirée) sur FindMy / Rappels déclenche désormais une réauthentification complète automatique au lieu de boucler indéfiniment\nNouveau: session keep-alive — toutes les 6 heures un POST /validate léger est envoyé à Apple pour garder la session en vie et détecter l'expiration avant tout appel de service échoue",
+        "it": "Fisso: persistente HTTP 450 (sessione scaduta) su FindMy / Reminders ora attiva automatica completa ri-autenticazione invece di loop indefinitamente\nNuovo: sessione manten-alive — ogni 6 ore un leggero POST /validate viene inviato a Apple per mantenere la sessione in vita e rilevare la scadenza prima che qualsiasi chiamata di servizio fallisca",
+        "es": "Fijación: HTTP 450 persistente (sesión vencida) en FindMy / Recordadores ahora activa la re-authenticación completa automática en lugar de bucle indefinidamente\nNuevo: sesión de mantenimiento - cada 6 horas un POST /validato ligero se envía a Apple para mantener la sesión viva y detectar la expiración antes de que cualquier llamada de servicio falle",
+        "pl": "Fix: stałe HTTP 450 (sesja wygasła) na FindMy / Reminders teraz uruchamia automatyczne pełne uwierzytelnianie zamiast pętli na czas nieokreślony\nNowy: session keep- alive - co 6 godzin lekki POST / walidate jest wysyłany do Apple, aby utrzymać sesję przy życiu i wykryć wygaśnięcie zanim jakiekolwiek połączenie serwisowe zawiedzie",
+        "uk": "Фіксація: персистентний HTTP 450 (зсія, що закінчується) на FindMy / Reminders тепер запускає автоматичне повне реабілітація замість петляцій невизначено\nНовий: сеанс продовжує роботу — кожні 6 годин легкий POST /validate надсилається до Apple, щоб зберегти сеанс живим і виявити доцільність перед будь-яким сервісним дзвінком не вдається",
+        "zh-cn": "固定 : FindMy / Reminders 上的持续 HTTP 450( 会话过期) 现在启动自动全重校正而不是无限循环\n新建: 会话保持动态——每6小时向苹果发送一个轻量级 POST / 验证器,以使会话保持活力,并在任何服务呼叫失败前检测过期"
+      },
       "0.7.2": {
         "en": "fixed: sms 2fa",
         "de": "fixiert: sms 2fa",
@@ -80,19 +93,6 @@
         "pl": "Kalendarz: zapis do zapisywalnych stanów zdarzeń (title, startDate, endDate, allDay, location, description, url, alarms, json) teraz poprawnie wywołuje aktualizację w iCloud — wcześniej zmiany były po cichu ignorowane z powodu brakującej subskrypcji stanów\nKalendarz: konfigurowalny okres wyprzedzenia (1–12 miesięcy) w interfejsie administratora określa, za ile miesięcy pobierane są wydarzenia",
         "uk": "Календар: запис у записувані стани подій (title, startDate, endDate, allDay, location, description, url, alarms, json) тепер коректно ініціює оновлення в iCloud — раніше зміни мовчки ігнорувались через відсутню підписку на стани\nКалендар: налаштовуваний період попереднього перегляду (1–12 місяців) в інтерфейсі адміністратора визначає, за скільки місяців завантажуються події",
         "zh-cn": "日历：写入可写事件状态（title、startDate、endDate、allDay、location、description、url、alarms、json）现在能正确触发 iCloud 更新 — 此前由于缺少状态订阅，修改被静默忽略\n日历：管理界面中可配置的预读周期（1–12 个月）控制获取多少个月的事件"
-      },
-      "0.6.2": {
-        "en": "Auth: automatic one-shot retry after a stale-session HTTP 401 (e.g. after an adapter update); the trust token is preserved so MFA is not required again",
-        "de": "Auth: automatisches Ein-Schuss-Retry nach einer Stale-session HTTP 401 (z.B. nach einem Adapter-Update); das Vertrauenstoken bleibt erhalten, so dass MFA nicht wieder benötigt wird",
-        "ru": "Auth: автоматическая однократная повторная запись после устаревшей сессии HTTP 401 (например, после обновления адаптера); токен доверия сохраняется, поэтому MFA не требуется снова",
-        "pt": "Auth: repetição automática de um tiro após um HTTP 401 de sessão lenta (por exemplo, após uma atualização do adaptador); o token de confiança é preservado para que MFA não seja necessário novamente",
-        "nl": "Auth: automatische one-shot retry na een oude sessie HTTP 401 (bijv. na een adapter-update); het vertrouwen token wordt bewaard zodat MFA niet opnieuw nodig is",
-        "fr": "Auth: réessayer automatiquement une capture après une session de blocage HTTP 401 (par exemple après une mise à jour de l'adaptateur); le jeton de confiance est conservé de sorte que MFA n'est plus nécessaire",
-        "it": "Auth: automatica retry one-shot dopo una stale-session HTTP 401 (ad esempio dopo un aggiornamento dell'adattatore); il token di fiducia viene conservato in modo che MFA non sia richiesto di nuovo",
-        "es": "Auth: retry automático de una sola instantánea después de una sesión HTTP 401 (por ejemplo, después de una actualización del adaptador); el token de confianza se conserva por lo que el MFA no es requerido de nuevo",
-        "pl": "Auth: automatyczne powtórowanie jednego ujęcia po sesji stale- session HTTP 401 (np. po aktualizacji adaptera); token zaufania jest zachowany, więc MFA nie jest wymagane ponownie",
-        "uk": "Аут: автоматична одноразова птиця після застібки HTTP 401 (наприклад, після оновлення адаптера); довірений токен зберігається, тому MFA не потрібно знову",
-        "zh-cn": "Auth: 在 stale- session HTTP 401( 例如在适配器更新后) 后自动重试一次; 信任符被保存, 因此不再需要 MFA"
       }
     },
     "titleLang": {
