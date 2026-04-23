@@ -560,6 +560,10 @@
                     "text": "geocodingInfoTraccar",
                     "newLine": true,
                     "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6,
                     "hidden": "data.geocodingProvider !== 'traccar'"
                 },
                 "_infoNominatim": {
@@ -567,6 +571,10 @@
                     "text": "geocodingInfoNominatim",
                     "newLine": true,
                     "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6,
                     "hidden": "data.geocodingProvider !== 'nominatim'"
                 },
                 "_infoOpencage": {
@@ -574,6 +582,10 @@
                     "text": "geocodingInfoOpencage",
                     "newLine": true,
                     "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6,
                     "hidden": "data.geocodingProvider !== 'opencage'"
                 },
                 "_cacheHeader": {
@@ -618,7 +630,11 @@
                     "type": "staticText",
                     "text": "driveSyncInfo",
                     "newLine": true,
-                    "xs": 12
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12
                 },
                 "driveSyncEnabled": {
                     "type": "checkbox",
