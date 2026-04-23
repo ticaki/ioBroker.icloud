@@ -171,10 +171,12 @@
     "geocodingCacheSize": "small"
   },
   "encryptedNative": [
-    "password"
+    "password",
+    "geocodingApiKey"
   ],
   "protectedNative": [
-    "password"
+    "password",
+    "geocodingApiKey"
   ],
   "objects": [],
   "instanceObjects": [
