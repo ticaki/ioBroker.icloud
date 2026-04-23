@@ -6,6 +6,9 @@ import SendIcon from '@mui/icons-material/Send';
 import { ConfigGeneric, type ConfigGenericProps, type ConfigGenericState } from '@iobroker/json-config';
 import { I18n } from '@iobroker/adapter-react-v5';
 
+/**
+ * State for the SmsMfaPanel component.
+ */
 interface SmsMfaPanelState extends ConfigGenericState {
     /** Whether the adapter process is alive (socket subscription). */
     alive: boolean;
@@ -27,11 +30,19 @@ interface SmsMfaPanelState extends ConfigGenericState {
     info: string | null;
 }
 
-/** How often (ms) the component polls the adapter for its MFA status. */
+/**
+ * How often (ms) the component polls the adapter for its MFA status.
+ */
 const POLL_INTERVAL_MS = 3_000;
 
+/**
+ * Panel for handling SMS-based Multi-Factor Authentication (MFA) for the iCloud adapter.
+ * This component allows users to request an SMS with a 6-digit code and submit it to authenticate.
+ */
 class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
+    /** Timer ID for the periodic MFA status polling. */
     private _pollTimer: number | null = null;
+    /** Handler for the adapter alive state subscription. */
     private _aliveHandler: ioBroker.StateChangeHandler | null = null;
 
     constructor(props: ConfigGenericProps) {
@@ -47,12 +58,20 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
         } satisfies Partial<SmsMfaPanelState>);
     }
 
+    /**
+     * Lifecycle method called after the component is mounted.
+     * Subscribes to the adapter's alive state and starts polling for MFA status.
+     */
     componentDidMount(): void {
         super.componentDidMount();
         this.subscribeAlive();
         void this.pollMfaStatus();
     }
 
+    /**
+     * Lifecycle method called before the component is unmounted.
+     * Unsubscribes from the adapter's alive state and stops the polling timer.
+     */
     componentWillUnmount(): void {
         super.componentWillUnmount();
         this.unsubscribeAlive();
