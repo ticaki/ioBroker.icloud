@@ -164,8 +164,8 @@ class iCloudService extends import_node_events.default {
   }
   /**
    * Authenticates to the iCloud service.
-   * If a username is not passed to this function, it will use the one provided to the options object in the constructor, failing that, it will find the first result in the system's keychain matching https://idmsa.apple.com
-   * The same applies to the password. If it is not provided to this function, the options object will be used, and then it will check the keychain for a keychain matching the email for idmsa.apple.com
+   * If a username is not passed to this function, it will use the one provided to the options object in the constructor.
+   * The same applies to the password.
    *
    * @param username The username to use instead of the one provided in this iCloudService's options
    * @param password The password to use instead of the one provided in this iCloudService's options
@@ -175,19 +175,7 @@ class iCloudService extends import_node_events.default {
     username = username || this.options.username;
     password = password || this.options.password;
     if (!username) {
-      try {
-        const keytarMod = require("keytar");
-        const saved = (await keytarMod.findCredentials("https://idmsa.apple.com"))[0];
-        if (!saved) {
-          throw new Error("Username was not provided and could not be found in keychain");
-        }
-        username = saved.account;
-        this._log(LogLevel.Debug, "Username found in keychain:", username);
-      } catch (e) {
-        throw new Error(
-          `Username was not provided, and unable to use Keytar to find saved credentials${String(e)}`
-        );
-      }
+      throw new Error("Username was not provided");
     }
     if (typeof username !== "string") {
       throw new TypeError(
@@ -196,17 +184,7 @@ class iCloudService extends import_node_events.default {
     }
     this.options.username = username;
     if (!password) {
-      try {
-        password = await // eslint-disable-next-line @typescript-eslint/no-require-imports
-        require("keytar").findPassword(
-          "https://idmsa.apple.com",
-          username != null ? username : ""
-        );
-      } catch (e) {
-        throw new Error(
-          `Password was not provided, and unable to use Keytar to find saved credentials${String(e)}`
-        );
-      }
+      throw new Error("Password was not provided");
     }
     if (typeof password !== "string") {
       throw new TypeError(
@@ -587,18 +565,6 @@ class iCloudService extends import_node_events.default {
             this._log(LogLevel.Warning, "Could not get PCS state:", e);
           }
           this._setState("Ready" /* Ready */);
-          if (this.options.saveCredentials) {
-            try {
-              const keytar = require("keytar");
-              keytar.setPassword(
-                "https://idmsa.apple.com",
-                this.options.username,
-                this.options.password
-              );
-            } catch (e) {
-              this._log(LogLevel.Warning, "Unable to save account credentials:", e);
-            }
-          }
         } else {
           throw new Error("Unable to process cloud setup response!");
         }

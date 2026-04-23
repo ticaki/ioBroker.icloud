@@ -548,7 +548,6 @@ class Icloud extends utils.Adapter {
         this.icloud = new iCloudService({
             username: this.config.username.trim(),
             password: this.config.password,
-            saveCredentials: false,
             trustDevice: true,
             dataDirectory,
             authMethod: 'srp',

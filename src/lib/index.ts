@@ -45,11 +45,6 @@ export interface iCloudServiceSetupOptions {
      */
     password?: string;
     /**
-     * Whether to save the credentials to the system's secret store.
-     * (i.e. Keychain on macOS)
-     */
-    saveCredentials?: boolean;
-    /**
      * Whether to store the trust-token to disk.
      * This allows future logins to be done without MFA.
      */
@@ -261,8 +256,8 @@ export default class iCloudService extends EventEmitter {
 
     /**
      * Authenticates to the iCloud service.
-     * If a username is not passed to this function, it will use the one provided to the options object in the constructor, failing that, it will find the first result in the system's keychain matching https://idmsa.apple.com
-     * The same applies to the password. If it is not provided to this function, the options object will be used, and then it will check the keychain for a keychain matching the email for idmsa.apple.com
+     * If a username is not passed to this function, it will use the one provided to the options object in the constructor.
+     * The same applies to the password.
      *
      * @param username The username to use instead of the one provided in this iCloudService's options
      * @param password The password to use instead of the one provided in this iCloudService's options
@@ -272,22 +267,7 @@ export default class iCloudService extends EventEmitter {
         password = password || this.options.password;
 
         if (!username) {
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
-                const keytarMod = require('keytar') as {
-                    findCredentials: (s: string) => Promise<Array<{ account: string }>>;
-                };
-                const saved = (await keytarMod.findCredentials('https://idmsa.apple.com'))[0];
-                if (!saved) {
-                    throw new Error('Username was not provided and could not be found in keychain');
-                }
-                username = saved.account;
-                this._log(LogLevel.Debug, 'Username found in keychain:', username);
-            } catch (e) {
-                throw new Error(
-                    `Username was not provided, and unable to use Keytar to find saved credentials${String(e)}`,
-                );
-            }
+            throw new Error('Username was not provided');
         }
         if (typeof (username as any) !== 'string') {
             throw new TypeError(
@@ -298,17 +278,7 @@ export default class iCloudService extends EventEmitter {
         }
         this.options.username = username;
         if (!password) {
-            try {
-                password = await // eslint-disable-next-line @typescript-eslint/no-require-imports
-                (require('keytar') as { findPassword: (s: string, u: string) => Promise<string> }).findPassword(
-                    'https://idmsa.apple.com',
-                    username ?? '',
-                );
-            } catch (e) {
-                throw new Error(
-                    `Password was not provided, and unable to use Keytar to find saved credentials${String(e)}`,
-                );
-            }
+            throw new Error('Password was not provided');
         }
         if (typeof (password as any) !== 'string') {
             throw new TypeError(
@@ -768,21 +738,6 @@ export default class iCloudService extends EventEmitter {
                     }
 
                     this._setState(iCloudServiceStatus.Ready);
-                    if (this.options.saveCredentials) {
-                        try {
-                            // eslint-disable-next-line @typescript-eslint/no-require-imports
-                            const keytar = require('keytar') as {
-                                setPassword: (s: string, u: string, p: string) => void;
-                            };
-                            keytar.setPassword(
-                                'https://idmsa.apple.com',
-                                this.options.username!,
-                                this.options.password!,
-                            );
-                        } catch (e) {
-                            this._log(LogLevel.Warning, 'Unable to save account credentials:', e);
-                        }
-                    }
                 } else {
                     throw new Error('Unable to process cloud setup response!');
                 }
