@@ -44,6 +44,10 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
     private _pollTimer: number | null = null;
     /** Handler for the adapter alive state subscription. */
     private _aliveHandler: ioBroker.StateChangeHandler | null = null;
+    /** True while a pollMfaStatus call is already in flight — prevents duplicate concurrent calls. */
+    private _polling = false;
+    /** Handler for the document visibilitychange event (pauses/resumes polling). */
+    private _visibilityHandler: (() => void) | null = null;
 
     constructor(props: ConfigGenericProps) {
         super(props);
@@ -60,22 +64,36 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
 
     /**
      * Lifecycle method called after the component is mounted.
-     * Subscribes to the adapter's alive state and starts polling for MFA status.
+     * Subscribes to the adapter's alive state, registers the page-visibility listener,
+     * and starts polling for MFA status.
      */
     componentDidMount(): void {
         super.componentDidMount();
         this.subscribeAlive();
+        this._visibilityHandler = (): void => {
+            if (document.hidden) {
+                this.stopPolling();
+            } else {
+                void this.pollMfaStatus();
+            }
+        };
+        document.addEventListener('visibilitychange', this._visibilityHandler);
         void this.pollMfaStatus();
     }
 
     /**
      * Lifecycle method called before the component is unmounted.
-     * Unsubscribes from the adapter's alive state and stops the polling timer.
+     * Unsubscribes from the adapter's alive state, removes the visibility listener,
+     * and stops the polling timer.
      */
     componentWillUnmount(): void {
         super.componentWillUnmount();
         this.unsubscribeAlive();
         this.stopPolling();
+        if (this._visibilityHandler) {
+            document.removeEventListener('visibilitychange', this._visibilityHandler);
+            this._visibilityHandler = null;
+        }
     }
 
     /**
@@ -120,8 +138,13 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
      * Queries the adapter for its current MFA status via `getMfaStatus` sendTo.
      * Because `sendTo` only succeeds when the adapter is running, a successful response
      * implicitly confirms the adapter is alive. Schedules the next poll when done.
+     * Returns immediately if a poll is already in flight or the document is hidden.
      */
     private async pollMfaStatus(): Promise<void> {
+        if (this._polling || document.hidden) {
+            return;
+        }
+        this._polling = true;
         this.stopPolling();
         let mfaRequested = false;
         let alive = false;
@@ -153,6 +176,7 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
             this.setState(update as SmsMfaPanelState);
         }
 
+        this._polling = false;
         this._pollTimer = window.setTimeout(() => {
             this._pollTimer = null;
             void this.pollMfaStatus();

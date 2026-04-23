@@ -38,6 +38,20 @@
                     "md": 12,
                     "lg": 12,
                     "xl": 12
+                },
+                "_donationHint": {
+                    "type": "staticLink",
+                    "label": "donationText",
+                    "href": "https://paypal.me/ticaki",
+                    "button": true,
+                    "color": "primary",
+                    "variant": "outlined",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3
                 }
             }
         },

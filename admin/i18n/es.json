@@ -87,5 +87,6 @@
 	"driveSyncInfo": "Synchronize local directories to iCloud Drive. Supports BackItUp integration and custom directories with conflict resolution.",
 	"driveSyncEnabled": "Enable Drive Sync",
 	"driveSyncInterval": "Sync interval (minutes)",
-	"driveSyncIntervalHelp": "How often files are synced to iCloud Drive (5–1440 minutes)"
+	"driveSyncIntervalHelp": "How often files are synced to iCloud Drive (5–1440 minutes)",
+	"donationText": "Apoya este adaptador ♥"
 }
