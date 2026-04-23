@@ -23,7 +23,7 @@ __export(drive_exports, {
   iCloudDriveService: () => iCloudDriveService
 });
 module.exports = __toCommonJS(drive_exports);
-var import_web = require("stream/web");
+var import_web = require("node:stream/web");
 class iCloudDriveRawNode {
   dateCreated;
   drivewsid;

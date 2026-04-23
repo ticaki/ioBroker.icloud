@@ -31,7 +31,7 @@ __export(reminders_exports, {
   iCloudRemindersService: () => iCloudRemindersService
 });
 module.exports = __toCommonJS(reminders_exports);
-var zlib = __toESM(require("zlib"));
+var zlib = __toESM(require("node:zlib"));
 const REMINDERS_ZONE = { zoneName: "Reminders", zoneType: "REGULAR_CUSTOM_ZONE" };
 const CONTAINER = "com.apple.reminders";
 const ENV = "production";

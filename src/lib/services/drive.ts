@@ -1,4 +1,4 @@
-import { ReadableStream } from 'stream/web';
+import { ReadableStream } from 'node:stream/web';
 import type iCloudService from '..';
 
 export type ItemType = 'APP_LIBRARY' | 'FILE' | 'FOLDER';

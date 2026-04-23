@@ -31,7 +31,7 @@ __export(notes_exports, {
   iCloudNotesService: () => iCloudNotesService
 });
 module.exports = __toCommonJS(notes_exports);
-var zlib = __toESM(require("zlib"));
+var zlib = __toESM(require("node:zlib"));
 const NOTES_ZONE = { zoneName: "Notes", zoneType: "REGULAR_CUSTOM_ZONE" };
 const CONTAINER = "com.apple.notes";
 const ENV = "production";

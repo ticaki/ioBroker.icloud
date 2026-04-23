@@ -1,4 +1,4 @@
-import * as zlib from 'zlib';
+import * as zlib from 'node:zlib';
 import type iCloudService from '..';
 
 // ── CloudKit record types ─────────────────────────────────────────────────────
