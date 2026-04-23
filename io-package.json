@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.7.4",
+    "version": "0.7.5",
     "news": {
+      "0.7.5": {
+        "en": "changed: Removed unused keytar dependency and code.\nfixed: jsonConfig warnings / all repochecker error, warnings\ndonate link",
+        "de": "geändert: Nicht genutzte Keytar-Abhängigkeit und Code entfernt.\nbehoben: jsonConfig warnungen / alle repochecker fehler, warnungen\nlink verraten",
+        "ru": "изменены: удалены неиспользуемые ключи и код.\nисправлено: предупреждения jsonConfig / все ошибки репочекера, предупреждения\nдонорская ссылка",
+        "pt": "alterado: Removeu a dependência e o código do keytar não utilizados.\ncorrigido: avisos do jsonConfig / erro do repochecker, avisos\ndoar link",
+        "nl": "gewijzigd: Verwijderde ongebruikte keytar afhankelijkheid en code.\nvaste: jsonConfig waarschuwingen / alle repochecker fout, waarschuwingen\nkoppeling doneren",
+        "fr": "modifié : Supprimé la dépendance et le code de keytar inutilisés.\ncorrigé: jsonConfig avertissements / toutes les erreurs repochecker, avertissements\ndonnez le lien",
+        "it": "cambiato: Rimossa dipendenza keytar non utilizzata e codice.\nfisso: jsonConfig avvisi / tutti gli errori repochecker, avvisi\nlink di donazione",
+        "es": "cambiado: Eliminar la dependencia y el código de keytar no utilizado.\nfijo: jsonConfig warnings / all repochecker error, warnings\ndonate link",
+        "pl": "zmiana: Usunięto niewykorzystane zależności klawiszy i kod.\nfixed: jsonConfig ostrzeżeń / wszystkich błędów repochecker, ostrzeżeń\nlink do darowizny",
+        "uk": "змінено: Вилучено невикористану залежностей та коду.\nвиправлено: jsonConfig попередження / всі помилкові помилки, попередження\nпосилання",
+        "zh-cn": "更改: 删除未使用的密钥tar依赖和代码.\n固定 : jsonConfig 警告 / 所有重新检查器错误, 警告\n捐赠链接"
+      },
       "0.7.4": {
         "en": "New: SMS MFA panel in the General admin tab — appears automatically below the login fields when the adapter requests MFA; lets you request an SMS code and submit the 6-digit code directly from the admin UI without touching ioBroker states; visibility is driven by an internal adapter variable (not the `mfa.required` state) so the panel only appears once the adapter is ready to accept the code",
         "de": "Neu: SMS MFA-Panel im General Admin-Tab – erscheint automatisch unter den Login-Feldern, wenn der Adapter MFA anfordert; Sie können einen SMS-Code anfordern und den 6-stelligen Code direkt vom Admin UI einreichen, ohne ioBroker Zustände zu berühren; Sicht wird durch eine interne Adaptervariable (nicht den `mfa.required` Zustand) angesteuert, so dass das Panel nur erscheint, wenn der Adapter bereit ist, den Code anzunehmen",
@@ -80,19 +93,6 @@
         "pl": "Drive Sync admin UI: zarówno przeglądarka folderów iCloud Drive jak i przeglądarka folderów lokalnych są teraz przewijane (lista jest ograniczona do 300 px wysokości)",
         "uk": "Привод Sync адміністратор UI: як веб-переглядач папок iCloud, так і локальний браузер папок тепер прокручуються (список, що захоплюється на висоті 300 px)",
         "zh-cn": "Drive Sync admin UI: iCloud Drive 文件夹浏览器和本地文件夹浏览器现在都可以滚动(列表封顶, 高度300 px) "
-      },
-      "0.6.4": {
-        "en": "Drive Sync: fixed\nDrive Sync admin UI: added local folder browser for directory-type sync entries",
-        "de": "Laufwerkssynchronisation geht im download\nLaufwerk Sync admin UI: lokale Ordner Browser für Verzeichnisse hinzugefügt",
-        "ru": "Drive Sync: фиксированный\nDrive Sync admin UI: добавлен локальный браузер папок для записей синхронизации типа каталога",
-        "pt": "Sincronização da unidade: corrigido\nDrive Sync admin UI: navegador de pastas local adicionado para entradas de sincronização tipo diretório",
-        "nl": "Drive Sync: vast\nDrive Sync admin UI: lokale mappenbrowser toegevoegd voor map-type sync items",
-        "fr": "Sync d'entraînement : corrigé\nDrive Sync admin UI: ajouté navigateur de dossier local pour les entrées de synchronisation de type répertoire",
-        "it": "Drive Sync: fisso\nDrive Sync admin UI: aggiunto browser cartella locale per le voci di sincronizzazione di tipo directory",
-        "es": "Sincronización de la unidad: fijo\nDrive Sync admin UI: navegador de carpeta local añadido para entradas de sincronización tipo directorio",
-        "pl": "Synchronizacja napędu: stała\nDrive Sync admin UI: dodana przeglądarka folderów lokalnych dla wpisów synchronizacji typu directory-",
-        "uk": "Синхронізація приводу: фіксована\nSync адміністратор UI: додано локальний браузер для записів синхронізації каталогів",
-        "zh-cn": "驱动同步: 已固定\n驱动同步管理 UI: 为目录类型同步条目添加本地文件夹浏览器"
       }
     },
     "titleLang": {
