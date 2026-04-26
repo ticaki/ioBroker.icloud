@@ -476,7 +476,7 @@ class iCloudService extends import_node_events.default {
    * @param code The six digit MFA code.
    */
   async provideMfaCode(code) {
-    var _a, _b, _c;
+    var _a;
     if (typeof code !== "string") {
       throw new TypeError(`provideMfaCode(code: string): 'code' was ${code.toString()}`);
     }
@@ -490,9 +490,9 @@ class iCloudService extends import_node_events.default {
     let authResponse;
     if (this._smsPhoneNumberId !== void 0) {
       const phoneId = this._smsPhoneNumberId;
-      const mode = (_b = (_a = this._trustedPhone) == null ? void 0 : _a.pushMode) != null ? _b : "sms";
+      const mode = "sms";
       const phonePayload = { id: phoneId };
-      if (((_c = this._trustedPhone) == null ? void 0 : _c.nonFTEU) !== void 0) {
+      if (((_a = this._trustedPhone) == null ? void 0 : _a.nonFTEU) !== void 0) {
         phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
       }
       this._log(

@@ -657,7 +657,7 @@ export default class iCloudService extends EventEmitter {
             // Code sent via SMS — must verify against /verify/phone/securitycode
             // pyiCloud: _validate_sms_code — uses trustedPhoneNumber payload including nonFTEU
             const phoneId = this._smsPhoneNumberId;
-            const mode = this._trustedPhone?.pushMode ?? 'sms';
+            const mode = 'sms';
             const phonePayload: Record<string, unknown> = { id: phoneId };
             if (this._trustedPhone?.nonFTEU !== undefined) {
                 phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
