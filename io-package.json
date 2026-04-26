@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.7.5",
+    "version": "0.7.6",
     "news": {
+      "0.7.6": {
+        "en": "fixed: SMS 2FA verification mode is now always forced to 'sms' — using pushMode from the trusted phone could cause authentication failures",
+        "de": "behoben: SMS-2FA-Verifikationsmodus wird jetzt immer auf 'sms' erzwungen — die Verwendung von pushMode des vertrauenswürdigen Telefons konnte zu Authentifizierungsfehlern führen",
+        "ru": "исправлено: режим проверки SMS 2FA теперь всегда принудительно устанавливается в 'sms' — использование pushMode доверенного телефона могло вызывать ошибки аутентификации",
+        "pt": "corrigido: o modo de verificação SMS 2FA agora é sempre forçado para 'sms' — usar pushMode do telefone confiável podia causar falhas de autenticação",
+        "nl": "opgelost: de verificatiemodus voor SMS 2FA wordt nu altijd geforceerd op 'sms' — het gebruik van pushMode van de vertrouwde telefoon kon authenticatiefouten veroorzaken",
+        "fr": "corrigé : le mode de vérification SMS 2FA est maintenant toujours forcé à 'sms' — l'utilisation de pushMode du téléphone de confiance pouvait provoquer des échecs d'authentification",
+        "it": "corretto: la modalità di verifica SMS 2FA è ora sempre forzata su 'sms' — l'uso di pushMode del telefono attendibile poteva causare errori di autenticazione",
+        "es": "corregido: el modo de verificación SMS 2FA ahora siempre se fuerza a 'sms' — usar pushMode del teléfono de confianza podía causar fallos de autenticación",
+        "pl": "naprawiono: tryb weryfikacji SMS 2FA jest teraz zawsze wymuszany na 'sms' — użycie pushMode zaufanego telefonu mogło powodować błędy uwierzytelniania",
+        "uk": "виправлено: режим перевірки SMS 2FA тепер завжди примусово встановлюється в 'sms' — використання pushMode довіреного телефону могло спричиняти помилки автентифікації",
+        "zh-cn": "修复: SMS 2FA 验证模式现在始终强制设为 'sms' — 使用受信任手机的 pushMode 可能导致身份验证失败"
+      },
       "0.7.5": {
         "en": "changed: Removed unused keytar dependency and code.\nfixed: jsonConfig warnings / all repochecker error, warnings\ndonate link",
         "de": "geändert: Nicht genutzte Keytar-Abhängigkeit und Code entfernt.\nbehoben: jsonConfig warnungen / alle repochecker fehler, warnungen\nlink verraten",
@@ -80,19 +93,6 @@
         "pl": "BREAKING CHANGE Kontakty: ścieżka zmieniona z contacts.<id>.<pole> na contacts.list.<id>.<pole> — istniejące stany są automatycznie czyszczone przy następnym uruchomieniu\nKontakty: opcja stany urodzinowe — tworzy stany JSON contacts.birthdays.today/tomorrow/next7days ze wszystkimi polami kontaktu i obliczonym wiekiem\nKontakty: opcja filtrowania grup — jako stany zapisywane są tylko kontakty z wymienionych grup; pozostaw puste dla wszystkich\nDrive Sync: oba tryby synchronizacji (katalog i BackItUp) teraz w pełni rekurencyjne — podkatalogi automatycznie synchronizowane, tworzone i usuwane\nPoprawka SMS MFA 412: nagłówek X-Apple-Auth-Attributes jest teraz przechwytywany i przekazywany we wszystkich żądaniach MFA",
         "uk": "BREAKING CHANGE Контакти: шлях змінено з contacts.<id>.<поле> на contacts.list.<id>.<поле> — наявні стани автоматично очищаються при наступному запуску\nКонтакти: опція стани днів народження — створює JSON-стани contacts.birthdays.today/tomorrow/next7days з усіма полями контакту та обчисленим віком\nКонтакти: опція фільтрація груп — як стани записуються лише контакти з вказаних груп; залиште порожнім для всіх\nDrive Sync: обидва режими синхронізації (каталог і BackItUp) тепер повністю рекурсивні — підкаталоги автоматично синхронізуються, створюються та видаляються\nВиправлення SMS MFA 412: заголовок X-Apple-Auth-Attributes тепер захоплюється та передається у всі запити MFA",
         "zh-cn": "破坏性变更 联系人：路径从 contacts.<id>.<字段> 更改为 contacts.list.<id>.<字段> — 现有状态将在下次启动时自动清理\n联系人：生日状态选项 — 创建 contacts.birthdays.today/tomorrow/next7days JSON 状态，包含所有联系人字段及计算年龄\n联系人：筛选群组选项 — 仅将所列群组中的联系人写入状态；留空则写入所有联系人\nDrive Sync：两种同步模式（目录和 BackItUp）现已完全递归 — 子目录自动同步、创建和删除\n修复 SMS MFA 412：X-Apple-Auth-Attributes 请求头现已在所有 MFA 请求中捕获并转发"
-      },
-      "0.6.5": {
-        "en": "Drive Sync admin UI: both the iCloud Drive folder browser and the local folder browser are now scrollable (list capped at 300 px height)",
-        "de": "Laufwerk Sync admin UI: Sowohl der iCloud Drive-Ordner-Browser als auch der lokale Ordner-Browser sind jetzt blätterbar (Liste mit 300 px Höhe)",
-        "ru": "Drive Sync admin UI: как браузер папок iCloud Drive, так и локальный браузер папок теперь прокручиваются (список ограничен высотой 300 пикселей)",
-        "pt": "A interface de administração do Drive Sync: tanto o navegador de pastas do iCloud Drive como o navegador de pastas local são agora roláveis (lista com tampa de 300 px height)",
-        "nl": "Drive Sync admin UI: zowel de iCloud Drive map browser als de lokale map browser zijn nu scrollable (lijst afgetopt op 300 px hoogte)",
-        "fr": "Drive Sync admin UI: le navigateur de dossier iCloud Drive et le navigateur de dossier local sont maintenant défilants (liste plafonnée à 300 px hauteur)",
-        "it": "Drive Sync admin UI: sia il browser della cartella iCloud Drive che il browser della cartella locale sono ora pergamenabili (elenco incassato a 300 px di altezza)",
-        "es": "Drive Sync admin UI: tanto el navegador de carpetas iCloud Drive como el navegador de carpetas locales son ahora desplazables (lista capped a 300 px de altura)",
-        "pl": "Drive Sync admin UI: zarówno przeglądarka folderów iCloud Drive jak i przeglądarka folderów lokalnych są teraz przewijane (lista jest ograniczona do 300 px wysokości)",
-        "uk": "Привод Sync адміністратор UI: як веб-переглядач папок iCloud, так і локальний браузер папок тепер прокручуються (список, що захоплюється на висоті 300 px)",
-        "zh-cn": "Drive Sync admin UI: iCloud Drive 文件夹浏览器和本地文件夹浏览器现在都可以滚动(列表封顶, 高度300 px) "
       }
     },
     "titleLang": {
