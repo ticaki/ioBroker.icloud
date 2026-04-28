@@ -46,6 +46,9 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+- (ticaki) Extends an ioBroker object only when the provided partial object has actually changed
+
 ### 0.7.6 (2026-04-26)
 * (ticaki) fixed: SMS 2FA verification mode is now always forced to `sms` — using `pushMode` from the trusted phone could cause authentication failures
 

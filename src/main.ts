@@ -81,6 +81,7 @@ const FINDMY_DEVICE_STATES: Array<{
     { id: 'isConsideredAccessory', name: 'Is Accessory', type: 'boolean', role: 'indicator' },
     { id: 'deviceWithYou', name: 'Device With You', type: 'boolean', role: 'indicator' },
     { id: 'latitude', name: 'Latitude', type: 'number', role: 'value.gps.latitude' },
+    { id: 'coordinates', name: 'Coordinates', type: 'string', role: 'value.gps' },
     { id: 'longitude', name: 'Longitude', type: 'number', role: 'value.gps.longitude' },
     { id: 'altitude', name: 'Altitude', type: 'number', role: 'value.gps.elevation' },
     { id: 'horizontalAccuracy', name: 'Horizontal Accuracy', type: 'number', role: 'value' },
@@ -336,6 +337,87 @@ class Icloud extends utils.Adapter {
     private externalGeocoder: ExternalGeocoder | null = null;
     /** In-memory cache of last written state values — used to skip unchanged writes after adapter start. */
     private stateCache: Map<string, ioBroker.StateValue> = new Map();
+
+    private readonly extendedObjects = new Map<string, string>();
+
+    /**
+     * Extends an ioBroker object only when the provided partial object has actually changed.
+     *
+     * This override is mainly used as a protection against repeatedly writing identical
+     * object definitions. Some generated code paths, especially Claude-generated adapter
+     * logic, may recreate and pass new `objPart` objects on every cycle even though their
+     * effective content is unchanged. Calling `extendObject` for every recreated object
+     * would still trigger unnecessary ioBroker object writes.
+     *
+     * To avoid this, the method serializes the provided `objPart` and stores the last
+     * serialized version per object ID. If the same ID is extended again with identical
+     * serialized content, the write is skipped and the method returns successfully without
+     * calling the parent adapter implementation.
+     *
+     * This reduces unnecessary object DB writes, avoids avoidable adapter workload, and
+     * prevents excessive object-change events caused by repeatedly extending unchanged
+     * objects.
+     *
+     * Important: the comparison is based on `JSON.stringify(objPart)`. This is fast and
+     * sufficient as long as the object structure is created with a stable property order.
+     * If the same logical object is created with different key ordering, it may still be
+     * treated as changed.
+     *
+     * @param id - The ioBroker object ID to extend.
+     * @param objPart - The partial object definition that should be applied.
+     * @param optionsOrCallback - Optional extend options or callback.
+     * @param callback - Optional callback when options are provided.
+     * @returns A promise for promise-based calls, or `void` for callback-based calls.
+     */
+    extendObject(id: string, objPart: ioBroker.PartialObject): ioBroker.SetObjectPromise;
+    extendObject(id: string, objPart: ioBroker.PartialObject, callback: ioBroker.SetObjectCallback): void;
+    extendObject(
+        id: string,
+        objPart: ioBroker.PartialObject,
+        options: ioBroker.ExtendObjectOptions,
+    ): ioBroker.SetObjectPromise;
+    extendObject(
+        id: string,
+        objPart: ioBroker.PartialObject,
+        options: ioBroker.ExtendObjectOptions,
+        callback: ioBroker.SetObjectCallback,
+    ): void;
+
+    extendObject(
+        id: string,
+        objPart: ioBroker.PartialObject,
+        optionsOrCallback?: ioBroker.ExtendObjectOptions | ioBroker.SetObjectCallback,
+        callback?: ioBroker.SetObjectCallback,
+    ): ioBroker.SetObjectPromise | void {
+        const serialized = JSON.stringify(objPart);
+        const previous = this.extendedObjects.get(id);
+
+        const options = typeof optionsOrCallback === 'function' ? undefined : optionsOrCallback;
+        const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
+
+        if (previous === serialized) {
+            if (cb) {
+                cb(null);
+                return;
+            }
+            return Promise.resolve({ id });
+        }
+        this.extendedObjects.set(id, serialized);
+        this.log.debug(`Extending object ${id} with ${serialized} (previous: ${previous ?? 'none'})`);
+        if (cb) {
+            if (options) {
+                super.extendObject(id, objPart, options, cb);
+                return;
+            }
+            super.extendObject(id, objPart, cb);
+            return;
+        }
+
+        if (options) {
+            return super.extendObject(id, objPart, options);
+        }
+        return super.extendObject(id, objPart);
+    }
 
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({
@@ -1193,6 +1275,7 @@ class Icloud extends utils.Adapter {
                     fmlyShare: d.fmlyShare,
                     isConsideredAccessory: d.isConsideredAccessory,
                     deviceWithYou: d.deviceWithYou,
+                    coordinates: loc ? `${loc.latitude};${loc.longitude}` : null,
                     latitude: loc?.latitude ?? null,
                     longitude: loc?.longitude ?? null,
                     altitude: loc?.altitude ?? null,

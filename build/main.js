@@ -82,6 +82,7 @@ const FINDMY_DEVICE_STATES = [
   { id: "isConsideredAccessory", name: "Is Accessory", type: "boolean", role: "indicator" },
   { id: "deviceWithYou", name: "Device With You", type: "boolean", role: "indicator" },
   { id: "latitude", name: "Latitude", type: "number", role: "value.gps.latitude" },
+  { id: "coordinates", name: "Coordinates", type: "string", role: "value.gps" },
   { id: "longitude", name: "Longitude", type: "number", role: "value.gps.longitude" },
   { id: "altitude", name: "Altitude", type: "number", role: "value.gps.elevation" },
   { id: "horizontalAccuracy", name: "Horizontal Accuracy", type: "number", role: "value" },
@@ -238,6 +239,34 @@ class Icloud extends utils.Adapter {
   externalGeocoder = null;
   /** In-memory cache of last written state values — used to skip unchanged writes after adapter start. */
   stateCache = /* @__PURE__ */ new Map();
+  extendedObjects = /* @__PURE__ */ new Map();
+  extendObject(id, objPart, optionsOrCallback, callback) {
+    const serialized = JSON.stringify(objPart);
+    const previous = this.extendedObjects.get(id);
+    const options = typeof optionsOrCallback === "function" ? void 0 : optionsOrCallback;
+    const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
+    if (previous === serialized) {
+      if (cb) {
+        cb(null);
+        return;
+      }
+      return Promise.resolve({ id });
+    }
+    this.extendedObjects.set(id, serialized);
+    this.log.debug(`Extending object ${id} with ${serialized} (previous: ${previous != null ? previous : "none"})`);
+    if (cb) {
+      if (options) {
+        super.extendObject(id, objPart, options, cb);
+        return;
+      }
+      super.extendObject(id, objPart, cb);
+      return;
+    }
+    if (options) {
+      return super.extendObject(id, objPart, options);
+    }
+    return super.extendObject(id, objPart);
+  }
   constructor(options = {}) {
     super({
       ...options,
@@ -984,6 +1013,7 @@ class Icloud extends utils.Adapter {
           fmlyShare: d.fmlyShare,
           isConsideredAccessory: d.isConsideredAccessory,
           deviceWithYou: d.deviceWithYou,
+          coordinates: loc ? `${loc.latitude};${loc.longitude}` : null,
           latitude: (_k = loc == null ? void 0 : loc.latitude) != null ? _k : null,
           longitude: (_l = loc == null ? void 0 : loc.longitude) != null ? _l : null,
           altitude: (_m = loc == null ? void 0 : loc.altitude) != null ? _m : null,
