@@ -86,6 +86,23 @@
                     "default": 5,
                     "disabled": "!data.findMyEnabled"
                 },
+                "findMyIntervalExpert": {
+                    "type": "number",
+                    "label": "Experimental FindMe Interval (seconds)",
+                    "help": "No guarantee: Set the normal interval to 120 to enable this field. min: 30, max: 120, step: 1",
+                    "newLine": false,
+                    "expertMode": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 30,
+                    "max": 120,
+                    "step": 1,
+                    "default": 30,
+                    "disabled": "!data.findMyEnabled || data.findMyInterval !== 120"
+                },
                 "locationPoints": {
                     "type": "table",
                     "label": "locationPoints",

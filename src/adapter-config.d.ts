@@ -44,6 +44,7 @@ declare global {
 			notesInterval: number;
 			accountStorageEnabled: boolean;
 			accountStorageInterval: number;
+            findMyIntervalExpert: number;
 		}
 	}
 }
