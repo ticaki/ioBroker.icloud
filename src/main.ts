@@ -1484,16 +1484,8 @@ class Icloud extends utils.Adapter {
             this.findMyRefreshTimer = null;
         }
         let intervalMin = Math.floor(this.config.findMyInterval ?? 15);
-        if (!Number.isFinite(intervalMin) || intervalMin < 1) {
-            this.log.warn(
-                `FindMy interval is ${this.config.findMyInterval} — value below 1 minute, falling back to 5 minutes`,
-            );
-            intervalMin = 5;
-        } else if (intervalMin > 120) {
-            this.log.warn(`FindMy interval is ${intervalMin} minutes — clamping to 121 minutes`);
-            intervalMin = 121;
-        } else if (
-            intervalMin === 120 &&
+        if (
+            this.config.findMyIntervalExpertEnabled &&
             this.config.findMyIntervalExpert != null &&
             Number.isFinite(this.config.findMyIntervalExpert)
         ) {
@@ -1505,8 +1497,16 @@ class Icloud extends utils.Adapter {
                 );
             }
             this.log.warn(
-                `FindMy expert interval: (${this.config.findMyIntervalExpert} seconds). Be warned — setting very low intervals may cause Apple to temporarily block your account!`,
+                `FindMy expert interval active: ${this.config.findMyIntervalExpert} seconds. Not recommended — a 1-minute interval is well-tested. Apple rate limits are unknown; very short intervals may temporarily block your account.`,
             );
+        } else if (!Number.isFinite(intervalMin) || intervalMin < 1) {
+            this.log.warn(
+                `FindMy interval is ${this.config.findMyInterval} — value below 1 minute, falling back to 5 minutes`,
+            );
+            intervalMin = 5;
+        } else if (intervalMin > 120) {
+            this.log.warn(`FindMy interval is ${intervalMin} minutes — clamping to 120 minutes`);
+            intervalMin = 120;
         }
         const INTERVAL_MS = intervalMin * 60 * 1000;
         const schedule = (): void => {
@@ -1521,7 +1521,7 @@ class Icloud extends utils.Adapter {
             }, INTERVAL_MS);
         };
         schedule();
-        this.log.debug('FindMy refresh scheduled every 15 min');
+        this.log.debug(`FindMy refresh scheduled every ${INTERVAL_MS / 1000} seconds`);
     }
 
     // ── Calendar helpers ──────────────────────────────────────────────────────

@@ -84,14 +84,26 @@
                     "max": 120,
                     "step": 1,
                     "default": 5,
+                    "disabled": "!data.findMyEnabled || !!data.findMyIntervalExpertEnabled"
+                },
+                "findMyIntervalExpertEnabled": {
+                    "type": "checkbox",
+                    "label": "findMyIntervalExpertEnabled",
+                    "help": "findMyIntervalExpertEnabledHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": false,
                     "disabled": "!data.findMyEnabled"
                 },
                 "findMyIntervalExpert": {
                     "type": "number",
-                    "label": "Experimental FindMe Interval (seconds)",
-                    "help": "No guarantee: Set the normal interval to 120 to enable this field. min: 30, max: 120, step: 1",
+                    "label": "findMyIntervalExpert",
+                    "help": "findMyIntervalExpertHelp",
                     "newLine": false,
-                    "expertMode": true,
                     "xs": 12,
                     "sm": 6,
                     "md": 4,
@@ -100,8 +112,9 @@
                     "min": 30,
                     "max": 120,
                     "step": 1,
-                    "default": 30,
-                    "disabled": "!data.findMyEnabled || data.findMyInterval !== 120"
+                    "default": 60,
+                    "hidden": "!data.findMyIntervalExpertEnabled",
+                    "disabled": "!data.findMyEnabled || !data.findMyIntervalExpertEnabled"
                 },
                 "locationPoints": {
                     "type": "table",

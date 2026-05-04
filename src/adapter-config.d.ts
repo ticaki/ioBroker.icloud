@@ -45,6 +45,7 @@ declare global {
 			accountStorageEnabled: boolean;
 			accountStorageInterval: number;
             findMyIntervalExpert: number;
+            findMyIntervalExpertEnabled: boolean;
 		}
 	}
 }
