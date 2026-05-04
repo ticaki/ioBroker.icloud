@@ -433,19 +433,33 @@ function generateUUID(): string {
         .toUpperCase();
 }
 
+interface CrdtDecodeResult {
+    /** Decoded plain text. Empty string on any failure. */
+    text: string;
+    /**
+     * True when the input had bytes that did not decompress as zlib/gzip and
+     * also failed protobuf parsing — a strong signal that the field is
+     * end-to-end encrypted (Advanced Data Protection) rather than a normal
+     * obfuscated CRDT document.
+     */
+    looksEncrypted: boolean;
+}
+
 /**
- * Decode a CRDT document (TitleDocument / NotesDocument) and return the plain text.
+ * Decode a CRDT document (TitleDocument / NotesDocument) and return the plain
+ * text plus a heuristic flag indicating whether the input looks encrypted.
  *
- * Returns an empty string on any failure. Failures are reported via the optional
- * `debugLog` callback at debug level — never as warnings or errors — so that
- * callers can provide context (field name, record ID) without alarming users.
+ * Returns `{ text: '', looksEncrypted: false }` on missing input. Failures are
+ * reported via the optional `debugLog` callback at debug level — never as
+ * warnings or errors — so callers can provide context (field name, record ID)
+ * without alarming users.
  *
  * @param value - base64-encoded string, Uint8Array, or plain string
  * @param debugLog - optional callback invoked with a diagnostic message on failure
  */
-function decodeCrdtDocument(value: unknown, debugLog?: (msg: string) => void): string {
+function decodeCrdtDocument(value: unknown, debugLog?: (msg: string) => void): CrdtDecodeResult {
     if (value === null || value === undefined) {
-        return '';
+        return { text: '', looksEncrypted: false };
     }
 
     let data: Buffer;
@@ -460,15 +474,15 @@ function decodeCrdtDocument(value: unknown, debugLog?: (msg: string) => void): s
             data = Buffer.from(b64, 'base64');
         } catch (e) {
             debugLog?.(`base64 decode failed: ${(e as Error).message} — raw(32): ${String(value).slice(0, 32)}`);
-            return '';
+            return { text: '', looksEncrypted: false };
         }
     } else if (value instanceof Uint8Array || Buffer.isBuffer(value)) {
         data = Buffer.from(value);
     } else {
         if (typeof value === 'object') {
-            return JSON.stringify(value);
+            return { text: JSON.stringify(value), looksEncrypted: false };
         }
-        return `${value as string | number | boolean}`;
+        return { text: `${value as string | number | boolean}`, looksEncrypted: false };
     }
 
     let decompressed = false;
@@ -492,18 +506,26 @@ function decodeCrdtDocument(value: unknown, debugLog?: (msg: string) => void): s
     }
 
     // Parse protobuf structure
+    let text = '';
+    let parseFailed = false;
     try {
-        const text = parseDocumentProto(data);
+        text = parseDocumentProto(data);
         if (!text) {
+            parseFailed = true;
             debugLog?.(`proto parse returned empty string — bytes(hex, 16): ${data.subarray(0, 16).toString('hex')}`);
         }
-        return text;
     } catch (e) {
+        parseFailed = true;
         debugLog?.(
             `proto parse threw: ${(e as Error).message} — bytes(hex, 16): ${data.subarray(0, 16).toString('hex')}`,
         );
-        return '';
     }
+
+    // Heuristic: bytes were present, neither zlib nor gzip decompression
+    // succeeded, and protobuf parsing also failed → almost certainly E2E
+    // encrypted (ADP) rather than a normal CRDT payload.
+    const looksEncrypted = parseFailed && !decompressed && data.length >= 16;
+    return { text, looksEncrypted };
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -519,6 +541,16 @@ export class iCloudRemindersService {
     private remindersById: Map<string, Reminder> = new Map();
     /** Last sync token — persisted across refreshes for incremental updates. */
     private _syncToken: string | undefined;
+
+    // ── ADP detection counters (cumulative over service lifetime) ─────────────
+    /** Reminder records seen with at least one *Document field. */
+    private recordsSeen = 0;
+    /** Reminder records where TitleDocument or NotesDocument decoded to a non-empty string. */
+    private recordsDecodedNonEmpty = 0;
+    /** Reminder records whose payload looks E2E-encrypted (no zlib/gzip + proto parse failed). */
+    private recordsLookingEncrypted = 0;
+    /** True once we've emitted the ADP warning — prevents repetition per service instance. */
+    private adpWarningEmitted = false;
 
     /** Public: current lists snapshot. */
     get lists(): RemindersList[] {
@@ -706,7 +738,40 @@ export class iCloudRemindersService {
                 `${this.listsById.size} list(s), ${this.remindersById.size} reminder(s) total`,
         );
 
+        this.maybeWarnAboutEncryption();
+
         return recordsIngested > 0;
+    }
+
+    /**
+     * Emit a one-time warning if the heuristic suggests Apple's "Advanced Data
+     * Protection" (ADP) is active on the account: enough records were seen,
+     * none decoded to a non-empty string, and several payloads carried bytes
+     * that were neither zlib/gzip-compressed nor parseable as protobuf — the
+     * fingerprint of E2E-encrypted CloudKit fields the adapter cannot decrypt.
+     */
+    private maybeWarnAboutEncryption(): void {
+        if (this.adpWarningEmitted) {
+            return;
+        }
+        if (this.recordsSeen < 5) {
+            return;
+        }
+        if (this.recordsDecodedNonEmpty > 0) {
+            return;
+        }
+        if (this.recordsLookingEncrypted < 3) {
+            return;
+        }
+        this.adpWarningEmitted = true;
+        this.service._log(
+            2 /* Warning */,
+            '[reminders-ck] Reminder-Inhalte konnten nicht entschlüsselt werden ' +
+                `(${this.recordsLookingEncrypted}/${this.recordsSeen} Records sehen end-to-end-verschlüsselt aus). ` +
+                'Vermutliche Ursache: "Erweiterter Datenschutz" (Advanced Data Protection / ADP) ist im Apple-Account aktiv. ' +
+                'Diese Daten sind nur auf den Apple-Geräten lesbar und können vom Adapter nicht entschlüsselt werden. ' +
+                'Lösung: ADP unter iCloud-Einstellungen → "Erweiterter Datenschutz" deaktivieren.',
+        );
     }
 
     /**
@@ -758,8 +823,26 @@ export class iCloudRemindersService {
                 );
             }
 
-            const title = titleDoc ? decodeCrdtDocument(titleDoc, makeDebugLog('TitleDocument')) : '';
-            const desc = notesDoc ? decodeCrdtDocument(notesDoc, makeDebugLog('NotesDocument')) : '';
+            const titleResult = titleDoc
+                ? decodeCrdtDocument(titleDoc, makeDebugLog('TitleDocument'))
+                : { text: '', looksEncrypted: false };
+            const descResult = notesDoc
+                ? decodeCrdtDocument(notesDoc, makeDebugLog('NotesDocument'))
+                : { text: '', looksEncrypted: false };
+            const title = titleResult.text;
+            const desc = descResult.text;
+
+            // Track ADP heuristic — only count records that actually had bytes
+            // to decode (otherwise an empty account would inflate the counter).
+            if (titleDoc || notesDoc) {
+                this.recordsSeen++;
+                if (title || desc) {
+                    this.recordsDecodedNonEmpty++;
+                }
+                if (titleResult.looksEncrypted || descResult.looksEncrypted) {
+                    this.recordsLookingEncrypted++;
+                }
+            }
 
             if (!title && titleDoc) {
                 this.service._log(

@@ -285,7 +285,7 @@ function generateUUID() {
 function decodeCrdtDocument(value, debugLog) {
   var _a, _b;
   if (value === null || value === void 0) {
-    return "";
+    return { text: "", looksEncrypted: false };
   }
   let data;
   if (typeof value === "string") {
@@ -298,15 +298,15 @@ function decodeCrdtDocument(value, debugLog) {
       data = Buffer.from(b64, "base64");
     } catch (e) {
       debugLog == null ? void 0 : debugLog(`base64 decode failed: ${e.message} \u2014 raw(32): ${String(value).slice(0, 32)}`);
-      return "";
+      return { text: "", looksEncrypted: false };
     }
   } else if (value instanceof Uint8Array || Buffer.isBuffer(value)) {
     data = Buffer.from(value);
   } else {
     if (typeof value === "object") {
-      return JSON.stringify(value);
+      return { text: JSON.stringify(value), looksEncrypted: false };
     }
-    return `${value}`;
+    return { text: `${value}`, looksEncrypted: false };
   }
   let decompressed = false;
   try {
@@ -324,18 +324,22 @@ function decodeCrdtDocument(value, debugLog) {
       `decompression skipped (not zlib/gzip) \u2014 treating as raw proto, byte(0): 0x${(_b = (_a = data[0]) == null ? void 0 : _a.toString(16)) != null ? _b : "??"}`
     );
   }
+  let text = "";
+  let parseFailed = false;
   try {
-    const text = parseDocumentProto(data);
+    text = parseDocumentProto(data);
     if (!text) {
+      parseFailed = true;
       debugLog == null ? void 0 : debugLog(`proto parse returned empty string \u2014 bytes(hex, 16): ${data.subarray(0, 16).toString("hex")}`);
     }
-    return text;
   } catch (e) {
+    parseFailed = true;
     debugLog == null ? void 0 : debugLog(
       `proto parse threw: ${e.message} \u2014 bytes(hex, 16): ${data.subarray(0, 16).toString("hex")}`
     );
-    return "";
   }
+  const looksEncrypted = parseFailed && !decompressed && data.length >= 16;
+  return { text, looksEncrypted };
 }
 class iCloudRemindersService {
   service;
@@ -347,6 +351,15 @@ class iCloudRemindersService {
   remindersById = /* @__PURE__ */ new Map();
   /** Last sync token — persisted across refreshes for incremental updates. */
   _syncToken;
+  // ── ADP detection counters (cumulative over service lifetime) ─────────────
+  /** Reminder records seen with at least one *Document field. */
+  recordsSeen = 0;
+  /** Reminder records where TitleDocument or NotesDocument decoded to a non-empty string. */
+  recordsDecodedNonEmpty = 0;
+  /** Reminder records whose payload looks E2E-encrypted (no zlib/gzip + proto parse failed). */
+  recordsLookingEncrypted = 0;
+  /** True once we've emitted the ADP warning — prevents repetition per service instance. */
+  adpWarningEmitted = false;
   /** Public: current lists snapshot. */
   get lists() {
     return [...this.listsById.values()];
@@ -514,7 +527,34 @@ class iCloudRemindersService {
       0,
       `[reminders-ck] refresh: ${isIncremental ? "incremental" : "full"}, ${page} page(s), ${recordsIngested} record(s) ingested, ${this.listsById.size} list(s), ${this.remindersById.size} reminder(s) total`
     );
+    this.maybeWarnAboutEncryption();
     return recordsIngested > 0;
+  }
+  /**
+   * Emit a one-time warning if the heuristic suggests Apple's "Advanced Data
+   * Protection" (ADP) is active on the account: enough records were seen,
+   * none decoded to a non-empty string, and several payloads carried bytes
+   * that were neither zlib/gzip-compressed nor parseable as protobuf — the
+   * fingerprint of E2E-encrypted CloudKit fields the adapter cannot decrypt.
+   */
+  maybeWarnAboutEncryption() {
+    if (this.adpWarningEmitted) {
+      return;
+    }
+    if (this.recordsSeen < 5) {
+      return;
+    }
+    if (this.recordsDecodedNonEmpty > 0) {
+      return;
+    }
+    if (this.recordsLookingEncrypted < 3) {
+      return;
+    }
+    this.adpWarningEmitted = true;
+    this.service._log(
+      2,
+      `[reminders-ck] Reminder-Inhalte konnten nicht entschl\xFCsselt werden (${this.recordsLookingEncrypted}/${this.recordsSeen} Records sehen end-to-end-verschl\xFCsselt aus). Vermutliche Ursache: "Erweiterter Datenschutz" (Advanced Data Protection / ADP) ist im Apple-Account aktiv. Diese Daten sind nur auf den Apple-Ger\xE4ten lesbar und k\xF6nnen vom Adapter nicht entschl\xFCsselt werden. L\xF6sung: ADP unter iCloud-Einstellungen \u2192 "Erweiterter Datenschutz" deaktivieren.`
+    );
   }
   /**
    * Route a single CloudKit record into the in-memory maps.
@@ -559,8 +599,19 @@ class iCloudRemindersService {
           `[reminders-ck] Reminder ${rec.recordName}: TitleDocument missing \u2014 available fields: ${Object.keys(fields).join(", ")}`
         );
       }
-      const title = titleDoc ? decodeCrdtDocument(titleDoc, makeDebugLog("TitleDocument")) : "";
-      const desc = notesDoc ? decodeCrdtDocument(notesDoc, makeDebugLog("NotesDocument")) : "";
+      const titleResult = titleDoc ? decodeCrdtDocument(titleDoc, makeDebugLog("TitleDocument")) : { text: "", looksEncrypted: false };
+      const descResult = notesDoc ? decodeCrdtDocument(notesDoc, makeDebugLog("NotesDocument")) : { text: "", looksEncrypted: false };
+      const title = titleResult.text;
+      const desc = descResult.text;
+      if (titleDoc || notesDoc) {
+        this.recordsSeen++;
+        if (title || desc) {
+          this.recordsDecodedNonEmpty++;
+        }
+        if (titleResult.looksEncrypted || descResult.looksEncrypted) {
+          this.recordsLookingEncrypted++;
+        }
+      }
       if (!title && titleDoc) {
         this.service._log(
           0,

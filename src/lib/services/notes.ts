@@ -172,17 +172,32 @@ function parseNoteStoreProto(buf: Buffer): string {
     return '';
 }
 
+interface NoteBodyDecodeResult {
+    /** Decoded note plain text. Empty string on any failure. */
+    text: string;
+    /**
+     * True when the input had bytes that did not decompress as zlib/gzip and
+     * also failed protobuf parsing — a strong signal that the field is
+     * end-to-end encrypted (Advanced Data Protection) rather than a normal
+     * obfuscated NoteStore payload.
+     */
+    looksEncrypted: boolean;
+}
+
 /**
  * Decode the TextDataEncrypted field from iCloud Notes.
  *
- * Pipeline: base64 → gzip/zlib decompress → protobuf (NoteStoreProto)
+ * Pipeline: base64 → gzip/zlib decompress → protobuf (NoteStoreProto).
+ *
+ * Returns plain text plus a heuristic flag indicating whether the input looks
+ * end-to-end encrypted (cannot be decoded by the adapter).
  *
  * @param value - base64-encoded string, Uint8Array, or raw bytes
  * @param debugLog - optional callback for diagnostic messages
  */
-function decodeNoteBody(value: unknown, debugLog?: (msg: string) => void): string {
+function decodeNoteBody(value: unknown, debugLog?: (msg: string) => void): NoteBodyDecodeResult {
     if (value === null || value === undefined) {
-        return '';
+        return { text: '', looksEncrypted: false };
     }
 
     let data: Buffer;
@@ -196,31 +211,42 @@ function decodeNoteBody(value: unknown, debugLog?: (msg: string) => void): strin
             data = Buffer.from(b64, 'base64');
         } catch (e) {
             debugLog?.(`base64 decode failed: ${(e as Error).message}`);
-            return '';
+            return { text: '', looksEncrypted: false };
         }
     } else if (value instanceof Uint8Array || Buffer.isBuffer(value)) {
         data = Buffer.from(value);
     } else {
-        return '';
+        return { text: '', looksEncrypted: false };
     }
 
     // Decompress
+    let decompressed = false;
     try {
         data = zlib.gunzipSync(data);
+        decompressed = true;
     } catch {
         try {
             data = zlib.inflateSync(data);
+            decompressed = true;
         } catch {
             // May not be compressed — try raw
         }
     }
 
+    let text = '';
+    let parseFailed = false;
     try {
-        return parseNoteStoreProto(data);
+        text = parseNoteStoreProto(data);
+        if (!text) {
+            parseFailed = true;
+        }
     } catch (e) {
+        parseFailed = true;
         debugLog?.(`proto parse failed: ${(e as Error).message}`);
-        return '';
     }
+
+    const looksEncrypted = parseFailed && !decompressed && data.length >= 16;
+    return { text, looksEncrypted };
 }
 
 // ── CloudKit field helpers ────────────────────────────────────────────────────
@@ -279,6 +305,16 @@ export class iCloudNotesService {
     private notesById: Map<string, NoteSummary> = new Map();
     /** Last sync token for incremental updates. */
     private _syncToken: string | undefined;
+
+    // ── ADP detection counters (cumulative over service lifetime) ─────────────
+    /** Note records seen with a TextDataEncrypted payload (excluding password-protected notes). */
+    private recordsSeen = 0;
+    /** Note records whose body decoded to a non-empty string. */
+    private recordsDecodedNonEmpty = 0;
+    /** Note records whose payload looks E2E-encrypted (no zlib/gzip + proto parse failed). */
+    private recordsLookingEncrypted = 0;
+    /** True once we've emitted the ADP warning — prevents repetition per service instance. */
+    private adpWarningEmitted = false;
 
     /** Public: current folders snapshot. */
     get folders(): NoteFolder[] {
@@ -458,7 +494,40 @@ export class iCloudNotesService {
                 `${this.foldersById.size} folder(s), ${this.notesById.size} note(s) total`,
         );
 
+        this.maybeWarnAboutEncryption();
+
         return recordsIngested > 0;
+    }
+
+    /**
+     * Emit a one-time warning if the heuristic suggests Apple's "Advanced Data
+     * Protection" (ADP) is active on the account: enough notes were seen, none
+     * decoded to a non-empty body, and several payloads carried bytes that
+     * were neither zlib/gzip-compressed nor parseable as protobuf — the
+     * fingerprint of E2E-encrypted CloudKit fields the adapter cannot decrypt.
+     */
+    private maybeWarnAboutEncryption(): void {
+        if (this.adpWarningEmitted) {
+            return;
+        }
+        if (this.recordsSeen < 5) {
+            return;
+        }
+        if (this.recordsDecodedNonEmpty > 0) {
+            return;
+        }
+        if (this.recordsLookingEncrypted < 3) {
+            return;
+        }
+        this.adpWarningEmitted = true;
+        this.service._log(
+            2 /* Warning */,
+            '[notes-ck] Notiz-Inhalte konnten nicht entschlüsselt werden ' +
+                `(${this.recordsLookingEncrypted}/${this.recordsSeen} Notizen sehen end-to-end-verschlüsselt aus). ` +
+                'Vermutliche Ursache: "Erweiterter Datenschutz" (Advanced Data Protection / ADP) ist im Apple-Account aktiv. ' +
+                'Diese Daten sind nur auf den Apple-Geräten lesbar und können vom Adapter nicht entschlüsselt werden. ' +
+                'Lösung: ADP unter iCloud-Einstellungen → "Erweiterter Datenschutz" deaktivieren.',
+        );
     }
 
     /**
@@ -527,7 +596,18 @@ export class iCloudNotesService {
         if (!isLocked) {
             const rawBody = getFieldValue(fields, 'TextDataEncrypted');
             if (rawBody) {
-                text = decodeNoteBody(rawBody, makeDebugLog('TextDataEncrypted')) || null;
+                const bodyResult = decodeNoteBody(rawBody, makeDebugLog('TextDataEncrypted'));
+                text = bodyResult.text || null;
+
+                // Track ADP heuristic — password-protected notes are excluded
+                // because their encryption is intentional (user passcode), not ADP.
+                this.recordsSeen++;
+                if (bodyResult.text) {
+                    this.recordsDecodedNonEmpty++;
+                }
+                if (bodyResult.looksEncrypted) {
+                    this.recordsLookingEncrypted++;
+                }
             }
         }
 
