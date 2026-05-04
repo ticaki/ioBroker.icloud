@@ -246,11 +246,12 @@ class Icloud extends utils.Adapter {
     const options = typeof optionsOrCallback === "function" ? void 0 : optionsOrCallback;
     const cb = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
     if (previous === serialized) {
+      const fullId = `${this.namespace}.${id}`;
       if (cb) {
-        cb(null);
+        cb(null, { id: fullId });
         return;
       }
-      return Promise.resolve({ id });
+      return Promise.resolve({ id: fullId });
     }
     this.extendedObjects.set(id, serialized);
     this.log.debug(`Extending object ${id} with ${serialized} (previous: ${previous != null ? previous : "none"})`);
