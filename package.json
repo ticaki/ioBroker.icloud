@@ -41,7 +41,7 @@
     "@iobroker/eslint-config": "^2.3.4",
     "@iobroker/testing": "^5.2.2",
     "@tsconfig/node22": "^22.0.5",
-    "@types/node": "^22.10.0",
+    "@types/node": "^22.19.20",
     "@types/tough-cookie": "^4.0.5",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
