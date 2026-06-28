@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "0.7.7",
+    "version": "1.0.0",
     "news": {
+      "1.0.0": {
+        "en": "New: FIDO2 security-key (passkey) MFA — sign in with a hardware security key directly from the admin panel, with a live localized status. Fixed: syncMap now preserves existing object ACLs (read-merge-write). Changed: internal waits and the geocoder reworked for a clean adapter unload. Fixed: ioBroker repochecker findings.",
+        "de": "Neu: FIDO2-Sicherheitsschlüssel-MFA (Passkey) — Anmeldung mit einem Hardware-Sicherheitsschlüssel direkt aus dem Admin-Panel, mit einem live lokalisierten Status. Behoben: syncMap behält bestehende Objekt-ACLs bei (Read-Merge-Write). Geändert: interne Wartezeiten und der Geocoder wurden für ein sauberes Entladen des Adapters überarbeitet. Behoben: ioBroker-Repochecker-Hinweise.",
+        "ru": "Новое: MFA с аппаратным ключом безопасности FIDO2 (passkey) — вход с помощью аппаратного ключа безопасности прямо из панели администратора с локализованным статусом в реальном времени. Исправлено: syncMap теперь сохраняет существующие ACL объектов (read-merge-write). Изменено: внутренние задержки и геокодер переработаны для корректной выгрузки адаптера. Исправлено: замечания repochecker ioBroker.",
+        "pt": "Novo: MFA com chave de segurança FIDO2 (passkey) — faça login com uma chave de segurança de hardware diretamente no painel de administração, com um status localizado em tempo real. Corrigido: syncMap agora preserva as ACLs de objetos existentes (read-merge-write). Alterado: as esperas internas e o geocodificador foram reformulados para um descarregamento limpo do adaptador. Corrigido: avisos do repochecker do ioBroker.",
+        "nl": "Nieuw: FIDO2-beveiligingssleutel-MFA (passkey) — log in met een hardware-beveiligingssleutel rechtstreeks vanuit het admin-paneel, met een live gelokaliseerde status. Opgelost: syncMap behoudt nu bestaande object-ACL's (read-merge-write). Gewijzigd: interne wachttijden en de geocoder zijn herzien voor een schone adapter-unload. Opgelost: ioBroker repochecker-meldingen.",
+        "fr": "Nouveau : MFA par clé de sécurité FIDO2 (passkey) — connectez-vous avec une clé de sécurité matérielle directement depuis le panneau d'administration, avec un statut localisé en temps réel. Corrigé : syncMap préserve désormais les ACL d'objets existantes (read-merge-write). Modifié : les attentes internes et le géocodeur ont été retravaillés pour un déchargement propre de l'adaptateur. Corrigé : remarques du repochecker ioBroker.",
+        "it": "Novità: MFA con chiave di sicurezza FIDO2 (passkey) — accedi con una chiave di sicurezza hardware direttamente dal pannello di amministrazione, con uno stato localizzato in tempo reale. Corretto: syncMap ora conserva le ACL degli oggetti esistenti (read-merge-write). Modificato: le attese interne e il geocoder sono stati rielaborati per uno scaricamento pulito dell'adattatore. Corretto: segnalazioni del repochecker di ioBroker.",
+        "es": "Nuevo: MFA con llave de seguridad FIDO2 (passkey) — inicia sesión con una llave de seguridad de hardware directamente desde el panel de administración, con un estado localizado en tiempo real. Corregido: syncMap ahora conserva las ACL de objetos existentes (read-merge-write). Cambiado: las esperas internas y el geocodificador se han rediseñado para una descarga limpia del adaptador. Corregido: avisos del repochecker de ioBroker.",
+        "pl": "Nowość: MFA z kluczem bezpieczeństwa FIDO2 (passkey) — logowanie za pomocą sprzętowego klucza bezpieczeństwa bezpośrednio z panelu administracyjnego, z lokalizowanym statusem na żywo. Naprawiono: syncMap zachowuje teraz istniejące listy ACL obiektów (read-merge-write). Zmieniono: wewnętrzne oczekiwania i geokoder przebudowano w celu czystego wyładowania adaptera. Naprawiono: uwagi repocheckera ioBroker.",
+        "uk": "Нове: MFA з апаратним ключем безпеки FIDO2 (passkey) — вхід за допомогою апаратного ключа безпеки безпосередньо з панелі адміністратора з локалізованим статусом у реальному часі. Виправлено: syncMap тепер зберігає наявні ACL об'єктів (read-merge-write). Змінено: внутрішні очікування та геокодер перероблено для коректного вивантаження адаптера. Виправлено: зауваження repochecker ioBroker.",
+        "zh-cn": "新增：FIDO2 安全密钥（passkey）多因素认证 — 直接在管理面板中使用硬件安全密钥登录，并显示实时本地化状态。修复：syncMap 现在会保留现有对象的 ACL（读取-合并-写入）。变更：重新设计了内部等待和地理编码器，以实现适配器的干净卸载。修复：ioBroker repochecker 提示。"
+      },
       "0.7.7": {
         "en": "Extends an ioBroker object only when the provided partial object has actually changed",
         "de": "Erweitert ein ioBroker-Objekt nur, wenn sich das bereitgestellte Teilobjekt tatsächlich geändert hat",
@@ -80,19 +93,6 @@
         "pl": "stałe: sms 2fa",
         "uk": "фіксована: смс 2fa",
         "zh-cn": "固定数:sms 2fa"
-      },
-      "0.7.1": {
-        "en": "Calendar: new `queryCalendarEvents` sendTo command — fetches events for an arbitrary date range (including past dates); automatically splits requests into one-month chunks to comply with Apple's API limit; all raw Apple fields are included in the response; results are also written to `calendar.query` (role=json, q=0x01)",
-        "de": "Kalender: neue `queryCalendarEvents` sendTo-Befehl — fragt Ereignisse für einen beliebigen Datumsbereich ab (einschließlich vergangener Termine); teilt Anfragen automatisch in einmonatige Abschnitte, um die API-Grenze von Apple einzuhalten; alle rohen Apple-Felder sind in der Antwort enthalten; Ergebnisse werden auch in `calendar.query` geschrieben (role=json, q=0x01)",
-        "ru": "Календарь: новая команда «queryCalendarEvents» sendTo — отслеживает события для произвольного диапазона дат (включая прошлые даты); автоматически разделяет запросы на месячные куски, чтобы соответствовать пределу API Apple; все необработанные поля Apple включены в ответ; результаты также написаны на «calendar.query» (роль = json, q = 0x01)",
-        "pt": "Calendário: novo `queryCalendarEvents` sendTo command — fetches events for arbitrary date range (inclusive datas passadas); automaticamente divide os pedidos em blocos de um mês para cumprir o limite da API da Apple; todos os campos da Apple brutos estão incluídos na resposta; os resultados também são escritos para `calendar.query` (role=json, q=0x01)",
-        "nl": "Kalender: nieuwe kalenderCalendarEvents",
-        "fr": "Calendrier: nouvelle commande `queryCalendarEvents` sendTo — récupère les événements pour une plage de dates arbitraire (y compris les dates passées); divise automatiquement les requêtes en morceaux d'un mois pour respecter la limite d'API d'Apple; tous les champs d'Apple bruts sont inclus dans la réponse; les résultats sont également écrits à `calendar.query` (role=json, q=0x01)",
-        "it": "Calendario: nuovo `queryCalendarEvents` sendTo comando — fetches eventi per un intervallo di date arbitrarie (comprese le date passate); divide automaticamente le richieste in blocchi di un mese per rispettare il limite API di Apple; tutti i campi di Apple grezzi sono inclusi nella risposta; i risultati sono scritti anche a `calendar.query` (role=json, q=0x01)",
-        "es": "Calendario: nuevo `queryCalendarEvents` sendTo command — fetches events for an arbitrary date range (including past dates); automatically splits requests into one-month chunks to comply with Apple's API limit; all raw Apple fields are included in the response; results are also written to `calendar.query` (role=json, q=0x01)",
-        "pl": "Kalendarz: nowy 'queryCalendarEvents' sendTo command - pobiera zdarzenia dla arbitralnego zakresu dat (włącznie z datami przeszłymi); automatycznie dzieli wnioski na jednomiesięczne kawałki w celu dostosowania się do limitu API Apple; wszystkie surowe pola Apple są zawarte w odpowiedzi; wyniki są również napisane na \"calendar.query\" (rola = json, q = 0x01)",
-        "uk": "Календар: новий `queryCalendarEvents` sendTo команда — фетчі події для довільного діапазону дати (в тому числі минулих дат); автоматично розбиває запити на один місяць для виконання ліміту API Apple; всі сирі поля Apple включені в відповідь; результати також написані на `calendar.query` (role=json, q=0x01)",
-        "zh-cn": "日历 : 新建“ queryCalendarEvents” 发送到命令 —— 获取任意日期范围的事件( 包括过去的日期); 自动将请求分割为一个月块, 以遵守 Apple 的 API 限制 ; 所有原始的 Apple 字段都包含在响应中; 结果也写入“ calendar.query ” (role=json, q=0x01)"
       }
     },
     "titleLang": {
