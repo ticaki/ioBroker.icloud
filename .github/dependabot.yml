@@ -20,8 +20,6 @@ updates:
     cooldown:
       default-days: 7
     ignore:
-      # @types/node must match the minimum supported node.js version (22.x).
-      # Do not let dependabot bump it to a newer major.
       - dependency-name: '@types/node'
         update-types:
           - 'version-update:semver-major'
