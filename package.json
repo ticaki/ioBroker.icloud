@@ -44,7 +44,7 @@
     "@types/node": "^22.20.1",
     "@types/tough-cookie": "^4.0.5",
     "ts-node": "^10.9.2",
-    "typescript": "^7.0.2"
+    "typescript": "^6.0.2"
   },
   "main": "build/main.js",
   "files": [
@@ -58,11 +58,11 @@
   ],
   "scripts": {
     "prebuild": "clean-dir ./build",
-    "build": "build-adapter ts",
-    "watch": "build-adapter ts --watch",
+    "build": "node tools/build-adapter.cjs ts",
+    "watch": "node tools/build-adapter.cjs ts --watch",
     "prebuild:ts": "clean-dir ./build",
-    "build:ts": "build-adapter ts",
-    "watch:ts": "build-adapter ts --watch",
+    "build:ts": "node tools/build-adapter.cjs ts",
+    "watch:ts": "node tools/build-adapter.cjs ts --watch",
     "test:ts": "mocha --config test/mocharc.custom.json src/**/*.test.ts",
     "test:package": "mocha test/package --exit",
     "test:integration": "mocha test/integration --exit",
