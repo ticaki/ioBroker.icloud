@@ -17,7 +17,7 @@ import {
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { ConfigGeneric, type ConfigGenericProps, type ConfigGenericState } from '@iobroker/json-config';
-import { I18n } from '@iobroker/adapter-react-v5';
+import { I18n } from '@iobroker/gui-components';
 
 interface DeviceInfo {
     id: string;
@@ -63,8 +63,8 @@ class FindMyDevices extends ConfigGeneric<ConfigGenericProps, FindMyDevicesState
         });
     }
 
-    componentDidMount(): void {
-        super.componentDidMount();
+    async componentDidMount(): Promise<void> {
+        await super.componentDidMount();
         this.fetchDevices();
         this.startPolling();
         this.subscribeAlive();
@@ -362,7 +362,7 @@ class FindMyDevices extends ConfigGeneric<ConfigGenericProps, FindMyDevicesState
                                         <TableCell>
                                             <Typography
                                                 variant="body2"
-                                                fontWeight="medium"
+                                                sx={{ fontWeight: 'medium' }}
                                             >
                                                 {device.name}
                                             </Typography>

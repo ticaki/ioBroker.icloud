@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readdirSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,6 +17,10 @@ function copyGlob(srcDir: string, pattern: RegExp, destDir: string): void {
 if (command === 'admin:copy') {
     const buildDir = resolve(__dirname, 'src-admin/build');
     const customDir = resolve(__dirname, 'admin/custom');
+    // Vite hashes the asset file names, so without clearing the target every build
+    // leaves its predecessors behind. Only assets/ is wiped - i18n/ lives next to it
+    // and is maintained by hand.
+    rmSync(resolve(customDir, 'assets'), { recursive: true, force: true });
     copyGlob(resolve(buildDir, 'assets'), /\.js$/, resolve(customDir, 'assets'));
     copyGlob(buildDir, /^customComponents\.js$/, customDir);
     console.log('admin:copy done');

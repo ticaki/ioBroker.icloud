@@ -5,7 +5,7 @@ import SmsIcon from '@mui/icons-material/Sms';
 import SendIcon from '@mui/icons-material/Send';
 import KeyIcon from '@mui/icons-material/Key';
 import { ConfigGeneric, type ConfigGenericProps, type ConfigGenericState } from '@iobroker/json-config';
-import { I18n } from '@iobroker/adapter-react-v5';
+import { I18n } from '@iobroker/gui-components';
 
 /**
  * State for the SmsMfaPanel component.
@@ -92,8 +92,8 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
      * Subscribes to the adapter's alive state, registers the page-visibility listener,
      * and starts polling for MFA status.
      */
-    componentDidMount(): void {
-        super.componentDidMount();
+    async componentDidMount(): Promise<void> {
+        await super.componentDidMount();
         this.subscribeAlive();
         this._visibilityHandler = (): void => {
             if (document.hidden) {
@@ -383,8 +383,7 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
                 <Stack
                     direction="row"
                     spacing={1}
-                    alignItems="center"
-                    sx={{ mb: 1.5 }}
+                    sx={{ alignItems: 'center', mb: 1.5 }}
                 >
                     <KeyIcon
                         color="warning"
@@ -392,8 +391,8 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
                     />
                     <Typography
                         variant="subtitle1"
-                        fontWeight="bold"
                         color="warning.main"
+                        sx={{ fontWeight: 'bold' }}
                     >
                         {I18n.t('custom_mfa_sk_title')}
                     </Typography>
@@ -428,7 +427,7 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
                     <Stack
                         direction={{ xs: 'column', sm: 'row' }}
                         spacing={1.5}
-                        alignItems={{ sm: 'center' }}
+                        sx={{ alignItems: { sm: 'center' } }}
                     >
                         <Button
                             variant="contained"
@@ -490,8 +489,7 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
                 <Stack
                     direction="row"
                     spacing={1}
-                    alignItems="center"
-                    sx={{ mb: 1.5 }}
+                    sx={{ alignItems: 'center', mb: 1.5 }}
                 >
                     <LockIcon
                         color="warning"
@@ -499,8 +497,8 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
                     />
                     <Typography
                         variant="subtitle1"
-                        fontWeight="bold"
                         color="warning.main"
+                        sx={{ fontWeight: 'bold' }}
                     >
                         {I18n.t('custom_mfa_title')}
                     </Typography>
@@ -535,7 +533,7 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
                 <Stack
                     direction={{ xs: 'column', sm: 'row' }}
                     spacing={1.5}
-                    alignItems={{ sm: 'center' }}
+                    sx={{ alignItems: { sm: 'center' } }}
                 >
                     <Button
                         variant="outlined"
@@ -570,7 +568,7 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
                                 void this.handleSubmit();
                             }
                         }}
-                        inputProps={{ inputMode: 'numeric', maxLength: 6, pattern: '[0-9]*' }}
+                        slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6, pattern: '[0-9]*' } }}
                         size="small"
                         disabled={busy}
                         sx={{ width: 140 }}
