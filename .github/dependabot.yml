@@ -20,6 +20,12 @@ updates:
       - dependency-name: '@types/node'
         update-types:
           - 'version-update:semver-major'
+      # TypeScript 7 ist noch nicht von @typescript-eslint unterstuetzt
+      # (peer: typescript ">=4.8.4 <6.1.0"), npm ci scheitert dann mit ERESOLVE.
+      # Wir bleiben bewusst auf 6.x.
+      - dependency-name: 'typescript'
+        update-types:
+          - 'version-update:semver-major'
 
   - package-ecosystem: 'github-actions'
     directory: '/'
