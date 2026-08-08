@@ -22,7 +22,7 @@
         "@mui/styles": "^6.5.0",
         "@originjs/vite-plugin-federation": "^1.4.0",
         "@types/dagre": "^0.7.54",
-        "@types/lodash": "^4.17.24",
+        "@types/lodash": "^4.17.25",
         "@types/node": "^25.9.5",
         "@types/react": "^18.3.19",
         "@types/react-dom": "^18.3.5",
