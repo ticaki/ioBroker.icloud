@@ -32,7 +32,7 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1.0.185
+        uses: anthropics/claude-code-action@v1.0.191
         with:
           # Auth via Claude subscription (Pro/Max) OAuth token.
           # For pay-per-use API billing instead, replace with:
