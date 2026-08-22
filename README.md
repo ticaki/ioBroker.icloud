@@ -46,10 +46,10 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
-* (ticaki) fixed: 2FA sign-in failed with `Invalid status code: 409` although the six-digit code was valid — Apple refuses a code that is submitted to the wrong verification endpoint, so the code is now retried on the other channel (trusted device ↔ SMS) and a 409 without an explicit rejection no longer aborts the login
-* (ticaki) fixed: the session data (`scnt`, session id, session token) returned by Apple's code verification is now applied to the following `2sv/trust` and `accountLogin` calls
-* (ticaki) fixed: the build scripts pointed at a non-existent `tools/build-adapter.cjs`, which broke `npm run build` and the CI
+### 1.0.1 (2026-08-22)
+* (ticaki) fixed: a valid 2FA code could be rejected with error 409 — the code is now retried on the other channel (trusted device / SMS)
+* (ticaki) fixed: the session data returned by Apple's code verification is now used for the following requests
+* (ticaki) fixed: the build scripts pointed at a non-existent file, which broke `npm run build` and the CI
 
 ### 1.0.0 (2026-06-28)
 * (ticaki) **New: FIDO2 / security-key MFA** — sign in with a hardware security key (passkey) straight from the admin panel; the full sign-in ceremony runs in the background with a live, localized status (MFA panel translated into 11 languages)
@@ -69,9 +69,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 * (ticaki) changed: Removed unused keytar dependency and code.
 * (ticaki) fixed: jsonConfig warnings / all repochecker error, warnings
 * (ticaki) donate link
-
-### 0.7.4 (2026-04-22)
-* (ticaki) New: SMS MFA panel in the General admin tab — appears automatically below the login fields when the adapter requests MFA; lets you request an SMS code and submit the 6-digit code directly from the admin UI without touching ioBroker states; visibility is driven by an internal adapter variable (not the `mfa.required` state) so the panel only appears once the adapter is ready to accept the code
 
 Older changes are listed in [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 

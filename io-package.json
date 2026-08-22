@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "news": {
+      "1.0.1": {
+        "en": "Fixed: a valid 2FA code could be rejected with error 409. Fixed: broken build scripts.",
+        "de": "Behoben: Ein gültiger 2FA-Code konnte mit Fehler 409 abgelehnt werden. Behoben: defekte Build-Skripte.",
+        "ru": "Исправлено: действительный код 2FA мог быть отклонён с ошибкой 409. Исправлено: неработающие скрипты сборки.",
+        "pt": "Corrigido: um código 2FA válido podia ser rejeitado com o erro 409. Corrigido: scripts de compilação com falhas.",
+        "nl": "Opgelost: een geldige 2FA-code kon worden geweigerd met fout 409. Opgelost: defecte build-scripts.",
+        "fr": "Corrigé : un code 2FA valide pouvait être rejeté avec l'erreur 409. Corrigé : scripts de compilation défectueux.",
+        "it": "Risolto: un codice 2FA valido poteva essere rifiutato con l'errore 409. Risolto: script di build non funzionanti.",
+        "es": "Corregido: un código 2FA válido podía ser rechazado con el error 409. Corregido: scripts de compilación defectuosos.",
+        "pl": "Naprawiono: prawidłowy kod 2FA mógł zostać odrzucony z błędem 409. Naprawiono: niedziałające skrypty kompilacji.",
+        "uk": "Виправлено: дійсний код 2FA міг бути відхилений з помилкою 409. Виправлено: непрацездатні скрипти збірки.",
+        "zh-cn": "修复：有效的双重验证代码可能因 409 错误被拒绝。修复：损坏的构建脚本。"
+      },
       "1.0.0": {
         "en": "New: FIDO2 security-key (passkey) MFA — sign in with a hardware security key directly from the admin panel, with a live localized status. Fixed: syncMap now preserves existing object ACLs (read-merge-write). Changed: internal waits and the geocoder reworked for a clean adapter unload. Fixed: ioBroker repochecker findings.",
         "de": "Neu: FIDO2-Sicherheitsschlüssel-MFA (Passkey) — Anmeldung mit einem Hardware-Sicherheitsschlüssel direkt aus dem Admin-Panel, mit einem live lokalisierten Status. Behoben: syncMap behält bestehende Objekt-ACLs bei (Read-Merge-Write). Geändert: interne Wartezeiten und der Geocoder wurden für ein sauberes Entladen des Adapters überarbeitet. Behoben: ioBroker-Repochecker-Hinweise.",
@@ -80,19 +93,6 @@
         "pl": "Fix: stałe HTTP 450 (sesja wygasła) na FindMy / Reminders teraz uruchamia automatyczne pełne uwierzytelnianie zamiast pętli na czas nieokreślony\nNowy: session keep- alive - co 6 godzin lekki POST / walidate jest wysyłany do Apple, aby utrzymać sesję przy życiu i wykryć wygaśnięcie zanim jakiekolwiek połączenie serwisowe zawiedzie",
         "uk": "Фіксація: персистентний HTTP 450 (зсія, що закінчується) на FindMy / Reminders тепер запускає автоматичне повне реабілітація замість петляцій невизначено\nНовий: сеанс продовжує роботу — кожні 6 годин легкий POST /validate надсилається до Apple, щоб зберегти сеанс живим і виявити доцільність перед будь-яким сервісним дзвінком не вдається",
         "zh-cn": "固定 : FindMy / Reminders 上的持续 HTTP 450( 会话过期) 现在启动自动全重校正而不是无限循环\n新建: 会话保持动态——每6小时向苹果发送一个轻量级 POST / 验证器,以使会话保持活力,并在任何服务呼叫失败前检测过期"
-      },
-      "0.7.2": {
-        "en": "fixed: sms 2fa",
-        "de": "fixiert: sms 2fa",
-        "ru": "разработчик: sms 2fa",
-        "pt": "fixo: sms 2fa",
-        "nl": "vast: sms 2fa",
-        "fr": "fixe: sms 2fa",
-        "it": "fisso: sms 2fa",
-        "es": "fija: sms 2fa",
-        "pl": "stałe: sms 2fa",
-        "uk": "фіксована: смс 2fa",
-        "zh-cn": "固定数:sms 2fa"
       }
     },
     "titleLang": {
