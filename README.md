@@ -47,6 +47,8 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	### **WORK IN PROGRESS**
 -->
 ### **WORK IN PROGRESS**
+* (ticaki) fixed: 2FA sign-in failed with `Invalid status code: 409` although the six-digit code was valid — Apple refuses a code that is submitted to the wrong verification endpoint, so the code is now retried on the other channel (trusted device ↔ SMS) and a 409 without an explicit rejection no longer aborts the login
+* (ticaki) fixed: the session data (`scnt`, session id, session token) returned by Apple's code verification is now applied to the following `2sv/trust` and `accountLogin` calls
 * (ticaki) fixed: the build scripts pointed at a non-existent `tools/build-adapter.cjs`, which broke `npm run build` and the CI
 
 ### 1.0.0 (2026-06-28)

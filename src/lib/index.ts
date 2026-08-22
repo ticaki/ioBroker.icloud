@@ -181,6 +181,12 @@ export type SecurityKeyProgress =
     | 'timeout'; // the overall window elapsed without a successful touch
 
 /**
+ * Which of Apple's two MFA verification endpoints a six-digit code has to be submitted to.
+ * `sms` → /verify/phone/securitycode, `device` → /verify/trusteddevice/securitycode.
+ */
+export type SecurityCodeChannel = 'sms' | 'device';
+
+/**
  * A parsed FIDO2 security-key challenge from Apple's `fsaChallenge` (GET /appleauth/auth).
  * `challenge` and `keyHandles` are base64(url) strings exactly as Apple sent them.
  */
@@ -968,45 +974,118 @@ export default class iCloudService extends EventEmitter {
             throw new Error('Cannot provide MFA code without calling authenticate first!');
         }
 
-        let authResponse: Response;
-        if (this._smsPhoneNumberId !== undefined) {
-            // Code sent via SMS — must verify against /verify/phone/securitycode
-            // pyiCloud: _validate_sms_code — uses trustedPhoneNumber payload including nonFTEU
-            const phoneId = this._smsPhoneNumberId;
-            const mode = 'sms';
-            const phonePayload: Record<string, unknown> = { id: phoneId };
+        // Apple issues the code either through the trusted-device push or through the phone
+        // (SMS / voice) channel, and each channel has its own verification endpoint. A code that is
+        // submitted to the *other* endpoint is refused — typically with HTTP 409, even though the
+        // code itself is valid. requestSmsMfaCode() records the phone channel, but when Apple falls
+        // back to SMS on its own (no trusted device reachable) we only notice here. Therefore the
+        // other channel is retried automatically before giving up.
+        const primary: SecurityCodeChannel = this._smsPhoneNumberId !== undefined ? 'sms' : 'device';
+        const fallback: SecurityCodeChannel = primary === 'sms' ? 'device' : 'sms';
+        const channels: SecurityCodeChannel[] = [primary];
+        if (fallback === 'device' || this._trustedPhone !== undefined) {
+            channels.push(fallback);
+        }
+
+        let last: { status: number; body: string } | undefined;
+        let accepted = false;
+        for (const channel of channels) {
+            last = await this._submitSecurityCode(channel, code);
+            // Device push answers 204, phone verification 200 with a JSON body.
+            if (last.status === 204 || last.status === 200) {
+                accepted = true;
+                break;
+            }
+            if (this._isCodeRejection(last.body)) {
+                // Apple explicitly says the code is wrong / expired — the other channel won't help.
+                break;
+            }
+        }
+
+        // Apple also answers 409 ("conflict") when the code was accepted but the session state
+        // doesn't match the endpoint; the body then carries no rejection error. Continuing into the
+        // trust flow is safe — 2sv/trust and accountLogin decide whether the session is really
+        // authenticated and push the service into Error state if it isn't.
+        if (!accepted && last?.status === 409 && !this._isCodeRejection(last.body)) {
+            this._log(
+                LogLevel.Warning,
+                '[auth] Code verification answered 409 without a rejection error — continuing with the trust flow',
+            );
+            accepted = true;
+        }
+
+        if (!accepted) {
+            // Keep _smsPhoneNumberId so a retry still targets the phone endpoint.
+            throw new Error(`Invalid status code: ${last?.status ?? 'unknown'} ${last?.body ?? ''}`);
+        }
+
+        this._smsPhoneNumberId = undefined; // reset after successful use
+        this._setState(iCloudServiceStatus.Authenticated);
+        if (this.options.trustDevice) {
+            void this._getTrustToken().then(this._getiCloudCookies.bind(this));
+        } else {
+            void this._getiCloudCookies();
+        }
+    }
+
+    /**
+     * POST the six-digit code to one of Apple's two verification endpoints.
+     *
+     * @param channel - `sms` → /verify/phone/securitycode, `device` → /verify/trusteddevice/securitycode.
+     * @param code - The six digit MFA code.
+     */
+    private async _submitSecurityCode(
+        channel: SecurityCodeChannel,
+        code: string,
+    ): Promise<{ status: number; body: string }> {
+        let response: Response;
+        if (channel === 'sms') {
+            // pyiCloud: _validate_sms_code — trustedPhoneNumber payload incl. nonFTEU, phone's pushMode
+            const id = this._smsPhoneNumberId ?? this._trustedPhone?.id ?? 1;
+            const phonePayload: Record<string, unknown> = { id };
             if (this._trustedPhone?.nonFTEU !== undefined) {
                 phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
             }
-            this._log(
-                LogLevel.Debug,
-                `[auth] POST /verify/phone/securitycode (SMS, phone id ${phoneId}, mode ${mode})`,
-            );
-            authResponse = await this.fetch(`${AUTH_ENDPOINT}verify/phone/securitycode`, {
+            const mode = this._trustedPhone?.pushMode ?? 'sms';
+            this._log(LogLevel.Debug, `[auth] POST /verify/phone/securitycode (phone id ${id}, mode ${mode})`);
+            response = await this.fetch(`${AUTH_ENDPOINT}verify/phone/securitycode`, {
                 headers: this.authStore.getMfaHeaders(),
                 method: 'POST',
                 body: JSON.stringify({ phoneNumber: phonePayload, securityCode: { code }, mode }),
             });
         } else {
-            // Code sent via trusted device push
             this._log(LogLevel.Debug, '[auth] POST /verify/trusteddevice/securitycode (device push)');
-            authResponse = await this.fetch(`${AUTH_ENDPOINT}verify/trusteddevice/securitycode`, {
+            response = await this.fetch(`${AUTH_ENDPOINT}verify/trusteddevice/securitycode`, {
                 headers: this.authStore.getMfaHeaders(),
                 method: 'POST',
                 body: JSON.stringify({ securityCode: { code } }),
             });
         }
-        this._smsPhoneNumberId = undefined; // reset after use
-        // Device push returns 204, SMS verification returns 200 with a JSON body containing "valid: true"
-        if (authResponse.status === 204 || authResponse.status === 200) {
-            this._setState(iCloudServiceStatus.Authenticated);
-            if (this.options.trustDevice) {
-                void this._getTrustToken().then(this._getiCloudCookies.bind(this));
-            } else {
-                void this._getiCloudCookies();
-            }
-        } else {
-            throw new Error(`Invalid status code: ${authResponse.status} ${await authResponse.text()}`);
+        // pyiCloud refreshes its session data from EVERY response: Apple hands out a fresh
+        // session token / scnt here, which 2sv/trust and accountLogin need afterwards.
+        this.authStore.extractSessionHeaders(response);
+        const body = await response.text();
+        this._log(LogLevel.Debug, `[auth] verify ${channel} securitycode → ${response.status}: ${body.slice(0, 300)}`);
+        return { status: response.status, body };
+    }
+
+    /**
+     * True when Apple's error body states that the code itself was refused (wrong, expired or
+     * locked) rather than signalling a session / channel mismatch.
+     * pyiCloud maps -21669 to "wrong verification code"; -21670 is the too-many-attempts lockout.
+     *
+     * @param body - The raw response body of a securitycode request.
+     */
+    private _isCodeRejection(body: string): boolean {
+        try {
+            const parsed = JSON.parse(body) as {
+                serviceErrors?: { code?: unknown }[];
+                service_errors?: { code?: unknown }[];
+            };
+            const errors = [...(parsed?.serviceErrors ?? []), ...(parsed?.service_errors ?? [])];
+            return errors.some(e => ['-21669', '-21670'].includes(String(e?.code)));
+        } catch {
+            return false;
         }
     }
 
