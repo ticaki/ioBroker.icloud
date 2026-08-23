@@ -561,6 +561,10 @@ export default class iCloudService extends EventEmitter {
                             const authResp = await this.fetch(AUTH_ENDPOINT.replace(/\/$/, ''), {
                                 headers: this.authStore.getMfaHeaders(),
                             });
+                            // pyiCloud refreshes its session data from EVERY response — Apple hands
+                            // out a fresh scnt / session id here, and the securitycode POST later on
+                            // is rejected (-21669) when it still carries the previous one.
+                            this.authStore.extractSessionHeaders(authResp);
                             const authRespText = await authResp.text();
                             this._log(
                                 LogLevel.Debug,
@@ -633,6 +637,7 @@ export default class iCloudService extends EventEmitter {
                                 headers: this.authStore.getMfaHeaders(),
                                 method: 'PUT',
                             });
+                            this.authStore.extractSessionHeaders(pushResp);
                             const pushRespText = await pushResp.text();
                             this._log(
                                 LogLevel.Debug,
@@ -719,6 +724,10 @@ export default class iCloudService extends EventEmitter {
             method: 'PUT',
             body: JSON.stringify({ phoneNumber: phonePayload, mode: 'sms' }),
         });
+        // Apple returns a refreshed scnt / session id here. Without picking it up, the following
+        // POST verify/phone/securitycode runs against a stale session and Apple answers -21669
+        // ("incorrect verification code") even though the SMS code is correct.
+        this.authStore.extractSessionHeaders(resp);
         const text = await resp.text();
         this._log(LogLevel.Debug, `[auth] SMS request → ${resp.status}: ${text.slice(0, 200)}`);
         if (!resp.ok) {
@@ -982,10 +991,12 @@ export default class iCloudService extends EventEmitter {
         // other channel is retried automatically before giving up.
         const primary: SecurityCodeChannel = this._smsPhoneNumberId !== undefined ? 'sms' : 'device';
         const fallback: SecurityCodeChannel = primary === 'sms' ? 'device' : 'sms';
-        const channels: SecurityCodeChannel[] = [primary];
-        if (fallback === 'device' || this._trustedPhone !== undefined) {
-            channels.push(fallback);
-        }
+        // BOTH endpoints are always tried. Apple issues *different* codes for the device push and
+        // for the SMS/phone channel, and each endpoint only knows its own code: a code submitted to
+        // the wrong endpoint is answered with -21669 ("incorrect verification code") — exactly like
+        // a genuinely wrong code. Stopping on -21669 therefore made a perfectly valid code look
+        // permanently wrong whenever the channel guess was off.
+        const channels: SecurityCodeChannel[] = [primary, fallback];
 
         let last: { status: number; body: string } | undefined;
         let accepted = false;
@@ -996,27 +1007,32 @@ export default class iCloudService extends EventEmitter {
                 accepted = true;
                 break;
             }
-            if (this._isCodeRejection(last.body)) {
-                // Apple explicitly says the code is wrong / expired — the other channel won't help.
+            // Apple also answers 409 ("conflict") when the code was accepted but the session state
+            // doesn't match the endpoint; the body then carries no rejection error. Continuing into
+            // the trust flow is safe — 2sv/trust and accountLogin decide whether the session is
+            // really authenticated and push the service into Error state if it isn't.
+            if (last.status === 409 && !this._isCodeRejection(last.body)) {
+                this._log(
+                    LogLevel.Warning,
+                    '[auth] Code verification answered 409 without a rejection error — continuing with the trust flow',
+                );
+                accepted = true;
                 break;
             }
-        }
-
-        // Apple also answers 409 ("conflict") when the code was accepted but the session state
-        // doesn't match the endpoint; the body then carries no rejection error. Continuing into the
-        // trust flow is safe — 2sv/trust and accountLogin decide whether the session is really
-        // authenticated and push the service into Error state if it isn't.
-        if (!accepted && last?.status === 409 && !this._isCodeRejection(last.body)) {
+            if (this._isCodeLockout(last.body)) {
+                // -21670: too many failed attempts. Further requests only make it worse.
+                this._log(LogLevel.Error, '[auth] Apple reports too many failed attempts (-21670) — giving up');
+                break;
+            }
             this._log(
-                LogLevel.Warning,
-                '[auth] Code verification answered 409 without a rejection error — continuing with the trust flow',
+                LogLevel.Debug,
+                `[auth] ${channel} endpoint did not accept the code (HTTP ${last.status}) — trying the other channel`,
             );
-            accepted = true;
         }
 
         if (!accepted) {
             // Keep _smsPhoneNumberId so a retry still targets the phone endpoint.
-            throw new Error(`Invalid status code: ${last?.status ?? 'unknown'} ${last?.body ?? ''}`);
+            throw new Error(this._describeCodeFailure(last));
         }
 
         this._smsPhoneNumberId = undefined; // reset after successful use
@@ -1070,23 +1086,68 @@ export default class iCloudService extends EventEmitter {
     }
 
     /**
+     * Parse Apple's `serviceErrors` / `service_errors` array out of a raw response body.
+     * Returns an empty array when the body is not JSON or carries no errors.
+     *
+     * @param body - The raw response body of an auth request.
+     */
+    private _parseServiceErrors(body: string): { code?: unknown; message?: unknown }[] {
+        try {
+            const parsed = JSON.parse(body) as {
+                serviceErrors?: { code?: unknown; message?: unknown }[];
+                service_errors?: { code?: unknown; message?: unknown }[];
+            };
+            return [...(parsed?.serviceErrors ?? []), ...(parsed?.service_errors ?? [])];
+        } catch {
+            return [];
+        }
+    }
+
+    /**
      * True when Apple's error body states that the code itself was refused (wrong, expired or
      * locked) rather than signalling a session / channel mismatch.
      * pyiCloud maps -21669 to "wrong verification code"; -21670 is the too-many-attempts lockout.
      *
+     * NOTE: -21669 is endpoint-local — it only means "this endpoint does not know this code".
+     * A code that belongs to the *other* channel produces the very same error, so this must not
+     * be treated as a final verdict on the code itself (see provideMfaCode).
+     *
      * @param body - The raw response body of a securitycode request.
      */
     private _isCodeRejection(body: string): boolean {
-        try {
-            const parsed = JSON.parse(body) as {
-                serviceErrors?: { code?: unknown }[];
-                service_errors?: { code?: unknown }[];
-            };
-            const errors = [...(parsed?.serviceErrors ?? []), ...(parsed?.service_errors ?? [])];
-            return errors.some(e => ['-21669', '-21670'].includes(String(e?.code)));
-        } catch {
-            return false;
+        return this._parseServiceErrors(body).some(e => ['-21669', '-21670'].includes(String(e?.code)));
+    }
+
+    /**
+     * True when Apple locked further code attempts after too many failures (-21670).
+     *
+     * @param body - The raw response body of a securitycode request.
+     */
+    private _isCodeLockout(body: string): boolean {
+        return this._parseServiceErrors(body).some(e => String(e?.code) === '-21670');
+    }
+
+    /**
+     * Turn the last failed securitycode response into a message a user can act on, instead of
+     * dumping Apple's raw JSON (which made the internal error code -21669 look like a mangled
+     * version of the entered code).
+     *
+     * @param last - Status and body of the last verification attempt, if any.
+     * @param last.status - HTTP status of that attempt.
+     * @param last.body - Raw response body of that attempt.
+     */
+    private _describeCodeFailure(last?: { status: number; body: string }): string {
+        const errors = this._parseServiceErrors(last?.body ?? '');
+        const codes = errors.map(e => String(e?.code));
+        if (codes.includes('-21670')) {
+            return 'Zu viele Fehlversuche — Apple hat die Code-Eingabe vorübergehend gesperrt (Apple-Fehler -21670). Bitte später erneut anmelden und einen neuen Code anfordern.';
         }
+        if (codes.includes('-21669')) {
+            return 'Apple hat den Bestätigungscode abgelehnt (Apple-Fehler -21669: falscher oder abgelaufener Code). Bitte einen neuen Code anfordern und ihn direkt nach dem Empfang eingeben.';
+        }
+        const appleMessage = errors.find(e => typeof e?.message === 'string')?.message as string | undefined;
+        const detail = appleMessage ?? (last?.body ? last.body.slice(0, 200) : '');
+        return `Code-Prüfung fehlgeschlagen (HTTP ${last?.status ?? 'unbekannt'})${detail ? `: ${detail}` : ''}`;
     }
 
     private async _getTrustToken(): Promise<void> {
