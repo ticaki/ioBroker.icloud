@@ -1,6 +1,11 @@
 # Older Changelog
 
 Older changelog entries will be moved here from the [README](README.md) once the changelog section there grows too long.
+## 0.7.5 (2026-04-23)
+* (ticaki) changed: Removed unused keytar dependency and code.
+* (ticaki) fixed: jsonConfig warnings / all repochecker error, warnings
+* (ticaki) donate link
+
 ## 0.7.4 (2026-04-22)
 * (ticaki) New: SMS MFA panel in the General admin tab — appears automatically below the login fields when the adapter requests MFA; lets you request an SMS code and submit the 6-digit code directly from the admin UI without touching ioBroker states; visibility is driven by an internal adapter variable (not the `mfa.required` state) so the panel only appears once the adapter is ready to accept the code
 

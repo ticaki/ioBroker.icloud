@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "news": {
+      "1.0.2": {
+        "en": "Fixed: a valid 2FA code was rejected with Apple error -21669 — the code is now tried on both verification channels (trusted device and SMS). Fixed: the refreshed session data from Apple's MFA requests is now used for the following requests.",
+        "de": "Behoben: Ein gültiger 2FA-Code wurde mit dem Apple-Fehler -21669 abgelehnt — der Code wird jetzt auf beiden Prüfwegen (vertrautes Gerät und SMS) versucht. Behoben: Die aktualisierten Sitzungsdaten aus Apples MFA-Anfragen werden jetzt für die folgenden Anfragen verwendet.",
+        "ru": "Исправлено: действительный код 2FA отклонялся с ошибкой Apple -21669 — теперь код проверяется по обоим каналам (доверенное устройство и SMS). Исправлено: обновлённые данные сессии из MFA-запросов Apple теперь используются для последующих запросов.",
+        "pt": "Corrigido: um código 2FA válido era rejeitado com o erro -21669 da Apple — o código passa agora a ser testado nos dois canais de verificação (dispositivo fidedigno e SMS). Corrigido: os dados de sessão atualizados dos pedidos MFA da Apple são agora usados nos pedidos seguintes.",
+        "nl": "Opgelost: een geldige 2FA-code werd geweigerd met Apple-fout -21669 — de code wordt nu via beide verificatiekanalen (vertrouwd apparaat en sms) geprobeerd. Opgelost: de vernieuwde sessiegegevens uit Apple's MFA-verzoeken worden nu voor de volgende verzoeken gebruikt.",
+        "fr": "Corrigé : un code 2FA valide était rejeté avec l'erreur Apple -21669 — le code est désormais essayé sur les deux canaux de vérification (appareil de confiance et SMS). Corrigé : les données de session actualisées issues des requêtes MFA d'Apple sont maintenant utilisées pour les requêtes suivantes.",
+        "it": "Risolto: un codice 2FA valido veniva rifiutato con l'errore Apple -21669 — il codice viene ora provato su entrambi i canali di verifica (dispositivo attendibile e SMS). Risolto: i dati di sessione aggiornati dalle richieste MFA di Apple vengono ora usati per le richieste successive.",
+        "es": "Corregido: un código 2FA válido se rechazaba con el error de Apple -21669 — ahora el código se prueba en ambos canales de verificación (dispositivo de confianza y SMS). Corregido: los datos de sesión actualizados de las solicitudes MFA de Apple ahora se usan en las solicitudes siguientes.",
+        "pl": "Naprawiono: prawidłowy kod 2FA był odrzucany z błędem Apple -21669 — kod jest teraz sprawdzany w obu kanałach weryfikacji (zaufane urządzenie i SMS). Naprawiono: odświeżone dane sesji z żądań MFA Apple są teraz używane w kolejnych żądaniach.",
+        "uk": "Виправлено: дійсний код 2FA відхилявся з помилкою Apple -21669 — тепер код перевіряється в обох каналах (довірений пристрій і SMS). Виправлено: оновлені дані сесії із MFA-запитів Apple тепер використовуються для наступних запитів.",
+        "zh-cn": "修复：有效的双重验证代码被 Apple 错误 -21669 拒绝——现在会在两个验证通道（受信任设备和短信）上尝试该代码。修复：来自 Apple MFA 请求的最新会话数据现在会用于后续请求。"
+      },
       "1.0.1": {
         "en": "Fixed: a valid 2FA code could be rejected with error 409. Fixed: broken build scripts.",
         "de": "Behoben: Ein gültiger 2FA-Code konnte mit Fehler 409 abgelehnt werden. Behoben: defekte Build-Skripte.",
@@ -80,19 +93,6 @@
         "pl": "Nowy: Panel MFA SMS w zakładce Ogólne admin - pojawia się automatycznie pod polami logowania, gdy adapter wymaga MFA; pozwala na żądanie kodu SMS i przesłać 6-cyfrowy kod bezpośrednio z interfejsu użytkownika admin bez dotykania stanów jOBroker; widoczność jest napędzana przez wewnętrzną zmienną adaptera (nie stan 'mfa.required'), więc panel pojawia się tylko wtedy, gdy adapter jest gotowy do przyjęcia kodu",
         "uk": "Новий: Панель SMS MFA в загальній вкладці адміністратора — з'являється автоматично нижче поля входу, коли адаптер запитує MFA; дозволяє запитати SMS-код та подати 6-цифровий код безпосередньо з адміністратора UI без сенсорних станів ioBroker; видимість приводиться до змінного внутрішнього адаптера (не `mfa.required` стану) так, що панель з'являється тільки після того, як адаптер готовий прийняти код",
         "zh-cn": "新建 : 一般admin 标签中的 SMS MFA 面板 – 当适配器请求 MFA 时自动出现在登录域下; 让您请求一个 SMS 代码, 并直接从 admin UI 提交 6 位码而不触碰 ioBroker 状态; 可见度由内部适配器变量(而不是 `mfa. required' 状态) 驱动, 因此, 面板仅在适配器准备好接受代码后才会出现 "
-      },
-      "0.7.3": {
-        "en": "Fix: persistent HTTP 450 (session expired) on FindMy / Reminders now triggers automatic full re-authentication instead of looping indefinitely\nNew: session keep-alive — every 6 hours a lightweight POST /validate is sent to Apple to keep the session alive and detect expiry before any service call fails",
-        "de": "Fix: persistent HTTP 450 (Session abgelaufen) auf FindMy / Reminders löst jetzt automatische vollständige Wieder-Authentisierung statt Schlaufen unbestimmt\nNeu: Sitzung halten-alive - alle 6 Stunden ein leichtes POST /validate wird an Apple gesendet, um die Sitzung am Leben zu halten und das Auslaufen zu erkennen, bevor ein Dienstruf ausfällt",
-        "ru": "Постоянный HTTP 450 (сессия истекла) на FindMy / Reminders теперь запускает автоматическую полную повторную аутентификацию вместо бесконечной петли\nНовый: сеанс Keep-alive — каждые 6 часов легкий POST /validate отправляется в Apple, чтобы сохранить сеанс живым и обнаружить истечение срока действия до того, как какой-либо вызов службы выйдет из строя",
-        "pt": "Corrigir: HTTP 450 persistente (sessão expirada) no FindMy / Lembretes agora desencadeia re-autenticação automática completa em vez de loop indefinidamente\nNovo: sessão manter-vivo — a cada 6 horas um POST /validate leve é enviado para a Apple para manter a sessão viva e detectar a expiração antes de qualquer chamada de serviço falhar",
-        "nl": "Fix: persistente HTTP 450 (sessie verlopen) op FindMy / Herinneringen nu activeert automatische volledige herauthenticatie in plaats van oneindig loopen\nNieuw: Session keep-alive ",
-        "fr": "Correction: HTTP 450 (session expirée) sur FindMy / Rappels déclenche désormais une réauthentification complète automatique au lieu de boucler indéfiniment\nNouveau: session keep-alive — toutes les 6 heures un POST /validate léger est envoyé à Apple pour garder la session en vie et détecter l'expiration avant tout appel de service échoue",
-        "it": "Fisso: persistente HTTP 450 (sessione scaduta) su FindMy / Reminders ora attiva automatica completa ri-autenticazione invece di loop indefinitamente\nNuovo: sessione manten-alive — ogni 6 ore un leggero POST /validate viene inviato a Apple per mantenere la sessione in vita e rilevare la scadenza prima che qualsiasi chiamata di servizio fallisca",
-        "es": "Fijación: HTTP 450 persistente (sesión vencida) en FindMy / Recordadores ahora activa la re-authenticación completa automática en lugar de bucle indefinidamente\nNuevo: sesión de mantenimiento - cada 6 horas un POST /validato ligero se envía a Apple para mantener la sesión viva y detectar la expiración antes de que cualquier llamada de servicio falle",
-        "pl": "Fix: stałe HTTP 450 (sesja wygasła) na FindMy / Reminders teraz uruchamia automatyczne pełne uwierzytelnianie zamiast pętli na czas nieokreślony\nNowy: session keep- alive - co 6 godzin lekki POST / walidate jest wysyłany do Apple, aby utrzymać sesję przy życiu i wykryć wygaśnięcie zanim jakiekolwiek połączenie serwisowe zawiedzie",
-        "uk": "Фіксація: персистентний HTTP 450 (зсія, що закінчується) на FindMy / Reminders тепер запускає автоматичне повне реабілітація замість петляцій невизначено\nНовий: сеанс продовжує роботу — кожні 6 годин легкий POST /validate надсилається до Apple, щоб зберегти сеанс живим і виявити доцільність перед будь-яким сервісним дзвінком не вдається",
-        "zh-cn": "固定 : FindMy / Reminders 上的持续 HTTP 450( 会话过期) 现在启动自动全重校正而不是无限循环\n新建: 会话保持动态——每6小时向苹果发送一个轻量级 POST / 验证器,以使会话保持活力,并在任何服务呼叫失败前检测过期"
       }
     },
     "titleLang": {

@@ -264,7 +264,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                 data,
             );
             if (result?.success) {
-                return result as unknown as T;
+                return result;
             }
             return null;
         } catch {
@@ -917,7 +917,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                                     this.setState({
                                         editEntry: {
                                             ...editEntry,
-                                            conflictResolution: e.target.value as DriveSyncEntry['conflictResolution'],
+                                            conflictResolution: e.target.value,
                                         },
                                     })
                                 }

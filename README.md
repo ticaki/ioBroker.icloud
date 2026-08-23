@@ -46,7 +46,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 1.0.2 (2026-08-23)
 * (ticaki) fixed: a valid 2FA code was rejected with Apple error -21669 — the code is now always tried on both verification endpoints (trusted device *and* SMS), because a code that belongs to the other channel is reported exactly like a wrong one
 * (ticaki) fixed: the refreshed session data (scnt / session id) returned by the auth-options, device-push and SMS requests is now applied to the following requests
 * (ticaki) changed: a rejected 2FA code now produces a readable message instead of Apple's raw JSON (the internal error code -21669 looked like a mangled version of the entered code)
@@ -69,11 +69,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 
 ### 0.7.6 (2026-04-26)
 * (ticaki) fixed: SMS 2FA verification mode is now always forced to `sms` — using `pushMode` from the trusted phone could cause authentication failures
-
-### 0.7.5 (2026-04-23)
-* (ticaki) changed: Removed unused keytar dependency and code.
-* (ticaki) fixed: jsonConfig warnings / all repochecker error, warnings
-* (ticaki) donate link
 
 Older changes are listed in [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 
