@@ -47,10 +47,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	### **WORK IN PROGRESS**
 -->
 ### **WORK IN PROGRESS**
-* (ticaki) **Admin 8 migration**: the custom config components now build against `@iobroker/gui-components` 10, `@iobroker/json-config` 9, MUI 9 and React 19 — this requires admin >= 8.0.1
-* (ticaki) changed: `admin` in `globalDependencies` raised from `>=7.6.20` to `>=8.0.1`
-* (ticaki) changed: MUI 9 no longer accepts system props on `Stack`/`Typography` and dropped `inputProps` on `TextField` — moved to `sx`/`slotProps`
-* (ticaki) changed: dropped the unused admin dependencies (`@mui/styles`, `reactflow`, `react-flow`, `dagre`, `colord`, `lodash`, `d3-hierarchy`, `@originjs/vite-plugin-federation`)
+* (ticaki) **BREAKING**: admin >= 8.0.1 is now required — the custom config components were migrated to `@iobroker/gui-components` 10, `@iobroker/json-config` 9, MUI 9 and React 19
 * (ticaki) fixed: `admin:copy` now clears `admin/custom/assets` before copying, so hashed bundles from earlier builds no longer pile up in the repo
 
 ### 1.0.2 (2026-08-23)
