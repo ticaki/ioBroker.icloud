@@ -52,7 +52,16 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 * (ticaki) changed: MUI 9 no longer accepts system props on `Stack`/`Typography` and dropped `inputProps` on `TextField` — moved to `sx`/`slotProps`
 * (ticaki) changed: dropped the unused admin dependencies (`@mui/styles`, `reactflow`, `react-flow`, `dagre`, `colord`, `lodash`, `d3-hierarchy`, `@originjs/vite-plugin-federation`)
 * (ticaki) fixed: `admin:copy` now clears `admin/custom/assets` before copying, so hashed bundles from earlier builds no longer pile up in the repo
-* (ticaki) fixed: the build scripts pointed at a non-existent `tools/build-adapter.cjs`, which broke `npm run build` and the CI
+
+### 1.0.2 (2026-08-23)
+* (ticaki) fixed: a valid 2FA code was rejected with Apple error -21669 — the code is now always tried on both verification endpoints (trusted device *and* SMS), because a code that belongs to the other channel is reported exactly like a wrong one
+* (ticaki) fixed: the refreshed session data (scnt / session id) returned by the auth-options, device-push and SMS requests is now applied to the following requests
+* (ticaki) changed: a rejected 2FA code now produces a readable message instead of Apple's raw JSON (the internal error code -21669 looked like a mangled version of the entered code)
+
+### 1.0.1 (2026-08-22)
+* (ticaki) fixed: a valid 2FA code could be rejected with error 409 — the code is now retried on the other channel (trusted device / SMS)
+* (ticaki) fixed: the session data returned by Apple's code verification is now used for the following requests
+* (ticaki) fixed: the build scripts pointed at a non-existent file, which broke `npm run build` and the CI
 
 ### 1.0.0 (2026-06-28)
 * (ticaki) **New: FIDO2 / security-key MFA** — sign in with a hardware security key (passkey) straight from the admin panel; the full sign-in ceremony runs in the background with a live, localized status (MFA panel translated into 11 languages)
@@ -67,14 +76,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 
 ### 0.7.6 (2026-04-26)
 * (ticaki) fixed: SMS 2FA verification mode is now always forced to `sms` — using `pushMode` from the trusted phone could cause authentication failures
-
-### 0.7.5 (2026-04-23)
-* (ticaki) changed: Removed unused keytar dependency and code.
-* (ticaki) fixed: jsonConfig warnings / all repochecker error, warnings
-* (ticaki) donate link
-
-### 0.7.4 (2026-04-22)
-* (ticaki) New: SMS MFA panel in the General admin tab — appears automatically below the login fields when the adapter requests MFA; lets you request an SMS code and submit the 6-digit code directly from the admin UI without touching ioBroker states; visibility is driven by an internal adapter variable (not the `mfa.required` state) so the panel only appears once the adapter is ready to accept the code
 
 Older changes are listed in [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 

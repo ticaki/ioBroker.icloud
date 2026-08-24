@@ -384,6 +384,7 @@ class iCloudService extends import_node_events.default {
               const authResp = await this.fetch(import_consts.AUTH_ENDPOINT.replace(/\/$/, ""), {
                 headers: this.authStore.getMfaHeaders()
               });
+              this.authStore.extractSessionHeaders(authResp);
               const authRespText = await authResp.text();
               this._log(
                 LogLevel.Debug,
@@ -427,6 +428,7 @@ class iCloudService extends import_node_events.default {
                 headers: this.authStore.getMfaHeaders(),
                 method: "PUT"
               });
+              this.authStore.extractSessionHeaders(pushResp);
               const pushRespText = await pushResp.text();
               this._log(
                 LogLevel.Debug,
@@ -495,6 +497,7 @@ class iCloudService extends import_node_events.default {
       method: "PUT",
       body: JSON.stringify({ phoneNumber: phonePayload, mode: "sms" })
     });
+    this.authStore.extractSessionHeaders(resp);
     const text = await resp.text();
     this._log(LogLevel.Debug, `[auth] SMS request \u2192 ${resp.status}: ${text.slice(0, 200)}`);
     if (!resp.ok) {
@@ -694,7 +697,6 @@ class iCloudService extends import_node_events.default {
    * @param code The six digit MFA code.
    */
   async provideMfaCode(code) {
-    var _a;
     if (typeof code !== "string") {
       throw new TypeError(`provideMfaCode(code: string): 'code' was ${code.toString()}`);
     }
@@ -705,42 +707,139 @@ class iCloudService extends import_node_events.default {
     if (!this.authStore.validateAuthSecrets()) {
       throw new Error("Cannot provide MFA code without calling authenticate first!");
     }
-    let authResponse;
-    if (this._smsPhoneNumberId !== void 0) {
-      const phoneId = this._smsPhoneNumberId;
-      const mode = "sms";
-      const phonePayload = { id: phoneId };
-      if (((_a = this._trustedPhone) == null ? void 0 : _a.nonFTEU) !== void 0) {
-        phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
+    const primary = this._smsPhoneNumberId !== void 0 ? "sms" : "device";
+    const fallback = primary === "sms" ? "device" : "sms";
+    const channels = [primary, fallback];
+    let last;
+    let accepted = false;
+    for (const channel of channels) {
+      last = await this._submitSecurityCode(channel, code);
+      if (last.status === 204 || last.status === 200) {
+        accepted = true;
+        break;
+      }
+      if (last.status === 409 && !this._isCodeRejection(last.body)) {
+        this._log(
+          LogLevel.Warning,
+          "[auth] Code verification answered 409 without a rejection error \u2014 continuing with the trust flow"
+        );
+        accepted = true;
+        break;
+      }
+      if (this._isCodeLockout(last.body)) {
+        this._log(LogLevel.Error, "[auth] Apple reports too many failed attempts (-21670) \u2014 giving up");
+        break;
       }
       this._log(
         LogLevel.Debug,
-        `[auth] POST /verify/phone/securitycode (SMS, phone id ${phoneId}, mode ${mode})`
+        `[auth] ${channel} endpoint did not accept the code (HTTP ${last.status}) \u2014 trying the other channel`
       );
-      authResponse = await this.fetch(`${import_consts.AUTH_ENDPOINT}verify/phone/securitycode`, {
+    }
+    if (!accepted) {
+      throw new Error(this._describeCodeFailure(last));
+    }
+    this._smsPhoneNumberId = void 0;
+    this._setState("Authenticated" /* Authenticated */);
+    if (this.options.trustDevice) {
+      void this._getTrustToken().then(this._getiCloudCookies.bind(this));
+    } else {
+      void this._getiCloudCookies();
+    }
+  }
+  /**
+   * POST the six-digit code to one of Apple's two verification endpoints.
+   *
+   * @param channel - `sms` → /verify/phone/securitycode, `device` → /verify/trusteddevice/securitycode.
+   * @param code - The six digit MFA code.
+   */
+  async _submitSecurityCode(channel, code) {
+    var _a, _b, _c, _d, _e, _f;
+    let response;
+    if (channel === "sms") {
+      const id = (_c = (_b = this._smsPhoneNumberId) != null ? _b : (_a = this._trustedPhone) == null ? void 0 : _a.id) != null ? _c : 1;
+      const phonePayload = { id };
+      if (((_d = this._trustedPhone) == null ? void 0 : _d.nonFTEU) !== void 0) {
+        phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
+      }
+      const mode = (_f = (_e = this._trustedPhone) == null ? void 0 : _e.pushMode) != null ? _f : "sms";
+      this._log(LogLevel.Debug, `[auth] POST /verify/phone/securitycode (phone id ${id}, mode ${mode})`);
+      response = await this.fetch(`${import_consts.AUTH_ENDPOINT}verify/phone/securitycode`, {
         headers: this.authStore.getMfaHeaders(),
         method: "POST",
         body: JSON.stringify({ phoneNumber: phonePayload, securityCode: { code }, mode })
       });
     } else {
       this._log(LogLevel.Debug, "[auth] POST /verify/trusteddevice/securitycode (device push)");
-      authResponse = await this.fetch(`${import_consts.AUTH_ENDPOINT}verify/trusteddevice/securitycode`, {
+      response = await this.fetch(`${import_consts.AUTH_ENDPOINT}verify/trusteddevice/securitycode`, {
         headers: this.authStore.getMfaHeaders(),
         method: "POST",
         body: JSON.stringify({ securityCode: { code } })
       });
     }
-    this._smsPhoneNumberId = void 0;
-    if (authResponse.status === 204 || authResponse.status === 200) {
-      this._setState("Authenticated" /* Authenticated */);
-      if (this.options.trustDevice) {
-        void this._getTrustToken().then(this._getiCloudCookies.bind(this));
-      } else {
-        void this._getiCloudCookies();
-      }
-    } else {
-      throw new Error(`Invalid status code: ${authResponse.status} ${await authResponse.text()}`);
+    this.authStore.extractSessionHeaders(response);
+    const body = await response.text();
+    this._log(LogLevel.Debug, `[auth] verify ${channel} securitycode \u2192 ${response.status}: ${body.slice(0, 300)}`);
+    return { status: response.status, body };
+  }
+  /**
+   * Parse Apple's `serviceErrors` / `service_errors` array out of a raw response body.
+   * Returns an empty array when the body is not JSON or carries no errors.
+   *
+   * @param body - The raw response body of an auth request.
+   */
+  _parseServiceErrors(body) {
+    var _a, _b;
+    try {
+      const parsed = JSON.parse(body);
+      return [...(_a = parsed == null ? void 0 : parsed.serviceErrors) != null ? _a : [], ...(_b = parsed == null ? void 0 : parsed.service_errors) != null ? _b : []];
+    } catch {
+      return [];
     }
+  }
+  /**
+   * True when Apple's error body states that the code itself was refused (wrong, expired or
+   * locked) rather than signalling a session / channel mismatch.
+   * pyiCloud maps -21669 to "wrong verification code"; -21670 is the too-many-attempts lockout.
+   *
+   * NOTE: -21669 is endpoint-local — it only means "this endpoint does not know this code".
+   * A code that belongs to the *other* channel produces the very same error, so this must not
+   * be treated as a final verdict on the code itself (see provideMfaCode).
+   *
+   * @param body - The raw response body of a securitycode request.
+   */
+  _isCodeRejection(body) {
+    return this._parseServiceErrors(body).some((e) => ["-21669", "-21670"].includes(String(e == null ? void 0 : e.code)));
+  }
+  /**
+   * True when Apple locked further code attempts after too many failures (-21670).
+   *
+   * @param body - The raw response body of a securitycode request.
+   */
+  _isCodeLockout(body) {
+    return this._parseServiceErrors(body).some((e) => String(e == null ? void 0 : e.code) === "-21670");
+  }
+  /**
+   * Turn the last failed securitycode response into a message a user can act on, instead of
+   * dumping Apple's raw JSON (which made the internal error code -21669 look like a mangled
+   * version of the entered code).
+   *
+   * @param last - Status and body of the last verification attempt, if any.
+   * @param last.status - HTTP status of that attempt.
+   * @param last.body - Raw response body of that attempt.
+   */
+  _describeCodeFailure(last) {
+    var _a, _b, _c;
+    const errors = this._parseServiceErrors((_a = last == null ? void 0 : last.body) != null ? _a : "");
+    const codes = errors.map((e) => String(e == null ? void 0 : e.code));
+    if (codes.includes("-21670")) {
+      return "Zu viele Fehlversuche \u2014 Apple hat die Code-Eingabe vor\xFCbergehend gesperrt (Apple-Fehler -21670). Bitte sp\xE4ter erneut anmelden und einen neuen Code anfordern.";
+    }
+    if (codes.includes("-21669")) {
+      return "Apple hat den Best\xE4tigungscode abgelehnt (Apple-Fehler -21669: falscher oder abgelaufener Code). Bitte einen neuen Code anfordern und ihn direkt nach dem Empfang eingeben.";
+    }
+    const appleMessage = (_b = errors.find((e) => typeof (e == null ? void 0 : e.message) === "string")) == null ? void 0 : _b.message;
+    const detail = appleMessage != null ? appleMessage : (last == null ? void 0 : last.body) ? last.body.slice(0, 200) : "";
+    return `Code-Pr\xFCfung fehlgeschlagen (HTTP ${(_c = last == null ? void 0 : last.status) != null ? _c : "unbekannt"})${detail ? `: ${detail}` : ""}`;
   }
   async _getTrustToken() {
     if (!this.authStore.validateAuthSecrets()) {
