@@ -46,7 +46,7 @@ import {
     Warning as WarningIcon,
 } from '@mui/icons-material';
 import { ConfigGeneric, type ConfigGenericProps, type ConfigGenericState } from '@iobroker/json-config';
-import { I18n } from '@iobroker/adapter-react-v5';
+import { I18n } from '@iobroker/gui-components';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -188,8 +188,8 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
         });
     }
 
-    componentDidMount(): void {
-        super.componentDidMount();
+    async componentDidMount(): Promise<void> {
+        await super.componentDidMount();
         this.subscribeAlive();
         void this.loadInitialData();
     }
@@ -610,8 +610,8 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                 <CardContent sx={{ pb: '8px !important', pt: 1 }}>
                     <Stack
                         direction="row"
-                        alignItems="center"
                         spacing={1}
+                        sx={{ alignItems: 'center' }}
                     >
                         {entry.type === 'backitup' ? <StorageIcon color="primary" /> : <FolderIcon color="action" />}
                         <Box sx={{ flex: 1 }}>
@@ -811,7 +811,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                             <Stack
                                 direction="row"
                                 spacing={1}
-                                alignItems="flex-end"
+                                sx={{ alignItems: 'flex-end' }}
                             >
                                 <TextField
                                     label={I18n.t('custom_drivesync_local_path')}
@@ -839,7 +839,7 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                         <Stack
                             direction="row"
                             spacing={1}
-                            alignItems="flex-end"
+                            sx={{ alignItems: 'flex-end' }}
                         >
                             <TextField
                                 label={I18n.t('custom_drivesync_icloud_folder')}
@@ -969,8 +969,8 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                 <DialogTitle>
                     <Stack
                         direction="row"
-                        alignItems="center"
                         spacing={1}
+                        sx={{ alignItems: 'center' }}
                     >
                         <FolderIcon />
                         <Typography variant="h6">{I18n.t('custom_drivesync_select_local_folder')}</Typography>
@@ -1090,8 +1090,8 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                 <DialogTitle>
                     <Stack
                         direction="row"
-                        alignItems="center"
                         spacing={1}
+                        sx={{ alignItems: 'center' }}
                     >
                         <CloudUploadIcon />
                         <Typography variant="h6">{I18n.t('custom_drivesync_select_folder')}</Typography>
@@ -1242,8 +1242,8 @@ class DriveSync extends ConfigGeneric<ConfigGenericProps, DriveSyncState> {
                 <DialogTitle>
                     <Stack
                         direction="row"
-                        alignItems="center"
                         spacing={1}
+                        sx={{ alignItems: 'center' }}
                     >
                         <WarningIcon color="warning" />
                         <Typography variant="h6">{I18n.t('custom_drivesync_conflict_title')}</Typography>

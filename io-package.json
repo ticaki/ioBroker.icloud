@@ -3,6 +3,19 @@
     "name": "icloud",
     "version": "1.0.2",
     "news": {
+      "2.0.0": {
+        "en": "BREAKING: admin >= 8.0.1 is now required. The custom config components were migrated to @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 and React 19 — with an older admin the iCloud settings pages will no longer load.",
+        "de": "BREAKING: Es wird jetzt admin >= 8.0.1 benötigt. Die eigenen Konfigurationskomponenten wurden auf @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 und React 19 umgestellt — mit einem älteren Admin laden die iCloud-Einstellungsseiten nicht mehr.",
+        "ru": "BREAKING: теперь требуется admin >= 8.0.1. Собственные компоненты настроек переведены на @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 и React 19 — со старым admin страницы настроек iCloud больше не загружаются.",
+        "pt": "BREAKING: passa a ser necessário o admin >= 8.0.1. Os componentes de configuração próprios foram migrados para @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 e React 19 — com um admin mais antigo as páginas de definições do iCloud deixam de carregar.",
+        "nl": "BREAKING: admin >= 8.0.1 is nu vereist. De eigen configuratiecomponenten zijn overgezet naar @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 en React 19 — met een oudere admin laden de iCloud-instellingenpagina's niet meer.",
+        "fr": "BREAKING : admin >= 8.0.1 est désormais requis. Les composants de configuration personnalisés ont été migrés vers @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 et React 19 — avec un admin plus ancien, les pages de réglages iCloud ne se chargent plus.",
+        "it": "BREAKING: ora è richiesto admin >= 8.0.1. I componenti di configurazione personalizzati sono stati migrati a @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 e React 19 — con un admin più vecchio le pagine delle impostazioni iCloud non si caricano più.",
+        "es": "BREAKING: ahora se requiere admin >= 8.0.1. Los componentes de configuración propios se han migrado a @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 y React 19 — con un admin más antiguo las páginas de ajustes de iCloud ya no se cargan.",
+        "pl": "BREAKING: wymagany jest teraz admin >= 8.0.1. Własne komponenty konfiguracji zostały przeniesione na @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 i React 19 — ze starszym adminem strony ustawień iCloud nie będą się już ładować.",
+        "uk": "BREAKING: тепер потрібен admin >= 8.0.1. Власні компоненти налаштувань переведено на @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 та React 19 — зі старішим admin сторінки налаштувань iCloud більше не завантажуються.",
+        "zh-cn": "BREAKING：现在需要 admin >= 8.0.1。自定义配置组件已迁移到 @iobroker/gui-components 10、@iobroker/json-config 9、MUI 9 和 React 19 — 使用旧版 admin 时 iCloud 设置页面将无法加载。"
+      },
       "1.0.2": {
         "en": "Fixed: a valid 2FA code was rejected with Apple error -21669 — the code is now tried on both verification channels (trusted device and SMS). Fixed: the refreshed session data from Apple's MFA requests is now used for the following requests.",
         "de": "Behoben: Ein gültiger 2FA-Code wurde mit dem Apple-Fehler -21669 abgelehnt — der Code wird jetzt auf beiden Prüfwegen (vertrautes Gerät und SMS) versucht. Behoben: Die aktualisierten Sitzungsdaten aus Apples MFA-Anfragen werden jetzt für die folgenden Anfragen verwendet.",
@@ -156,7 +169,7 @@
     ],
     "globalDependencies": [
       {
-        "admin": ">=7.6.20"
+        "admin": ">=8.0.1"
       }
     ]
   },
