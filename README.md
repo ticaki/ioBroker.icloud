@@ -48,7 +48,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 -->
 ### **WORK IN PROGRESS**
 * (ticaki) **BREAKING**: admin >= 8.0.1 is now required — the custom config components were migrated to `@iobroker/gui-components` 10, `@iobroker/json-config` 9, MUI 9 and React 19
-* (ticaki) fixed: `admin:copy` now clears `admin/custom/assets` before copying, so hashed bundles from earlier builds no longer pile up in the repo
 
 ### 1.0.2 (2026-08-23)
 * (ticaki) fixed: a valid 2FA code was rejected with Apple error -21669 — the code is now always tried on both verification endpoints (trusted device *and* SMS), because a code that belongs to the other channel is reported exactly like a wrong one
