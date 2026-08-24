@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "icloud",
-    "version": "1.0.2",
+    "version": "2.0.0",
     "news": {
       "2.0.0": {
         "en": "BREAKING: admin >= 8.0.1 is now required. The custom config components were migrated to @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 and React 19 — with an older admin the iCloud settings pages will no longer load.",
@@ -93,19 +93,6 @@
         "pl": "zmiana: Usunięto niewykorzystane zależności klawiszy i kod.\nfixed: jsonConfig ostrzeżeń / wszystkich błędów repochecker, ostrzeżeń\nlink do darowizny",
         "uk": "змінено: Вилучено невикористану залежностей та коду.\nвиправлено: jsonConfig попередження / всі помилкові помилки, попередження\nпосилання",
         "zh-cn": "更改: 删除未使用的密钥tar依赖和代码.\n固定 : jsonConfig 警告 / 所有重新检查器错误, 警告\n捐赠链接"
-      },
-      "0.7.4": {
-        "en": "New: SMS MFA panel in the General admin tab — appears automatically below the login fields when the adapter requests MFA; lets you request an SMS code and submit the 6-digit code directly from the admin UI without touching ioBroker states; visibility is driven by an internal adapter variable (not the `mfa.required` state) so the panel only appears once the adapter is ready to accept the code",
-        "de": "Neu: SMS MFA-Panel im General Admin-Tab – erscheint automatisch unter den Login-Feldern, wenn der Adapter MFA anfordert; Sie können einen SMS-Code anfordern und den 6-stelligen Code direkt vom Admin UI einreichen, ohne ioBroker Zustände zu berühren; Sicht wird durch eine interne Adaptervariable (nicht den `mfa.required` Zustand) angesteuert, so dass das Panel nur erscheint, wenn der Adapter bereit ist, den Code anzunehmen",
-        "ru": "Новая: панель SMS MFA в вкладке «Общий администратор» — появляется автоматически под полями входа, когда адаптер запрашивает MFA; позволяет запрашивать SMS-код и отправлять 6-значный код непосредственно из пользовательского интерфейса администратора, не касаясь состояний ioBroker; видимость приводится в действие внутренней переменной адаптера (не состоянием «mfa.required»), поэтому панель появляется только после того, как адаптер готов принять код",
-        "pt": "Novo: Painel MFA SMS na guia Geral de administração — aparece automaticamente abaixo dos campos de login quando o adaptador solicita MFA; permite que você solicite um código SMS e envie o código de 6 dígitos diretamente da interface de administração sem tocar estados ioBroker; visibilidade é guiada por uma variável de adaptador interno (não o estado `mfa.required`) para que o painel só aparece uma vez que o adaptador está pronto para aceitar o código",
-        "nl": "Nieuw: SMS-tv-paneel in het tabblad Algemeen admin verschijnt automatisch onder de inlogvelden wanneer de adapter vraagt om een SMS-code aan te vragen en de 6-cijferige code direct vanuit de admin UI in te dienen zonder de joBroker toestanden aan te raken; zichtbaarheid wordt aangedreven door een interne adapter variabele (niet de status \"mfa.\" . ",
-        "fr": "Nouveau: Panneau SMS MFA dans l'onglet Administration générale — apparaît automatiquement sous les champs de connexion lorsque l'adaptateur demande MFA; vous permet de demander un code SMS et de soumettre le code à 6 chiffres directement de l'interface utilisateur admin sans toucher les états ioBroker; la visibilité est conduite par une variable d'adaptateur interne (pas l'état `mfa.required`) de sorte que le panneau n'apparaît que lorsque l'adaptateur est prêt à accepter le code",
-        "it": "Nuovo: pannello MFA SMS nella scheda General admin — appare automaticamente sotto i campi di login quando l'adattatore richiede MFA; consente di richiedere un codice SMS e di inviare il codice a 6 cifre direttamente dall'interfaccia utente senza toccare stati ioBroker; la visibilità è guidata da una variabile adattatore interno (non lo stato `mfa.required`) in modo che il pannello venga visualizzato solo una volta che l'adattatore è pronto ad accettare il codice",
-        "es": "Nuevo: panel SMS MFA en la pestaña Administración General — aparece automáticamente por debajo de los campos de inicio de sesión cuando el adaptador solicita MFA; le permite solicitar un código SMS y enviar el código de 6 dígitos directamente desde el administrador UI sin tocar los estados ioBroker; la visibilidad es impulsada por una variable de adaptador interno (no el estado 'mfa.required') por lo que el panel sólo aparece una vez que el adaptador está listo para aceptar el código",
-        "pl": "Nowy: Panel MFA SMS w zakładce Ogólne admin - pojawia się automatycznie pod polami logowania, gdy adapter wymaga MFA; pozwala na żądanie kodu SMS i przesłać 6-cyfrowy kod bezpośrednio z interfejsu użytkownika admin bez dotykania stanów jOBroker; widoczność jest napędzana przez wewnętrzną zmienną adaptera (nie stan 'mfa.required'), więc panel pojawia się tylko wtedy, gdy adapter jest gotowy do przyjęcia kodu",
-        "uk": "Новий: Панель SMS MFA в загальній вкладці адміністратора — з'являється автоматично нижче поля входу, коли адаптер запитує MFA; дозволяє запитати SMS-код та подати 6-цифровий код безпосередньо з адміністратора UI без сенсорних станів ioBroker; видимість приводиться до змінного внутрішнього адаптера (не `mfa.required` стану) так, що панель з'являється тільки після того, як адаптер готовий прийняти код",
-        "zh-cn": "新建 : 一般admin 标签中的 SMS MFA 面板 – 当适配器请求 MFA 时自动出现在登录域下; 让您请求一个 SMS 代码, 并直接从 admin UI 提交 6 位码而不触碰 ioBroker 状态; 可见度由内部适配器变量(而不是 `mfa. required' 状态) 驱动, 因此, 面板仅在适配器准备好接受代码后才会出现 "
       }
     },
     "titleLang": {

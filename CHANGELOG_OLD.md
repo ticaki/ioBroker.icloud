@@ -1,6 +1,9 @@
 # Older Changelog
 
 Older changelog entries will be moved here from the [README](README.md) once the changelog section there grows too long.
+## 0.7.6 (2026-04-26)
+* (ticaki) fixed: SMS 2FA verification mode is now always forced to `sms` — using `pushMode` from the trusted phone could cause authentication failures
+
 ## 0.7.5 (2026-04-23)
 * (ticaki) changed: Removed unused keytar dependency and code.
 * (ticaki) fixed: jsonConfig warnings / all repochecker error, warnings

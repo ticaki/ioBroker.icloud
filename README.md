@@ -46,7 +46,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 2.0.0 (2026-08-24)
 * (ticaki) **BREAKING**: admin >= 8.0.1 is now required — the custom config components were migrated to `@iobroker/gui-components` 10, `@iobroker/json-config` 9, MUI 9 and React 19
 
 ### 1.0.2 (2026-08-23)
@@ -69,9 +69,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 
 ### 0.7.7 (2026-05-11)
 - (ticaki) Extends an ioBroker object only when the provided partial object has actually changed
-
-### 0.7.6 (2026-04-26)
-* (ticaki) fixed: SMS 2FA verification mode is now always forced to `sms` — using `pushMode` from the trusted phone could cause authentication failures
 
 Older changes are listed in [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 
