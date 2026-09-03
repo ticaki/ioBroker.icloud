@@ -46,7 +46,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 2.0.1 (2026-09-03)
 * (ticaki) fixed: login failed with `SRP init failed (409)` when a leftover session from an aborted 2FA attempt was still on disk — the stale session is now discarded and the sign-in retried once
 * (ticaki) fixed: the fresh scnt / session id returned by Apple's SRP init response is now used for the following `signin/complete` request
 
@@ -70,9 +70,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 * (ticaki) changed: internal waits (security-key polling, PCS consent, geocoder rate-throttle) now use the cancellable adapter timer, so pending timers are cleared cleanly when the adapter unloads
 * (ticaki) changed: geocoder HTTP requests now use `AbortSignal.timeout` with improved timeout detection
 * (ticaki) fixed: addressed ioBroker repochecker findings for the latest-repo listing
-
-### 0.7.7 (2026-05-11)
-- (ticaki) Extends an ioBroker object only when the provided partial object has actually changed
 
 Older changes are listed in [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 

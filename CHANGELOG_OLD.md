@@ -1,6 +1,9 @@
 # Older Changelog
 
 Older changelog entries will be moved here from the [README](README.md) once the changelog section there grows too long.
+## 0.7.7 (2026-05-11)
+- (ticaki) Extends an ioBroker object only when the provided partial object has actually changed
+
 ## 0.7.6 (2026-04-26)
 * (ticaki) fixed: SMS 2FA verification mode is now always forced to `sms` — using `pushMode` from the trusted phone could cause authentication failures
 

@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "icloud",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "news": {
       "2.0.1": {
         "en": "Fixed: the login could fail with \"SRP init failed (409)\" when a session left over from an aborted 2FA attempt was still stored on disk — the stale session is now discarded and the sign-in is retried once. In addition, the fresh session data returned by Apple's SRP init response is now used for the following sign-in request.",
@@ -93,19 +93,6 @@
         "pl": "naprawiono: tryb weryfikacji SMS 2FA jest teraz zawsze wymuszany na 'sms' — użycie pushMode zaufanego telefonu mogło powodować błędy uwierzytelniania",
         "uk": "виправлено: режим перевірки SMS 2FA тепер завжди примусово встановлюється в 'sms' — використання pushMode довіреного телефону могло спричиняти помилки автентифікації",
         "zh-cn": "修复: SMS 2FA 验证模式现在始终强制设为 'sms' — 使用受信任手机的 pushMode 可能导致身份验证失败"
-      },
-      "0.7.5": {
-        "en": "changed: Removed unused keytar dependency and code.\nfixed: jsonConfig warnings / all repochecker error, warnings\ndonate link",
-        "de": "geändert: Nicht genutzte Keytar-Abhängigkeit und Code entfernt.\nbehoben: jsonConfig warnungen / alle repochecker fehler, warnungen\nlink verraten",
-        "ru": "изменены: удалены неиспользуемые ключи и код.\nисправлено: предупреждения jsonConfig / все ошибки репочекера, предупреждения\nдонорская ссылка",
-        "pt": "alterado: Removeu a dependência e o código do keytar não utilizados.\ncorrigido: avisos do jsonConfig / erro do repochecker, avisos\ndoar link",
-        "nl": "gewijzigd: Verwijderde ongebruikte keytar afhankelijkheid en code.\nvaste: jsonConfig waarschuwingen / alle repochecker fout, waarschuwingen\nkoppeling doneren",
-        "fr": "modifié : Supprimé la dépendance et le code de keytar inutilisés.\ncorrigé: jsonConfig avertissements / toutes les erreurs repochecker, avertissements\ndonnez le lien",
-        "it": "cambiato: Rimossa dipendenza keytar non utilizzata e codice.\nfisso: jsonConfig avvisi / tutti gli errori repochecker, avvisi\nlink di donazione",
-        "es": "cambiado: Eliminar la dependencia y el código de keytar no utilizado.\nfijo: jsonConfig warnings / all repochecker error, warnings\ndonate link",
-        "pl": "zmiana: Usunięto niewykorzystane zależności klawiszy i kod.\nfixed: jsonConfig ostrzeżeń / wszystkich błędów repochecker, ostrzeżeń\nlink do darowizny",
-        "uk": "змінено: Вилучено невикористану залежностей та коду.\nвиправлено: jsonConfig попередження / всі помилкові помилки, попередження\nпосилання",
-        "zh-cn": "更改: 删除未使用的密钥tar依赖和代码.\n固定 : jsonConfig 警告 / 所有重新检查器错误, 警告\n捐赠链接"
       }
     },
     "titleLang": {

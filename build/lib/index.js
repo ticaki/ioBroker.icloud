@@ -256,12 +256,12 @@ class iCloudService extends import_node_events.default {
           this._log(LogLevel.Debug, "[auth] Session token check failed:", String(e));
         }
       }
-      const sessionAuthHeaders = {
+      const buildSessionAuthHeaders = () => ({
         ...import_consts.AUTH_HEADERS,
         "X-Apple-OAuth-State": clientId,
         ...this.authStore.scnt ? { scnt: this.authStore.scnt } : {},
         ...this.authStore.sessionId ? { "X-Apple-ID-Session-Id": this.authStore.sessionId } : {}
-      };
+      });
       let authEndpoint = "signin";
       let authData = {
         accountName: this.options.username,
@@ -270,24 +270,43 @@ class iCloudService extends import_node_events.default {
         // always true — matches pyicloud behaviour
       };
       if (this.options.authMethod === "srp") {
-        const authenticator = new import_iCSRPAuthenticator.GSASRPAuthenticator(username);
-        const initData = await authenticator.getInit();
-        this._log(LogLevel.Debug, "[auth] SRP init \u2192 POST", `${import_consts.AUTH_ENDPOINT}signin/init`);
-        const initRaw = await this.fetch(`${import_consts.AUTH_ENDPOINT}signin/init`, {
-          headers: sessionAuthHeaders,
-          method: "POST",
-          body: JSON.stringify(initData)
-        });
-        this._log(LogLevel.Debug, "[auth] SRP init response status:", initRaw.status);
-        if (!initRaw.ok) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const authenticator = new import_iCSRPAuthenticator.GSASRPAuthenticator(username);
+          const initData = await authenticator.getInit();
+          this._log(LogLevel.Debug, "[auth] SRP init \u2192 POST", `${import_consts.AUTH_ENDPOINT}signin/init`);
+          const initRaw = await this.fetch(`${import_consts.AUTH_ENDPOINT}signin/init`, {
+            headers: buildSessionAuthHeaders(),
+            method: "POST",
+            body: JSON.stringify(initData)
+          });
+          this._log(LogLevel.Debug, "[auth] SRP init response status:", initRaw.status);
+          if (initRaw.ok) {
+            this.authStore.extractSessionHeaders(initRaw);
+            const initResponse = await initRaw.json();
+            authData = {
+              ...authData,
+              ...await authenticator.getComplete(password, initResponse)
+            };
+            break;
+          }
+          if (initRaw.status === 409 && attempt === 0) {
+            const staleBody = (await initRaw.text()).slice(0, 200);
+            this._log(
+              LogLevel.Debug,
+              `[auth] SRP init returned 409 (${staleBody}) \u2014 discarding stale session and retrying once`
+            );
+            this.authStore.clearStaleSession(this.options.username);
+            continue;
+          }
           const errBody = (await initRaw.text()).slice(0, 200);
+          if (initRaw.status === 409) {
+            this.authStore.clearStaleSession(this.options.username);
+            throw new Error(
+              `SRP init failed (409): Apple lehnt den Login-Start ab. Bitte pr\xFCfe Apple-ID und Passwort und versuche es in einigen Minuten erneut. ${errBody}`
+            );
+          }
           throw new Error(`SRP init failed (${initRaw.status}): ${errBody}`);
         }
-        const initResponse = await initRaw.json();
-        authData = {
-          ...authData,
-          ...await authenticator.getComplete(password, initResponse)
-        };
         authEndpoint = "signin/complete";
       } else {
         authData.password = this.options.password;
@@ -295,7 +314,7 @@ class iCloudService extends import_node_events.default {
       const signinUrl = `${import_consts.AUTH_ENDPOINT + authEndpoint}?isRememberMeEnabled=true`;
       this._log(LogLevel.Debug, "[auth] signin \u2192 POST", signinUrl);
       const authResponse = await this.fetch(signinUrl, {
-        headers: sessionAuthHeaders,
+        headers: buildSessionAuthHeaders(),
         method: "POST",
         body: JSON.stringify(authData)
       });
