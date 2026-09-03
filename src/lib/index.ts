@@ -415,12 +415,15 @@ export default class iCloudService extends EventEmitter {
 
             // Build signin headers including persisted scnt + session_id (like pyicloud).
             // Auth cookies (aasp etc.) are sent automatically by the fetch-cookie jar.
-            const sessionAuthHeaders: Record<string, string> = {
+            // Built fresh for every request: Apple hands out a new scnt / session id on the
+            // SRP init response, and signin/complete is rejected when it still carries the
+            // previous one (pyicloud refreshes its header data from every response).
+            const buildSessionAuthHeaders = (): Record<string, string> => ({
                 ...AUTH_HEADERS,
                 'X-Apple-OAuth-State': clientId,
                 ...(this.authStore.scnt ? { scnt: this.authStore.scnt } : {}),
                 ...(this.authStore.sessionId ? { 'X-Apple-ID-Session-Id': this.authStore.sessionId } : {}),
-            };
+            });
 
             let authEndpoint = 'signin';
             let authData = {
@@ -429,24 +432,50 @@ export default class iCloudService extends EventEmitter {
                 rememberMe: true, // always true — matches pyicloud behaviour
             } as any;
             if (this.options.authMethod === 'srp') {
-                const authenticator = new GSASRPAuthenticator(username);
-                const initData = await authenticator.getInit();
-                this._log(LogLevel.Debug, '[auth] SRP init → POST', `${AUTH_ENDPOINT}signin/init`);
-                const initRaw = await this.fetch(`${AUTH_ENDPOINT}signin/init`, {
-                    headers: sessionAuthHeaders,
-                    method: 'POST',
-                    body: JSON.stringify(initData),
-                });
-                this._log(LogLevel.Debug, '[auth] SRP init response status:', initRaw.status);
-                if (!initRaw.ok) {
+                // Apple answers signin/init with 409 when the session we present (persisted scnt /
+                // X-Apple-ID-Session-Id / aasp cookie) is still stuck in a half-finished 2FA phase —
+                // e.g. after an aborted MFA prompt or an adapter update. Retry once from scratch with
+                // that session discarded; the trust token survives so MFA can still be skipped.
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    const authenticator = new GSASRPAuthenticator(username);
+                    const initData = await authenticator.getInit();
+                    this._log(LogLevel.Debug, '[auth] SRP init → POST', `${AUTH_ENDPOINT}signin/init`);
+                    const initRaw = await this.fetch(`${AUTH_ENDPOINT}signin/init`, {
+                        headers: buildSessionAuthHeaders(),
+                        method: 'POST',
+                        body: JSON.stringify(initData),
+                    });
+                    this._log(LogLevel.Debug, '[auth] SRP init response status:', initRaw.status);
+                    if (initRaw.ok) {
+                        // Adopt the fresh scnt / session id before signin/complete goes out.
+                        this.authStore.extractSessionHeaders(initRaw);
+                        const initResponse = (await initRaw.json()) as any;
+                        authData = {
+                            ...authData,
+                            ...(await authenticator.getComplete(password, initResponse)),
+                        };
+                        break;
+                    }
+                    if (initRaw.status === 409 && attempt === 0) {
+                        const staleBody = (await initRaw.text()).slice(0, 200);
+                        this._log(
+                            LogLevel.Debug,
+                            `[auth] SRP init returned 409 (${staleBody}) — discarding stale session and retrying once`,
+                        );
+                        this.authStore.clearStaleSession(this.options.username);
+                        continue;
+                    }
                     const errBody = (await initRaw.text()).slice(0, 200);
+                    if (initRaw.status === 409) {
+                        // Second 409 in a row: the retry already ran without any persisted session
+                        // data, so this is not something a further retry can fix.
+                        this.authStore.clearStaleSession(this.options.username);
+                        throw new Error(
+                            `SRP init failed (409): Apple lehnt den Login-Start ab. Bitte prüfe Apple-ID und Passwort und versuche es in einigen Minuten erneut. ${errBody}`,
+                        );
+                    }
                     throw new Error(`SRP init failed (${initRaw.status}): ${errBody}`);
                 }
-                const initResponse = (await initRaw.json()) as any;
-                authData = {
-                    ...authData,
-                    ...(await authenticator.getComplete(password, initResponse)),
-                };
                 authEndpoint = 'signin/complete';
             } else {
                 authData.password = this.options.password;
@@ -455,7 +484,7 @@ export default class iCloudService extends EventEmitter {
             const signinUrl = `${AUTH_ENDPOINT + authEndpoint}?isRememberMeEnabled=true`;
             this._log(LogLevel.Debug, '[auth] signin → POST', signinUrl);
             const authResponse = await this.fetch(signinUrl, {
-                headers: sessionAuthHeaders,
+                headers: buildSessionAuthHeaders(),
                 method: 'POST',
                 body: JSON.stringify(authData),
             });
