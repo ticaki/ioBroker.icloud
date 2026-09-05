@@ -256,6 +256,14 @@ export default class iCloudService extends EventEmitter {
      */
     private _trustedPhone?: { id: number | string; nonFTEU?: boolean; pushMode?: string };
 
+    /**
+     * Apple's raw trusted-phone object exactly as sent in GET /appleauth/auth.
+     * Kept verbatim so a failed SMS request can be retried with the complete payload Apple
+     * echoes back (numberWithDialCode, obfuscatedNumber, lastTwoDigits, pushMode, …) instead of
+     * the minimal `{ id, nonFTEU }` form.
+     */
+    private _trustedPhoneRaw?: Record<string, unknown>;
+
     /** Set after requestSmsMfaCode() — routes provideMfaCode to /verify/phone/securitycode */
     private _smsPhoneNumberId?: number | string;
 
@@ -471,7 +479,7 @@ export default class iCloudService extends EventEmitter {
                         // data, so this is not something a further retry can fix.
                         this.authStore.clearStaleSession(this.options.username);
                         throw new Error(
-                            `SRP init failed (409): Apple lehnt den Login-Start ab. Bitte prüfe Apple-ID und Passwort und versuche es in einigen Minuten erneut. ${errBody}`,
+                            `SRP init failed (409): Apple refused to start the login. Please verify your Apple ID and password and try again in a few minutes. ${errBody}`,
                         );
                     }
                     throw new Error(`SRP init failed (${initRaw.status}): ${errBody}`);
@@ -586,74 +594,7 @@ export default class iCloudService extends EventEmitter {
                         this._setState(iCloudServiceStatus.Ready);
                     } else {
                         try {
-                            this._log(LogLevel.Debug, '[auth] GET /appleauth/auth — fetching auth options');
-                            const authResp = await this.fetch(AUTH_ENDPOINT.replace(/\/$/, ''), {
-                                headers: this.authStore.getMfaHeaders(),
-                            });
-                            // pyiCloud refreshes its session data from EVERY response — Apple hands
-                            // out a fresh scnt / session id here, and the securitycode POST later on
-                            // is rejected (-21669) when it still carries the previous one.
-                            this.authStore.extractSessionHeaders(authResp);
-                            const authRespText = await authResp.text();
-                            this._log(
-                                LogLevel.Debug,
-                                `[auth] GET /appleauth/auth → ${authResp.status}: ${authRespText}`,
-                            );
-
-                            // Parse trusted phone number from auth options (pyiCloud: _get_mfa_auth_options)
-                            try {
-                                const authOptions = JSON.parse(authRespText) as Record<string, unknown>;
-                                // Apple may nest phone data under "phoneNumberVerification" (modern flow,
-                                // as seen in pyiCloud's PhoneNumberVerification.from_mapping) or expose it
-                                // at the top level. Check both.
-                                const phoneVerification = authOptions?.phoneNumberVerification as
-                                    | Record<string, unknown>
-                                    | undefined;
-                                const phoneData =
-                                    (authOptions?.trustedPhoneNumber as Record<string, unknown> | undefined) ??
-                                    (phoneVerification?.trustedPhoneNumber as Record<string, unknown> | undefined) ??
-                                    (authOptions?.trustedPhoneNumbers as Record<string, unknown>[] | undefined)?.[0] ??
-                                    (
-                                        phoneVerification?.trustedPhoneNumbers as Record<string, unknown>[] | undefined
-                                    )?.[0];
-                                if (phoneData?.id !== undefined) {
-                                    this._trustedPhone = {
-                                        id: phoneData.id as number | string,
-                                        nonFTEU: typeof phoneData.nonFTEU === 'boolean' ? phoneData.nonFTEU : undefined,
-                                        pushMode:
-                                            typeof phoneData.pushMode === 'string' ? phoneData.pushMode : undefined,
-                                    };
-                                    this._log(
-                                        LogLevel.Debug,
-                                        `[auth] Trusted phone: id=${this._trustedPhone.id}, nonFTEU=${this._trustedPhone.nonFTEU}, pushMode=${this._trustedPhone.pushMode}`,
-                                    );
-                                }
-
-                                // Parse the FIDO2 security-key challenge, if present. Accounts with
-                                // hardware security keys get an `fsaChallenge` here instead of usable
-                                // SMS/trusted-device options — see authenticateWithSecurityKey().
-                                const fsa = authOptions?.fsaChallenge as Record<string, unknown> | undefined;
-                                const keyHandles = fsa?.keyHandles;
-                                if (
-                                    fsa &&
-                                    typeof fsa.challenge === 'string' &&
-                                    typeof fsa.rpId === 'string' &&
-                                    Array.isArray(keyHandles) &&
-                                    keyHandles.every(k => typeof k === 'string')
-                                ) {
-                                    this._securityKeyChallenge = {
-                                        challenge: fsa.challenge,
-                                        rpId: fsa.rpId,
-                                        keyHandles: keyHandles,
-                                    };
-                                    this._log(
-                                        LogLevel.Debug,
-                                        `[auth] Security-key challenge present: rpId=${fsa.rpId}, ${keyHandles.length} keyHandle(s)`,
-                                    );
-                                }
-                            } catch {
-                                /* JSON parse failed — non-fatal; _trustedPhone stays undefined */
-                            }
+                            await this._refreshAuthOptions();
 
                             // After GET /appleauth/auth, explicitly request Apple to push the code
                             // to trusted devices. Without this PUT call, SRP-authenticated sessions
@@ -695,7 +636,7 @@ export default class iCloudService extends EventEmitter {
                     // where old session data causes a transient 401).
                     this.authStore.clearStaleSession(this.options.username);
                     throw new Error(
-                        `STALE_SESSION_401: Falsche Apple-ID, falsches Passwort oder veraltete Session (HTTP ${authResponse.status}): ${body}`,
+                        `STALE_SESSION_401: Wrong Apple ID, wrong password or a stale session (HTTP ${authResponse.status}): ${body}`,
                     );
                 }
                 if (authResponse.status == 503) {
@@ -703,15 +644,95 @@ export default class iCloudService extends EventEmitter {
                     this.authStore.saveCookieJar(this.options.username);
                     this.authStore.saveSession(this.options.username);
                     throw new Error(
-                        'RATE_LIMITED: Apple hat den Login vorübergehend gesperrt (HTTP 503). Bitte 30–60 Minuten warten und dann erneut versuchen.',
+                        'RATE_LIMITED: Apple has temporarily blocked the login (HTTP 503). Please wait 30–60 minutes and try again.',
                     );
                 }
 
-                throw new Error(`Unbekannter Fehler beim Login (HTTP ${authResponse.status}): ${body}`);
+                throw new Error(`Unexpected login error (HTTP ${authResponse.status}): ${body}`);
             }
         } catch (e) {
             this._setState(iCloudServiceStatus.Error, e);
             throw e;
+        }
+    }
+
+    /**
+     * GET /appleauth/auth — (re-)fetch Apple's MFA options and refresh the session headers.
+     *
+     * Apple hands out a fresh scnt / session id / X-Apple-Auth-Attributes with every response, and
+     * an MFA request that carries stale ones is answered with a 5xx or -21669. Call this right
+     * before any verify/* request that does not directly follow the sign-in.
+     */
+    private async _refreshAuthOptions(): Promise<void> {
+        this._log(LogLevel.Debug, '[auth] GET /appleauth/auth — fetching auth options');
+        const authResp = await this.fetch(AUTH_ENDPOINT.replace(/\/$/, ''), {
+            headers: this.authStore.getMfaHeaders(),
+        });
+        // pyiCloud refreshes its session data from EVERY response — Apple hands
+        // out a fresh scnt / session id here, and the securitycode POST later on
+        // is rejected (-21669) when it still carries the previous one.
+        this.authStore.extractSessionHeaders(authResp);
+        const authRespText = await authResp.text();
+        this._log(LogLevel.Debug, `[auth] GET /appleauth/auth → ${authResp.status}: ${authRespText}`);
+        this._parseAuthOptions(authRespText);
+    }
+
+    /**
+     * Parse Apple's MFA options: trusted phone number(s) and the FIDO2 security-key challenge.
+     * Mirrors pyiCloud's _get_mfa_auth_options. Never throws — a body that is not the expected
+     * JSON simply leaves the previously parsed values in place.
+     *
+     * @param authRespText - Raw body of a GET /appleauth/auth response.
+     */
+    private _parseAuthOptions(authRespText: string): void {
+        try {
+            const authOptions = JSON.parse(authRespText) as Record<string, unknown>;
+            // Apple may nest phone data under "phoneNumberVerification" (modern flow,
+            // as seen in pyiCloud's PhoneNumberVerification.from_mapping) or expose it
+            // at the top level. Check both.
+            const phoneVerification = authOptions?.phoneNumberVerification as Record<string, unknown> | undefined;
+            const phoneData =
+                (authOptions?.trustedPhoneNumber as Record<string, unknown> | undefined) ??
+                (phoneVerification?.trustedPhoneNumber as Record<string, unknown> | undefined) ??
+                (authOptions?.trustedPhoneNumbers as Record<string, unknown>[] | undefined)?.[0] ??
+                (phoneVerification?.trustedPhoneNumbers as Record<string, unknown>[] | undefined)?.[0];
+            if (phoneData?.id !== undefined) {
+                this._trustedPhoneRaw = phoneData;
+                this._trustedPhone = {
+                    id: phoneData.id as number | string,
+                    nonFTEU: typeof phoneData.nonFTEU === 'boolean' ? phoneData.nonFTEU : undefined,
+                    pushMode: typeof phoneData.pushMode === 'string' ? phoneData.pushMode : undefined,
+                };
+                this._log(
+                    LogLevel.Debug,
+                    `[auth] Trusted phone: id=${this._trustedPhone.id}, nonFTEU=${this._trustedPhone.nonFTEU}, pushMode=${this._trustedPhone.pushMode}`,
+                );
+            }
+
+            // Parse the FIDO2 security-key challenge, if present. Accounts with
+            // hardware security keys get an `fsaChallenge` here instead of usable
+            // SMS/trusted-device options — see authenticateWithSecurityKey().
+            const fsa = authOptions?.fsaChallenge as Record<string, unknown> | undefined;
+            const keyHandles = fsa?.keyHandles;
+            if (
+                fsa &&
+                typeof fsa.challenge === 'string' &&
+                typeof fsa.rpId === 'string' &&
+                Array.isArray(keyHandles) &&
+                keyHandles.every(k => typeof k === 'string')
+            ) {
+                this._securityKeyChallenge = {
+                    challenge: fsa.challenge,
+                    rpId: fsa.rpId,
+                    keyHandles: keyHandles,
+                };
+                this._log(
+                    LogLevel.Debug,
+                    `[auth] Security-key challenge present: rpId=${fsa.rpId}, ${keyHandles.length} keyHandle(s)`,
+                );
+            }
+        } catch {
+            /* JSON parse failed — non-fatal; _trustedPhone stays undefined */
         }
     }
 
@@ -723,6 +744,17 @@ export default class iCloudService extends EventEmitter {
      * @param phoneNumberId - Optional explicit phone number ID. When omitted, the ID from Apple's auth response is used.
      */
     async requestSmsMfaCode(phoneNumberId?: number | string): Promise<void> {
+        // The SMS request is triggered by the user, typically minutes after the sign-in and always
+        // after the automatic trusted-device push. Apple invalidates scnt / session id / auth
+        // attributes along the way and answers a verify/phone that carries the stale ones with a
+        // 5xx. Re-reading the auth options refreshes those headers — and returns the currently
+        // valid phone number ids, which is what the SMS request is addressed to.
+        try {
+            await this._refreshAuthOptions();
+        } catch (e) {
+            this._log(LogLevel.Debug, '[auth] refreshing auth options before SMS request failed:', String(e));
+        }
+
         // Normally Apple returns a trusted phone number in the auth options. Accounts that use
         // security keys (FIDO2 / YubiKey) as their primary 2FA may omit the phone number from
         // GET /appleauth/auth (the response carries an fsaChallenge instead), even though a phone
@@ -737,7 +769,7 @@ export default class iCloudService extends EventEmitter {
             id = 1;
             this._log(
                 LogLevel.Warning,
-                '[auth] No trusted phone number in auth options (security-key account?) — trying SMS fallback with phone id=1',
+                '[auth] No trusted phone number in auth options — trying SMS fallback with phone id=1',
             );
         }
 
@@ -747,7 +779,42 @@ export default class iCloudService extends EventEmitter {
             phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
         }
 
-        this._log(LogLevel.Debug, `[auth] PUT /appleauth/auth/verify/phone — requesting SMS code to phone id ${id}`);
+        let attempt = await this._putVerifyPhone(phonePayload);
+
+        // Apple answers 5xx when it dislikes the minimal payload. Retry once with the complete
+        // phone object from the auth options (numberWithDialCode, pushMode, obfuscatedNumber, …) —
+        // that is what Apple's own web client round-trips.
+        if (!attempt.ok && attempt.status >= 500 && this._trustedPhoneRaw) {
+            const fullPayload: Record<string, unknown> = { ...this._trustedPhoneRaw, id };
+            const addsFields = Object.keys(fullPayload).some(k => !(k in phonePayload));
+            if (addsFields) {
+                this._log(
+                    LogLevel.Debug,
+                    `[auth] SMS request rejected with HTTP ${attempt.status} — retrying with full phone payload`,
+                );
+                attempt = await this._putVerifyPhone(fullPayload);
+            }
+        }
+
+        if (!attempt.ok) {
+            throw new Error(this._describeSmsFailure(attempt.status, attempt.body));
+        }
+        // Remember that next MFA code submission must go to the phone endpoint
+        this._smsPhoneNumberId = id;
+    }
+
+    /**
+     * Single PUT /appleauth/auth/verify/phone round trip.
+     *
+     * @param phonePayload - The `phoneNumber` object sent to Apple.
+     */
+    private async _putVerifyPhone(
+        phonePayload: Record<string, unknown>,
+    ): Promise<{ ok: boolean; status: number; body: string }> {
+        this._log(
+            LogLevel.Debug,
+            `[auth] PUT /appleauth/auth/verify/phone — payload ${JSON.stringify({ phoneNumber: phonePayload, mode: 'sms' })}`,
+        );
         const resp = await this.fetch(`${AUTH_ENDPOINT}verify/phone`, {
             headers: this.authStore.getMfaHeaders(),
             method: 'PUT',
@@ -757,13 +824,61 @@ export default class iCloudService extends EventEmitter {
         // POST verify/phone/securitycode runs against a stale session and Apple answers -21669
         // ("incorrect verification code") even though the SMS code is correct.
         this.authStore.extractSessionHeaders(resp);
-        const text = await resp.text();
-        this._log(LogLevel.Debug, `[auth] SMS request → ${resp.status}: ${text.slice(0, 200)}`);
-        if (!resp.ok) {
-            throw new Error(`SMS request failed (${resp.status}): ${text.slice(0, 200)}`);
+        const body = await resp.text();
+        // Log the response in full: Apple pretty-prints the echoed phone number first, so the
+        // decisive `serviceErrors` block sits well beyond the first few hundred characters.
+        this._log(LogLevel.Debug, `[auth] SMS request → ${resp.status}: ${body.slice(0, 2000)}`);
+        return { ok: resp.ok, status: resp.status, body };
+    }
+
+    /**
+     * Turn a failed SMS request into a message the user can act on instead of Apple's raw JSON
+     * (whose leading, obfuscated phone number pushed the actual error out of the log).
+     *
+     * @param status - HTTP status of the failed verify/phone request.
+     * @param body - Raw response body of that request.
+     */
+    private _describeSmsFailure(status: number, body: string): string {
+        const errors = this._parseServiceErrors(body);
+        const codes = errors.map(e => String(e?.code));
+        const appleMessage = errors.find(e => typeof e?.message === 'string')?.message as string | undefined;
+
+        let securityCode: Record<string, unknown> | undefined;
+        try {
+            const parsed = JSON.parse(body) as Record<string, unknown>;
+            securityCode = (parsed?.securityCode as Record<string, unknown> | undefined) ?? parsed;
+        } catch {
+            /* not JSON — fall through to the generic message */
         }
-        // Remember that next MFA code submission must go to the phone endpoint
-        this._smsPhoneNumberId = id;
+        if (securityCode?.tooManyCodesSent === true || codes.includes('-21878')) {
+            return 'Apple has sent too many verification codes to this number and is blocking further SMS. Please wait a few hours, or confirm the code on a trusted Apple device instead.';
+        }
+        if (securityCode?.securityCodeLocked === true || securityCode?.tooManyCodesValidated === true) {
+            return 'Apple has temporarily locked code verification for this account. Please sign in again later.';
+        }
+        if (this._securityKeyChallenge) {
+            return `Apple rejected the SMS request (HTTP ${status})${appleMessage ? `: ${appleMessage}` : ''}. This account has a security key (FIDO2) enrolled — Apple does not send SMS codes for such accounts. Please use the security key, or enter the code shown on a trusted Apple device.`;
+        }
+        const detail = appleMessage ?? (errors.length ? JSON.stringify(errors) : this._stripEchoedPhone(body));
+        return `SMS request failed (HTTP ${status})${detail ? `: ${detail}` : ''}`;
+    }
+
+    /**
+     * Drop the echoed (obfuscated) phone number from an Apple auth response so the remaining,
+     * informative part fits into a log line / error message.
+     *
+     * @param body - The raw response body.
+     */
+    private _stripEchoedPhone(body: string): string {
+        try {
+            const parsed = JSON.parse(body) as Record<string, unknown>;
+            delete parsed.phoneNumber;
+            delete parsed.trustedPhoneNumber;
+            delete parsed.trustedPhoneNumbers;
+            return JSON.stringify(parsed).slice(0, 300);
+        } catch {
+            return body.slice(0, 300);
+        }
     }
 
     /**
@@ -1110,7 +1225,7 @@ export default class iCloudService extends EventEmitter {
         // session token / scnt here, which 2sv/trust and accountLogin need afterwards.
         this.authStore.extractSessionHeaders(response);
         const body = await response.text();
-        this._log(LogLevel.Debug, `[auth] verify ${channel} securitycode → ${response.status}: ${body.slice(0, 300)}`);
+        this._log(LogLevel.Debug, `[auth] verify ${channel} securitycode → ${response.status}: ${body.slice(0, 2000)}`);
         return { status: response.status, body };
     }
 
@@ -1169,14 +1284,14 @@ export default class iCloudService extends EventEmitter {
         const errors = this._parseServiceErrors(last?.body ?? '');
         const codes = errors.map(e => String(e?.code));
         if (codes.includes('-21670')) {
-            return 'Zu viele Fehlversuche — Apple hat die Code-Eingabe vorübergehend gesperrt (Apple-Fehler -21670). Bitte später erneut anmelden und einen neuen Code anfordern.';
+            return 'Too many failed attempts — Apple has temporarily locked code entry (Apple error -21670). Please sign in again later and request a new code.';
         }
         if (codes.includes('-21669')) {
-            return 'Apple hat den Bestätigungscode abgelehnt (Apple-Fehler -21669: falscher oder abgelaufener Code). Bitte einen neuen Code anfordern und ihn direkt nach dem Empfang eingeben.';
+            return 'Apple rejected the verification code (Apple error -21669: wrong or expired code). Please request a new code and enter it right after it arrives.';
         }
         const appleMessage = errors.find(e => typeof e?.message === 'string')?.message as string | undefined;
         const detail = appleMessage ?? (last?.body ? last.body.slice(0, 200) : '');
-        return `Code-Prüfung fehlgeschlagen (HTTP ${last?.status ?? 'unbekannt'})${detail ? `: ${detail}` : ''}`;
+        return `Code verification failed (HTTP ${last?.status ?? 'unknown'})${detail ? `: ${detail}` : ''}`;
     }
 
     private async _getTrustToken(): Promise<void> {
