@@ -181,6 +181,29 @@ function dateToAppleList(dt: Date, isStart: boolean): (string | number)[] {
     return [dateString, year, month, day, hour, minute, minutesFromMidnight];
 }
 
+/**
+ * Compact rendering of the Apple edge headers that tell an empty error response apart:
+ * which instance answered, whether a CDN served it and whether Apple asked us to back off.
+ *
+ * @param headers - The response headers to describe.
+ */
+function describeAppleHeaders(headers: Headers): string {
+    const keys = [
+        'x-apple-request-uuid',
+        'x-responding-instance',
+        'x-apple-edge-response-time',
+        'retry-after',
+        'age',
+        'via',
+        'content-length',
+    ];
+    const parts = keys
+        .map(k => [k, headers.get(k)] as const)
+        .filter((e): e is readonly [string, string] => e[1] !== null)
+        .map(([k, v]) => `${k}=${v}`);
+    return parts.length ? parts.join(', ') : 'no diagnostic headers';
+}
+
 export class iCloudCalendarService {
     service: iCloudService;
     serviceUri: string;
@@ -195,11 +218,24 @@ export class iCloudCalendarService {
         this.calendarServiceUri = `${service.accountInfo!.webservices.calendar.url}/ca`;
     }
 
+    /**
+     * Query parameters every calendar request carries.
+     *
+     * The base set (`clientBuildNumber`, `clientMasteringNumber`, `clientId`, `dsid`) comes from
+     * `service.getParams()` — pyicloud builds every calendar request as `dict(self.params)` plus
+     * lang/usertz/startDate/endDate, and Apple's own web client sends the same client identifiers.
+     * Without them some calendar partitions reject the request outright (HTTP 500 with an empty
+     * body) and Apple's CDN caches the response globally instead of per user.
+     */
+    private baseParams(): Record<string, string> {
+        return { ...Object.fromEntries(this.service.getParams()), dsid: this.dsid };
+    }
+
     private defaultParams(from?: Date, to?: Date): Record<string, string> {
         return {
+            ...this.baseParams(),
             startDate: dayjs(from ?? dayjs().startOf('month')).format(this.dateFormat),
             endDate: dayjs(to ?? dayjs().endOf('month')).format(this.dateFormat),
-            dsid: this.dsid,
             lang: 'en-us',
             usertz: this.tz,
         };
@@ -240,8 +276,20 @@ export class iCloudCalendarService {
 
         const text = await response.text();
 
+        if (!response.ok) {
+            // An empty error body carries no clue about who refused the request. Apple's edge
+            // headers do: they identify the responding instance and whether the answer came from
+            // a cache — the difference between a broken request, a stale CDN entry and an outage.
+            this.service._log(
+                0 /* LogLevel.Debug */,
+                `[calendar] GET ${endpointUrl} → HTTP ${response.status}, ${describeAppleHeaders(response.headers)}`,
+            );
+        }
+
         if (!text || !text.trim()) {
-            if (response.status === 401 && retry) {
+            // Apple answers an expired/missing X-APPLE-WEBAUTH-* cookie with a plain 401 on some
+            // partitions and with an empty 5xx on others — re-authenticate for both.
+            if ((response.status === 401 || response.status >= 500) && retry) {
                 await this.service.authenticateWebService('calendar');
                 return this.fetchEndpoint<T>(endpointUrl, params, false);
             }
@@ -324,9 +372,9 @@ export class iCloudCalendarService {
 
     async eventDetails(calendarGuid: string, eventGuid: string): Promise<iCloudCalendarEventDetailResponse> {
         return this.fetchEndpoint<iCloudCalendarEventDetailResponse>(`/eventdetail/${calendarGuid}/${eventGuid}`, {
+            ...this.baseParams(),
             lang: 'en-us',
             usertz: this.tz,
-            dsid: this.dsid,
         });
     }
 

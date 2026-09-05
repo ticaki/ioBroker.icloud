@@ -52,6 +52,19 @@ function dateToAppleList(dt, isStart) {
   const minutesFromMidnight = isStart ? hour * 60 + minute : (24 - hour) * 60 + (60 - minute);
   return [dateString, year, month, day, hour, minute, minutesFromMidnight];
 }
+function describeAppleHeaders(headers) {
+  const keys = [
+    "x-apple-request-uuid",
+    "x-responding-instance",
+    "x-apple-edge-response-time",
+    "retry-after",
+    "age",
+    "via",
+    "content-length"
+  ];
+  const parts = keys.map((k) => [k, headers.get(k)]).filter((e) => e[1] !== null).map(([k, v]) => `${k}=${v}`);
+  return parts.length ? parts.join(", ") : "no diagnostic headers";
+}
 class iCloudCalendarService {
   service;
   serviceUri;
@@ -65,11 +78,23 @@ class iCloudCalendarService {
     this.dsid = this.service.accountInfo.dsInfo.dsid;
     this.calendarServiceUri = `${service.accountInfo.webservices.calendar.url}/ca`;
   }
+  /**
+   * Query parameters every calendar request carries.
+   *
+   * The base set (`clientBuildNumber`, `clientMasteringNumber`, `clientId`, `dsid`) comes from
+   * `service.getParams()` — pyicloud builds every calendar request as `dict(self.params)` plus
+   * lang/usertz/startDate/endDate, and Apple's own web client sends the same client identifiers.
+   * Without them some calendar partitions reject the request outright (HTTP 500 with an empty
+   * body) and Apple's CDN caches the response globally instead of per user.
+   */
+  baseParams() {
+    return { ...Object.fromEntries(this.service.getParams()), dsid: this.dsid };
+  }
   defaultParams(from, to) {
     return {
+      ...this.baseParams(),
       startDate: (0, import_dayjs.default)(from != null ? from : (0, import_dayjs.default)().startOf("month")).format(this.dateFormat),
       endDate: (0, import_dayjs.default)(to != null ? to : (0, import_dayjs.default)().endOf("month")).format(this.dateFormat),
-      dsid: this.dsid,
       lang: "en-us",
       usertz: this.tz
     };
@@ -101,8 +126,14 @@ class iCloudCalendarService {
       }
     });
     const text = await response.text();
+    if (!response.ok) {
+      this.service._log(
+        0,
+        `[calendar] GET ${endpointUrl} \u2192 HTTP ${response.status}, ${describeAppleHeaders(response.headers)}`
+      );
+    }
     if (!text || !text.trim()) {
-      if (response.status === 401 && retry) {
+      if ((response.status === 401 || response.status >= 500) && retry) {
         await this.service.authenticateWebService("calendar");
         return this.fetchEndpoint(endpointUrl, params, false);
       }
@@ -171,9 +202,9 @@ class iCloudCalendarService {
   }
   async eventDetails(calendarGuid, eventGuid) {
     return this.fetchEndpoint(`/eventdetail/${calendarGuid}/${eventGuid}`, {
+      ...this.baseParams(),
       lang: "en-us",
-      usertz: this.tz,
-      dsid: this.dsid
+      usertz: this.tz
     });
   }
   async events(from, to) {

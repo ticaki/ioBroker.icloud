@@ -401,7 +401,7 @@ class iCloudNotesService {
     this.adpWarningEmitted = true;
     this.service._log(
       2,
-      `[notes-ck] Notiz-Inhalte konnten nicht entschl\xFCsselt werden (${this.recordsLookingEncrypted}/${this.recordsSeen} Notizen sehen end-to-end-verschl\xFCsselt aus). Vermutliche Ursache: "Erweiterter Datenschutz" (Advanced Data Protection / ADP) ist im Apple-Account aktiv. Diese Daten sind nur auf den Apple-Ger\xE4ten lesbar und k\xF6nnen vom Adapter nicht entschl\xFCsselt werden. L\xF6sung: ADP unter iCloud-Einstellungen \u2192 "Erweiterter Datenschutz" deaktivieren.`
+      `[notes-ck] Note contents could not be decrypted (${this.recordsLookingEncrypted}/${this.recordsSeen} notes look end-to-end encrypted). Likely cause: Advanced Data Protection (ADP) is enabled for this Apple account. Such data is readable on Apple devices only and cannot be decrypted by the adapter. Fix: disable ADP in the iCloud settings \u2192 "Advanced Data Protection".`
     );
   }
   /**
