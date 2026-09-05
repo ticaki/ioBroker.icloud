@@ -241,15 +241,22 @@ export class iCloudCalendarService {
         const text = await response.text();
 
         if (!text || !text.trim()) {
-            this.service._log(
-                0 /* LogLevel.Debug */,
-                `[calendar] Empty response from ${endpointUrl} (HTTP ${response.status}) — skipping`,
-            );
             if (response.status === 401 && retry) {
                 await this.service.authenticateWebService('calendar');
                 return this.fetchEndpoint<T>(endpointUrl, params, false);
             }
+            if (!response.ok) {
+                throw new Error(`GET ${endpointUrl} failed: HTTP ${response.status} (empty response)`);
+            }
+            this.service._log(
+                0 /* LogLevel.Debug */,
+                `[calendar] Empty response from ${endpointUrl} (HTTP ${response.status}) — skipping`,
+            );
             return {} as T;
+        }
+
+        if (!response.ok) {
+            throw new Error(`GET ${endpointUrl} failed: HTTP ${response.status} — ${text.slice(0, 200)}`);
         }
 
         const json = JSON.parse(text);
@@ -258,6 +265,12 @@ export class iCloudCalendarService {
         );
         if (authResult !== null) {
             return authResult;
+        }
+        // Apple answers with HTTP 200 and an error envelope for anything the auth handler above
+        // does not cover (service disabled, rate limit, …) — surface it instead of returning
+        // a response object whose expected arrays are simply missing.
+        if (json?.error === 1) {
+            throw new Error(`GET ${endpointUrl} failed: ${json.reason ?? 'unknown error'}`);
         }
 
         return json as T;

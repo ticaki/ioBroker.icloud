@@ -89,6 +89,7 @@ class iCloudCalendarService {
     return null;
   }
   async fetchEndpoint(endpointUrl, params, retry = true) {
+    var _a;
     const url = new URL(`${this.calendarServiceUri}${endpointUrl}`);
     url.search = new URLSearchParams(params).toString();
     this.service._log(0, `[calendar] GET ${url.toString()}`);
@@ -101,15 +102,21 @@ class iCloudCalendarService {
     });
     const text = await response.text();
     if (!text || !text.trim()) {
-      this.service._log(
-        0,
-        `[calendar] Empty response from ${endpointUrl} (HTTP ${response.status}) \u2014 skipping`
-      );
       if (response.status === 401 && retry) {
         await this.service.authenticateWebService("calendar");
         return this.fetchEndpoint(endpointUrl, params, false);
       }
+      if (!response.ok) {
+        throw new Error(`GET ${endpointUrl} failed: HTTP ${response.status} (empty response)`);
+      }
+      this.service._log(
+        0,
+        `[calendar] Empty response from ${endpointUrl} (HTTP ${response.status}) \u2014 skipping`
+      );
       return {};
+    }
+    if (!response.ok) {
+      throw new Error(`GET ${endpointUrl} failed: HTTP ${response.status} \u2014 ${text.slice(0, 200)}`);
     }
     const json = JSON.parse(text);
     const authResult = await this.handleAuthError(
@@ -119,6 +126,9 @@ class iCloudCalendarService {
     );
     if (authResult !== null) {
       return authResult;
+    }
+    if ((json == null ? void 0 : json.error) === 1) {
+      throw new Error(`GET ${endpointUrl} failed: ${(_a = json.reason) != null ? _a : "unknown error"}`);
     }
     return json;
   }

@@ -1441,6 +1441,12 @@ class Icloud extends utils.Adapter {
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
       const startupResp = await calService.startup();
       const collections = (_a = startupResp.Collection) != null ? _a : [];
+      if (collections.length === 0) {
+        this.log.warn(
+          "Calendar refresh: Apple returned no calendars \u2014 keeping existing objects. Enable debug logging to see the raw /startup response."
+        );
+        return;
+      }
       const months = Math.max(1, Math.min(12, Math.floor((_b = this.config.calendarMonths) != null ? _b : 2)));
       const eventsResp = await calService.eventsForMonths(months);
       const events = (_c = eventsResp.Event) != null ? _c : [];
@@ -1680,6 +1686,9 @@ class Icloud extends utils.Adapter {
     }
   }
   async cleanupCalendarObjects(activeCalendarIds, maxCount) {
+    if (activeCalendarIds.size === 0) {
+      return;
+    }
     const prefix = `${this.namespace}.calendar.`;
     const existing = await this.getObjectViewAsync("system", "folder", {
       startkey: prefix,

@@ -1758,6 +1758,15 @@ class Icloud extends utils.Adapter {
             // Fetch collections via /startup (current month only — always works)
             const startupResp = await calService.startup();
             const collections = startupResp.Collection ?? [];
+            if (collections.length === 0) {
+                // Apple always returns at least the default calendar (it cannot be deleted), so an
+                // empty list means the request failed or iCloud Calendar is off for this account.
+                // Bail out without touching existing objects and without updating lastSync.
+                this.log.warn(
+                    'Calendar refresh: Apple returned no calendars — keeping existing objects. Enable debug logging to see the raw /startup response.',
+                );
+                return;
+            }
 
             // Fetch events month-by-month via /events (Apple silently returns empty
             // results when the date range exceeds ~30 days, so we chunk by month).
@@ -2021,6 +2030,11 @@ class Icloud extends utils.Adapter {
     }
 
     private async cleanupCalendarObjects(activeCalendarIds: Set<string>, maxCount: number): Promise<void> {
+        if (activeCalendarIds.size === 0) {
+            // Guard against wiping the whole calendar tree — an empty set can only be the result
+            // of a failed refresh, never of an account that really has no calendars.
+            return;
+        }
         const prefix = `${this.namespace}.calendar.`;
         const existing = await this.getObjectViewAsync('system', 'folder', {
             startkey: prefix,
