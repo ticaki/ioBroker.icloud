@@ -46,7 +46,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 2.0.2 (2026-09-05)
 * (ticaki) fixed: a failed calendar request no longer deleted all calendar objects and left only `calendar.lastSync` behind — an empty calendar list is now treated as an error, the existing objects are kept and the failure is logged
 
 ### 2.0.1 (2026-09-03)
@@ -65,14 +65,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 * (ticaki) fixed: a valid 2FA code could be rejected with error 409 — the code is now retried on the other channel (trusted device / SMS)
 * (ticaki) fixed: the session data returned by Apple's code verification is now used for the following requests
 * (ticaki) fixed: the build scripts pointed at a non-existent file, which broke `npm run build` and the CI
-
-### 1.0.0 (2026-06-28)
-* (ticaki) **New: FIDO2 / security-key MFA** — sign in with a hardware security key (passkey) straight from the admin panel; the full sign-in ceremony runs in the background with a live, localized status (MFA panel translated into 11 languages)
-* (ticaki) Admin: the security-key button now shows a live "running" state while the background ceremony is in progress
-* (ticaki) fixed: object writes in `syncMap` now use read-merge-write (`getObject` + `setObject`) so existing ACLs and custom settings are preserved instead of being overwritten
-* (ticaki) changed: internal waits (security-key polling, PCS consent, geocoder rate-throttle) now use the cancellable adapter timer, so pending timers are cleared cleanly when the adapter unloads
-* (ticaki) changed: geocoder HTTP requests now use `AbortSignal.timeout` with improved timeout detection
-* (ticaki) fixed: addressed ioBroker repochecker findings for the latest-repo listing
 
 Older changes are listed in [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 

@@ -1,6 +1,14 @@
 # Older Changelog
 
 Older changelog entries will be moved here from the [README](README.md) once the changelog section there grows too long.
+## 1.0.0 (2026-06-28)
+* (ticaki) **New: FIDO2 / security-key MFA** — sign in with a hardware security key (passkey) straight from the admin panel; the full sign-in ceremony runs in the background with a live, localized status (MFA panel translated into 11 languages)
+* (ticaki) Admin: the security-key button now shows a live "running" state while the background ceremony is in progress
+* (ticaki) fixed: object writes in `syncMap` now use read-merge-write (`getObject` + `setObject`) so existing ACLs and custom settings are preserved instead of being overwritten
+* (ticaki) changed: internal waits (security-key polling, PCS consent, geocoder rate-throttle) now use the cancellable adapter timer, so pending timers are cleared cleanly when the adapter unloads
+* (ticaki) changed: geocoder HTTP requests now use `AbortSignal.timeout` with improved timeout detection
+* (ticaki) fixed: addressed ioBroker repochecker findings for the latest-repo listing
+
 ## 0.7.7 (2026-05-11)
 - (ticaki) Extends an ioBroker object only when the provided partial object has actually changed
 
