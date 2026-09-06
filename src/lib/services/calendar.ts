@@ -422,15 +422,48 @@ export class iCloudCalendarService {
     }
 
     async calendars(from?: Date, to?: Date): Promise<iCloudCalendarCollection[]> {
-        const response = await this.fetchEndpoint<iCloudCalendarStartupResponse>(
-            '/startup',
-            this.defaultParams(from, to),
-        );
+        const response = await this.fetchStartup(from, to);
         return response.Collection || [];
     }
 
     async startup(from?: Date, to?: Date): Promise<iCloudCalendarStartupResponse> {
-        return this.fetchEndpoint<iCloudCalendarStartupResponse>('/startup', this.defaultParams(from, to));
+        return this.fetchStartup(from, to);
+    }
+
+    /**
+     * GET /ca/startup with a diagnostic counter-probe.
+     *
+     * A failing /startup alone says nothing about its cause: /events runs against the same host,
+     * cookies and query parameters but a different backend. If it answers while /startup does not,
+     * the account's calendar list is what Apple chokes on — not the session, the partition or the
+     * request. Both failing the same way points at the session or the partition instead. The probe
+     * costs one request per failed refresh and never changes the outcome.
+     *
+     * @param from - Start of the requested range (defaults to the start of the current month).
+     * @param to - End of the requested range (defaults to the end of the current month).
+     */
+    private async fetchStartup(from?: Date, to?: Date): Promise<iCloudCalendarStartupResponse> {
+        const params = this.defaultParams(from, to);
+        try {
+            return await this.fetchEndpoint<iCloudCalendarStartupResponse>('/startup', params);
+        } catch (e) {
+            try {
+                const probe = await this.fetchEndpoint<iCloudCalendarEventsResponse>('/events', params, false);
+                this.service._log(
+                    2 /* LogLevel.Warning */,
+                    `[calendar] /startup failed but /events answered (${probe.Event?.length ?? 0} event(s)) — ` +
+                        "Apple serves this account's events but not its calendar list. " +
+                        'Please check whether Calendar is enabled for iCloud on your Apple devices and ' +
+                        'whether icloud.com/calendar works in a browser.',
+                );
+            } catch (probeErr) {
+                this.service._log(
+                    0 /* LogLevel.Debug */,
+                    `[calendar] counter-probe GET /events failed as well: ${(probeErr as Error)?.message ?? String(probeErr)}`,
+                );
+            }
+            throw e;
+        }
     }
 
     private async getCtag(calendarGuid: string): Promise<string> {

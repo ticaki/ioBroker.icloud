@@ -247,14 +247,44 @@ class iCloudCalendarService {
     return { Event: allEvents, Alarm: allAlarms, Recurrence: allRecurrences };
   }
   async calendars(from, to) {
-    const response = await this.fetchEndpoint(
-      "/startup",
-      this.defaultParams(from, to)
-    );
+    const response = await this.fetchStartup(from, to);
     return response.Collection || [];
   }
   async startup(from, to) {
-    return this.fetchEndpoint("/startup", this.defaultParams(from, to));
+    return this.fetchStartup(from, to);
+  }
+  /**
+   * GET /ca/startup with a diagnostic counter-probe.
+   *
+   * A failing /startup alone says nothing about its cause: /events runs against the same host,
+   * cookies and query parameters but a different backend. If it answers while /startup does not,
+   * the account's calendar list is what Apple chokes on — not the session, the partition or the
+   * request. Both failing the same way points at the session or the partition instead. The probe
+   * costs one request per failed refresh and never changes the outcome.
+   *
+   * @param from - Start of the requested range (defaults to the start of the current month).
+   * @param to - End of the requested range (defaults to the end of the current month).
+   */
+  async fetchStartup(from, to) {
+    var _a, _b, _c;
+    const params = this.defaultParams(from, to);
+    try {
+      return await this.fetchEndpoint("/startup", params);
+    } catch (e) {
+      try {
+        const probe = await this.fetchEndpoint("/events", params, false);
+        this.service._log(
+          2,
+          `[calendar] /startup failed but /events answered (${(_b = (_a = probe.Event) == null ? void 0 : _a.length) != null ? _b : 0} event(s)) \u2014 Apple serves this account's events but not its calendar list. Please check whether Calendar is enabled for iCloud on your Apple devices and whether icloud.com/calendar works in a browser.`
+        );
+      } catch (probeErr) {
+        this.service._log(
+          0,
+          `[calendar] counter-probe GET /events failed as well: ${(_c = probeErr == null ? void 0 : probeErr.message) != null ? _c : String(probeErr)}`
+        );
+      }
+      throw e;
+    }
   }
   async getCtag(calendarGuid) {
     const collections = await this.calendars();
