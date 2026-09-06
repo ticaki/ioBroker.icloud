@@ -1,6 +1,11 @@
 # Older Changelog
 
 Older changelog entries will be moved here from the [README](README.md) once the changelog section there grows too long.
+## 1.0.2 (2026-08-23)
+* (ticaki) fixed: a valid 2FA code was rejected with Apple error -21669 — the code is now always tried on both verification endpoints (trusted device *and* SMS), because a code that belongs to the other channel is reported exactly like a wrong one
+* (ticaki) fixed: the refreshed session data (scnt / session id) returned by the auth-options, device-push and SMS requests is now applied to the following requests
+* (ticaki) changed: a rejected 2FA code now produces a readable message instead of Apple's raw JSON (the internal error code -21669 looked like a mangled version of the entered code)
+
 ## 1.0.1 (2026-08-22)
 * (ticaki) fixed: a valid 2FA code could be rejected with error 409 — the code is now retried on the other channel (trusted device / SMS)
 * (ticaki) fixed: the session data returned by Apple's code verification is now used for the following requests

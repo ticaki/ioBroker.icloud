@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "icloud",
-    "version": "2.0.3",
+    "version": "2.0.4",
     "news": {
       "2.0.4": {
         "en": "Fixed: the calendar could fail permanently with \"WEBSERVICE_REAUTH_REQUIRED:calendar\" although the session was still valid — the service re-authentication no longer posts the account password to Apple's accountLogin (which answers HTTP 421 for every account with two-factor authentication) but refreshes the webservices with the session token. Fixed: an empty HTTP 500 is no longer mistaken for an expired session. New: when Apple refuses the calendar list, it is taken from a single-day request and, if that fails too, reconstructed from the events — the adapter delivers the events instead of aborting the whole refresh.",
@@ -93,19 +93,6 @@
         "pl": "Naprawiono: prawidłowy kod 2FA mógł zostać odrzucony z błędem 409. Naprawiono: niedziałające skrypty kompilacji.",
         "uk": "Виправлено: дійсний код 2FA міг бути відхилений з помилкою 409. Виправлено: непрацездатні скрипти збірки.",
         "zh-cn": "修复：有效的双重验证代码可能因 409 错误被拒绝。修复：损坏的构建脚本。"
-      },
-      "1.0.0": {
-        "en": "New: FIDO2 security-key (passkey) MFA — sign in with a hardware security key directly from the admin panel, with a live localized status. Fixed: syncMap now preserves existing object ACLs (read-merge-write). Changed: internal waits and the geocoder reworked for a clean adapter unload. Fixed: ioBroker repochecker findings.",
-        "de": "Neu: FIDO2-Sicherheitsschlüssel-MFA (Passkey) — Anmeldung mit einem Hardware-Sicherheitsschlüssel direkt aus dem Admin-Panel, mit einem live lokalisierten Status. Behoben: syncMap behält bestehende Objekt-ACLs bei (Read-Merge-Write). Geändert: interne Wartezeiten und der Geocoder wurden für ein sauberes Entladen des Adapters überarbeitet. Behoben: ioBroker-Repochecker-Hinweise.",
-        "ru": "Новое: MFA с аппаратным ключом безопасности FIDO2 (passkey) — вход с помощью аппаратного ключа безопасности прямо из панели администратора с локализованным статусом в реальном времени. Исправлено: syncMap теперь сохраняет существующие ACL объектов (read-merge-write). Изменено: внутренние задержки и геокодер переработаны для корректной выгрузки адаптера. Исправлено: замечания repochecker ioBroker.",
-        "pt": "Novo: MFA com chave de segurança FIDO2 (passkey) — faça login com uma chave de segurança de hardware diretamente no painel de administração, com um status localizado em tempo real. Corrigido: syncMap agora preserva as ACLs de objetos existentes (read-merge-write). Alterado: as esperas internas e o geocodificador foram reformulados para um descarregamento limpo do adaptador. Corrigido: avisos do repochecker do ioBroker.",
-        "nl": "Nieuw: FIDO2-beveiligingssleutel-MFA (passkey) — log in met een hardware-beveiligingssleutel rechtstreeks vanuit het admin-paneel, met een live gelokaliseerde status. Opgelost: syncMap behoudt nu bestaande object-ACL's (read-merge-write). Gewijzigd: interne wachttijden en de geocoder zijn herzien voor een schone adapter-unload. Opgelost: ioBroker repochecker-meldingen.",
-        "fr": "Nouveau : MFA par clé de sécurité FIDO2 (passkey) — connectez-vous avec une clé de sécurité matérielle directement depuis le panneau d'administration, avec un statut localisé en temps réel. Corrigé : syncMap préserve désormais les ACL d'objets existantes (read-merge-write). Modifié : les attentes internes et le géocodeur ont été retravaillés pour un déchargement propre de l'adaptateur. Corrigé : remarques du repochecker ioBroker.",
-        "it": "Novità: MFA con chiave di sicurezza FIDO2 (passkey) — accedi con una chiave di sicurezza hardware direttamente dal pannello di amministrazione, con uno stato localizzato in tempo reale. Corretto: syncMap ora conserva le ACL degli oggetti esistenti (read-merge-write). Modificato: le attese interne e il geocoder sono stati rielaborati per uno scaricamento pulito dell'adattatore. Corretto: segnalazioni del repochecker di ioBroker.",
-        "es": "Nuevo: MFA con llave de seguridad FIDO2 (passkey) — inicia sesión con una llave de seguridad de hardware directamente desde el panel de administración, con un estado localizado en tiempo real. Corregido: syncMap ahora conserva las ACL de objetos existentes (read-merge-write). Cambiado: las esperas internas y el geocodificador se han rediseñado para una descarga limpia del adaptador. Corregido: avisos del repochecker de ioBroker.",
-        "pl": "Nowość: MFA z kluczem bezpieczeństwa FIDO2 (passkey) — logowanie za pomocą sprzętowego klucza bezpieczeństwa bezpośrednio z panelu administracyjnego, z lokalizowanym statusem na żywo. Naprawiono: syncMap zachowuje teraz istniejące listy ACL obiektów (read-merge-write). Zmieniono: wewnętrzne oczekiwania i geokoder przebudowano w celu czystego wyładowania adaptera. Naprawiono: uwagi repocheckera ioBroker.",
-        "uk": "Нове: MFA з апаратним ключем безпеки FIDO2 (passkey) — вхід за допомогою апаратного ключа безпеки безпосередньо з панелі адміністратора з локалізованим статусом у реальному часі. Виправлено: syncMap тепер зберігає наявні ACL об'єктів (read-merge-write). Змінено: внутрішні очікування та геокодер перероблено для коректного вивантаження адаптера. Виправлено: зауваження repochecker ioBroker.",
-        "zh-cn": "新增：FIDO2 安全密钥（passkey）多因素认证 — 直接在管理面板中使用硬件安全密钥登录，并显示实时本地化状态。修复：syncMap 现在会保留现有对象的 ACL（读取-合并-写入）。变更：重新设计了内部等待和地理编码器，以实现适配器的干净卸载。修复：ioBroker repochecker 提示。"
       }
     },
     "titleLang": {

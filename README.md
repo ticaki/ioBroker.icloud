@@ -46,7 +46,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 2.0.4 (2026-09-06)
 * (ticaki) fixed: the calendar could fail permanently with `WEBSERVICE_REAUTH_REQUIRED:calendar` although the session was still valid — the service re-authentication no longer posts the account password to Apple's `accountLogin` (which answers HTTP 421 for every account with two-factor authentication) but refreshes the webservices with the session token, the way FindMy has been doing it all along
 * (ticaki) fixed: an empty HTTP 500 is no longer mistaken for an expired session — only a real HTTP 401 triggers a calendar re-authentication now
 * (ticaki) fixed: when Apple refuses `/ca/startup`, the calendar list is now taken from a single-day `/startup` request and, if that fails too, reconstructed from the `pGuid`s of `/ca/events` — the adapter delivers the events instead of aborting the whole refresh, and a reconstructed list never deletes existing calendar objects
@@ -66,11 +66,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 
 ### 2.0.0 (2026-08-24)
 * (ticaki) **BREAKING**: admin >= 8.0.1 is now required — the custom config components were migrated to `@iobroker/gui-components` 10, `@iobroker/json-config` 9, MUI 9 and React 19
-
-### 1.0.2 (2026-08-23)
-* (ticaki) fixed: a valid 2FA code was rejected with Apple error -21669 — the code is now always tried on both verification endpoints (trusted device *and* SMS), because a code that belongs to the other channel is reported exactly like a wrong one
-* (ticaki) fixed: the refreshed session data (scnt / session id) returned by the auth-options, device-push and SMS requests is now applied to the following requests
-* (ticaki) changed: a rejected 2FA code now produces a readable message instead of Apple's raw JSON (the internal error code -21669 looked like a mangled version of the entered code)
 
 Older changes are listed in [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 
