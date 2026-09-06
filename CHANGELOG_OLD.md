@@ -1,6 +1,11 @@
 # Older Changelog
 
 Older changelog entries will be moved here from the [README](README.md) once the changelog section there grows too long.
+## 1.0.1 (2026-08-22)
+* (ticaki) fixed: a valid 2FA code could be rejected with error 409 — the code is now retried on the other channel (trusted device / SMS)
+* (ticaki) fixed: the session data returned by Apple's code verification is now used for the following requests
+* (ticaki) fixed: the build scripts pointed at a non-existent file, which broke `npm run build` and the CI
+
 ## 1.0.0 (2026-06-28)
 * (ticaki) **New: FIDO2 / security-key MFA** — sign in with a hardware security key (passkey) straight from the admin panel; the full sign-in ceremony runs in the background with a live, localized status (MFA panel translated into 11 languages)
 * (ticaki) Admin: the security-key button now shows a live "running" state while the background ceremony is in progress
