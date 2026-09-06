@@ -117,6 +117,13 @@ interface iCloudCalendarStartupResponse {
     Alarm: Array<iCloudCalendarAlarm>;
     Event: Array<iCloudCalendarEvent>;
     Collection: Array<iCloudCalendarCollection>;
+    /**
+     * Set when `/startup` never answered and the calendar list had to be reconstructed from the
+     * `pGuid`s of the events. Such a list only contains calendars that actually have events in
+     * the queried range and carries no titles, colours or flags — consumers must not treat it as
+     * the authoritative set of calendars (i.e. must not delete anything missing from it).
+     */
+    degraded?: boolean;
 }
 
 interface iCloudCalendarEventsResponse {
@@ -241,6 +248,21 @@ export class iCloudCalendarService {
         };
     }
 
+    /**
+     * Re-authenticate for the calendar web service and pick up the (possibly new) partition URL.
+     *
+     * Apple moves accounts between calendar partitions (p198-calendarws.icloud.com and friends);
+     * accountLogin returns the current one, so a cached URI from a previous session would keep
+     * addressing the old host.
+     */
+    private async reauthenticate(): Promise<void> {
+        await this.service.authenticateWebService('calendar');
+        const newUri = this.service.accountInfo?.webservices.calendar?.url;
+        if (newUri) {
+            this.calendarServiceUri = `${newUri}/ca`;
+        }
+    }
+
     private async handleAuthError<T>(json: any, retry: boolean, retryFn: () => Promise<T>): Promise<T | null> {
         if (json?.error === 1 && typeof json?.reason === 'string' && json.reason.includes('X-APPLE-WEBAUTH-TOKEN')) {
             if (retry) {
@@ -248,7 +270,7 @@ export class iCloudCalendarService {
                     0 /* LogLevel.Debug */,
                     '[calendar] Missing X-APPLE-WEBAUTH-TOKEN — re-authenticating for calendar service',
                 );
-                await this.service.authenticateWebService('calendar');
+                await this.reauthenticate();
                 return retryFn();
             }
             throw new Error(`Calendar authentication failed: ${json.reason}`);
@@ -287,10 +309,12 @@ export class iCloudCalendarService {
         }
 
         if (!text || !text.trim()) {
-            // Apple answers an expired/missing X-APPLE-WEBAUTH-* cookie with a plain 401 on some
-            // partitions and with an empty 5xx on others — re-authenticate for both.
-            if ((response.status === 401 || response.status >= 500) && retry) {
-                await this.service.authenticateWebService('calendar');
+            // Only a 401 means the X-APPLE-WEBAUTH-* cookie is gone. An empty 5xx does not:
+            // accounts that get one on /startup answer /events with the very same cookies in the
+            // next request, so re-authenticating on 5xx only replaced Apple's error with a
+            // misleading auth error of our own.
+            if (response.status === 401 && retry) {
+                await this.reauthenticate();
                 return this.fetchEndpoint<T>(endpointUrl, params, false);
             }
             if (!response.ok) {
@@ -353,7 +377,7 @@ export class iCloudCalendarService {
                 `[calendar] Empty response from POST ${endpointUrl} (HTTP ${response.status})`,
             );
             if (response.status === 401 && retry) {
-                await this.service.authenticateWebService('calendar');
+                await this.reauthenticate();
                 return this.postEndpoint<T>(endpointUrl, params, body, false);
             }
             return {} as T;
@@ -431,13 +455,21 @@ export class iCloudCalendarService {
     }
 
     /**
-     * GET /ca/startup with a diagnostic counter-probe.
+     * GET /ca/startup, with two fallbacks so a broken calendar list does not cost the events too.
      *
-     * A failing /startup alone says nothing about its cause: /events runs against the same host,
-     * cookies and query parameters but a different backend. If it answers while /startup does not,
-     * the account's calendar list is what Apple chokes on — not the session, the partition or the
-     * request. Both failing the same way points at the session or the partition instead. The probe
-     * costs one request per failed refresh and never changes the outcome.
+     * Some accounts get an empty HTTP 500 from `/startup` while `/events` answers normally with
+     * the very same host, cookies and query parameters — Apple serves the events but chokes on
+     * the calendar list. Rather than failing the whole refresh we try, in order:
+     *
+     * 1. `/startup` for the requested range,
+     * 2. `/startup` for a single day — `Collection[]` does not depend on the queried range, so a
+     *    narrow request still yields the complete calendar list when the failure comes from the
+     *    events inside the range,
+     * 3. `/events` for the requested range, with the calendar list reconstructed from the events'
+     *    `pGuid`s and flagged as `degraded`.
+     *
+     * The fallbacks never re-authenticate (`retry = false`): the first request already settled
+     * whether the session is valid, and a second reauth would only mask Apple's real error.
      *
      * @param from - Start of the requested range (defaults to the start of the current month).
      * @param to - End of the requested range (defaults to the end of the current month).
@@ -447,14 +479,52 @@ export class iCloudCalendarService {
         try {
             return await this.fetchEndpoint<iCloudCalendarStartupResponse>('/startup', params);
         } catch (e) {
+            const today = dayjs().format(this.dateFormat);
+            try {
+                const narrow = await this.fetchEndpoint<iCloudCalendarStartupResponse>(
+                    '/startup',
+                    { ...params, startDate: today, endDate: today },
+                    false,
+                );
+                if (narrow.Collection?.length) {
+                    this.service._log(
+                        2 /* LogLevel.Warning */,
+                        `[calendar] /startup failed for ${params.startDate}..${params.endDate} but answered for a ` +
+                            `single day — using the calendar list from the narrow request ` +
+                            `(${narrow.Collection.length} calendar(s)); events are fetched separately anyway.`,
+                    );
+                    return narrow;
+                }
+            } catch (narrowErr) {
+                this.service._log(
+                    0 /* LogLevel.Debug */,
+                    `[calendar] /startup for a single day failed as well: ${(narrowErr as Error)?.message ?? String(narrowErr)}`,
+                );
+            }
+
             try {
                 const probe = await this.fetchEndpoint<iCloudCalendarEventsResponse>('/events', params, false);
+                const events = probe.Event ?? [];
+                const guids = [...new Set(events.map(ev => ev.pGuid).filter((g): g is string => !!g))];
+                if (guids.length) {
+                    this.service._log(
+                        2 /* LogLevel.Warning */,
+                        `[calendar] /startup failed but /events answered (${events.length} event(s) in ` +
+                            `${guids.length} calendar(s)) — Apple serves this account's events but not its ` +
+                            `calendar list. Continuing with a calendar list reconstructed from the events: ` +
+                            `calendars without events in the queried range are missing and no titles, colours ` +
+                            `or flags are available for the others.`,
+                    );
+                    return {
+                        Alarm: probe.Alarm ?? [],
+                        Event: events,
+                        Collection: guids.map(guid => this.placeholderCollection(guid)),
+                        degraded: true,
+                    };
+                }
                 this.service._log(
-                    2 /* LogLevel.Warning */,
-                    `[calendar] /startup failed but /events answered (${probe.Event?.length ?? 0} event(s)) — ` +
-                        "Apple serves this account's events but not its calendar list. " +
-                        'Please check whether Calendar is enabled for iCloud on your Apple devices and ' +
-                        'whether icloud.com/calendar works in a browser.',
+                    0 /* LogLevel.Debug */,
+                    '[calendar] counter-probe GET /events answered but contained no events — no calendar list to reconstruct',
                 );
             } catch (probeErr) {
                 this.service._log(
@@ -464,6 +534,39 @@ export class iCloudCalendarService {
             }
             throw e;
         }
+    }
+
+    /**
+     * A calendar collection reconstructed from an event's `pGuid` — everything Apple would have
+     * delivered in `/startup` is unknown here, so only the guid is real.
+     *
+     * @param guid - The calendar guid taken from the events' `pGuid`.
+     */
+    private placeholderCollection(guid: string): iCloudCalendarCollection {
+        return {
+            title: guid,
+            guid,
+            ctag: '',
+            order: 0,
+            color: '',
+            symbolicColor: '',
+            enabled: true,
+            createdDate: [],
+            isFamily: false,
+            lastModifiedDate: [],
+            shareTitle: '',
+            prePublishedUrl: '',
+            supportedType: '',
+            etag: '',
+            isDefault: false,
+            objectType: '',
+            readOnly: true,
+            isPublished: false,
+            isPrivatelyShared: false,
+            extendedDetailsAreIncluded: false,
+            shouldShowJunkUIWhenAppropriate: false,
+            visible: true,
+        };
     }
 
     private async getCtag(calendarGuid: string): Promise<string> {

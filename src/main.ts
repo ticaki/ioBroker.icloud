@@ -1758,6 +1758,12 @@ class Icloud extends utils.Adapter {
             // Fetch collections via /startup (current month only — always works)
             const startupResp = await calService.startup();
             const collections = startupResp.Collection ?? [];
+            if (startupResp.degraded) {
+                // The calendar list was reconstructed from the events' pGuids and carries the guid
+                // as its title — restore the real names from the objects of a previous refresh so
+                // the state tree does not move to guid-named folders.
+                await this.restoreCalendarTitles(collections);
+            }
             if (collections.length === 0) {
                 // Apple always returns at least the default calendar (it cannot be deleted), so an
                 // empty list means the request failed or iCloud Calendar is off for this account.
@@ -2012,7 +2018,11 @@ class Icloud extends utils.Adapter {
                 }
             }
 
-            await this.cleanupCalendarObjects(activeCalendarIds, maxCount);
+            // A reconstructed calendar list only contains calendars that have events in the
+            // queried range — deleting everything missing from it would wipe the empty ones.
+            if (!startupResp.degraded) {
+                await this.cleanupCalendarObjects(activeCalendarIds, maxCount);
+            }
             await this.setState('calendar.lastSync', Date.now(), true);
             if (this.calendarFirstLoad) {
                 this.calendarFirstLoad = false;
@@ -2026,6 +2036,43 @@ class Icloud extends utils.Adapter {
         } catch (err) {
             const msg = (err as Error)?.message ?? String(err);
             this.log.warn(`Calendar refresh failed: ${msg}`);
+        }
+    }
+
+    /**
+     * Replace the guid placeholders of a reconstructed calendar list with the titles a previous
+     * successful refresh stored, matching by the `guid` state below each calendar folder.
+     * Calendars that were never seen before keep their guid as the title.
+     *
+     * @param collections - The reconstructed calendar list; entries are patched in place.
+     */
+    private async restoreCalendarTitles(collections: { guid: string; title: string }[]): Promise<void> {
+        try {
+            const guidStates = await this.getStatesAsync('calendar.*.guid');
+            const titleByGuid = new Map<string, string>();
+            for (const [id, state] of Object.entries(guidStates ?? {})) {
+                const guid = typeof state?.val === 'string' ? state.val : '';
+                if (!guid) {
+                    continue;
+                }
+                const calId = id.slice(`${this.namespace}.calendar.`.length).split('.')[0];
+                const folder = await this.getObjectAsync(`calendar.${calId}`);
+                const name = folder?.common?.name;
+                titleByGuid.set(guid, typeof name === 'string' && name ? name : calId);
+            }
+            let restored = 0;
+            for (const col of collections) {
+                const title = titleByGuid.get(col.guid);
+                if (title) {
+                    col.title = title;
+                    restored++;
+                }
+            }
+            this.log.debug(
+                `Calendar: restored ${restored}/${collections.length} calendar title(s) from existing objects`,
+            );
+        } catch (err) {
+            this.log.debug(`Calendar: could not restore calendar titles: ${(err as Error)?.message ?? String(err)}`);
         }
     }
 

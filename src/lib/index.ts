@@ -1599,13 +1599,13 @@ export default class iCloudService extends EventEmitter {
                 extended_login: true,
                 trustToken: this.authStore.trustToken ?? '',
             };
-            this._log(LogLevel.Debug, '[findmy] refreshWebservices → POST', SETUP_ENDPOINT);
+            this._log(LogLevel.Debug, '[auth] refreshWebservices → POST', SETUP_ENDPOINT);
             const response = await this.fetch(SETUP_ENDPOINT, {
                 headers: DEFAULT_HEADERS,
                 method: 'POST',
                 body: JSON.stringify(data),
             });
-            this._log(LogLevel.Debug, '[findmy] refreshWebservices response status:', response.status);
+            this._log(LogLevel.Debug, '[auth] refreshWebservices response status:', response.status);
             if (response.status === 200) {
                 this.authStore.processCloudSetupResponse(response, this.options.username);
                 try {
@@ -1623,42 +1623,23 @@ export default class iCloudService extends EventEmitter {
     }
 
     /**
-     * Authenticate for a specific web service by calling accountLogin with appName + credentials.
-     * Mirrors pyicloud's _authenticate_with_credentials_service(service).
-     * Sets the service-specific X-APPLE-WEBAUTH-* cookie (e.g. X-APPLE-WEBAUTH-TOKEN for calendar).
+     * Re-authenticate for a specific web service.
+     *
+     * Apple no longer accepts the plain `appName` + `apple_id` + `password` accountLogin that
+     * pyicloud's `_authenticate_with_credentials_service()` uses: with SRP and 2FA in place it
+     * answers HTTP 421 every time, so that path could never repair a session — it only kept
+     * posting the account password at Apple. The service-specific `X-APPLE-WEBAUTH-*` cookies
+     * come back from the token-based accountLogin as well, which is what FindMy has been using
+     * successfully all along.
      *
      * @param appName - Apple webservice app name (e.g. 'calendar', 'contacts', 'reminders')
      */
     async authenticateWebService(appName: string): Promise<void> {
-        const data = {
-            appName,
-            apple_id: this.options.username,
-            password: this.options.password,
-        };
-        this._log(LogLevel.Debug, `[auth] authenticateWebService "${appName}" → POST`, SETUP_ENDPOINT);
-        const response = await this.fetch(SETUP_ENDPOINT, {
-            headers: DEFAULT_HEADERS,
-            method: 'POST',
-            body: JSON.stringify(data),
-        });
-        this._log(LogLevel.Debug, `[auth] authenticateWebService "${appName}" response status:`, response.status);
-        if (response.status === 421 || response.status === 450) {
-            // Apple requires full re-authentication including 2FA for this service.
-            // Mirrors pyiCloud: 421/450 triggers authenticate(force_refresh=True, service=...)
-            try {
-                await response.text();
-            } catch {
-                /* ignore */
-            }
+        this._log(LogLevel.Debug, `[auth] authenticateWebService "${appName}" → refreshing webservices`);
+        const refreshed = await this.refreshWebservices();
+        if (!refreshed) {
+            // The session token itself is dead — only a full sign-in including 2FA can fix this.
             throw new Error(`WEBSERVICE_REAUTH_REQUIRED:${appName}`);
-        }
-        if (response.ok) {
-            this.authStore.processCloudSetupResponse(response, this.options.username);
-        }
-        try {
-            await response.text();
-        } catch {
-            /* ignore */
         }
     }
 

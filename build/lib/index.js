@@ -1221,13 +1221,13 @@ class iCloudService extends import_node_events.default {
         extended_login: true,
         trustToken: (_a = this.authStore.trustToken) != null ? _a : ""
       };
-      this._log(LogLevel.Debug, "[findmy] refreshWebservices \u2192 POST", import_consts.SETUP_ENDPOINT);
+      this._log(LogLevel.Debug, "[auth] refreshWebservices \u2192 POST", import_consts.SETUP_ENDPOINT);
       const response = await this.fetch(import_consts.SETUP_ENDPOINT, {
         headers: import_consts.DEFAULT_HEADERS,
         method: "POST",
         body: JSON.stringify(data)
       });
-      this._log(LogLevel.Debug, "[findmy] refreshWebservices response status:", response.status);
+      this._log(LogLevel.Debug, "[auth] refreshWebservices response status:", response.status);
       if (response.status === 200) {
         this.authStore.processCloudSetupResponse(response, this.options.username);
         try {
@@ -1243,38 +1243,22 @@ class iCloudService extends import_node_events.default {
     }
   }
   /**
-   * Authenticate for a specific web service by calling accountLogin with appName + credentials.
-   * Mirrors pyicloud's _authenticate_with_credentials_service(service).
-   * Sets the service-specific X-APPLE-WEBAUTH-* cookie (e.g. X-APPLE-WEBAUTH-TOKEN for calendar).
+   * Re-authenticate for a specific web service.
+   *
+   * Apple no longer accepts the plain `appName` + `apple_id` + `password` accountLogin that
+   * pyicloud's `_authenticate_with_credentials_service()` uses: with SRP and 2FA in place it
+   * answers HTTP 421 every time, so that path could never repair a session — it only kept
+   * posting the account password at Apple. The service-specific `X-APPLE-WEBAUTH-*` cookies
+   * come back from the token-based accountLogin as well, which is what FindMy has been using
+   * successfully all along.
    *
    * @param appName - Apple webservice app name (e.g. 'calendar', 'contacts', 'reminders')
    */
   async authenticateWebService(appName) {
-    const data = {
-      appName,
-      apple_id: this.options.username,
-      password: this.options.password
-    };
-    this._log(LogLevel.Debug, `[auth] authenticateWebService "${appName}" \u2192 POST`, import_consts.SETUP_ENDPOINT);
-    const response = await this.fetch(import_consts.SETUP_ENDPOINT, {
-      headers: import_consts.DEFAULT_HEADERS,
-      method: "POST",
-      body: JSON.stringify(data)
-    });
-    this._log(LogLevel.Debug, `[auth] authenticateWebService "${appName}" response status:`, response.status);
-    if (response.status === 421 || response.status === 450) {
-      try {
-        await response.text();
-      } catch {
-      }
+    this._log(LogLevel.Debug, `[auth] authenticateWebService "${appName}" \u2192 refreshing webservices`);
+    const refreshed = await this.refreshWebservices();
+    if (!refreshed) {
       throw new Error(`WEBSERVICE_REAUTH_REQUIRED:${appName}`);
-    }
-    if (response.ok) {
-      this.authStore.processCloudSetupResponse(response, this.options.username);
-    }
-    try {
-      await response.text();
-    } catch {
     }
   }
   /**

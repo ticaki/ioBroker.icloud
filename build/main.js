@@ -1441,6 +1441,9 @@ class Icloud extends utils.Adapter {
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
       const startupResp = await calService.startup();
       const collections = (_a = startupResp.Collection) != null ? _a : [];
+      if (startupResp.degraded) {
+        await this.restoreCalendarTitles(collections);
+      }
       if (collections.length === 0) {
         this.log.warn(
           "Calendar refresh: Apple returned no calendars \u2014 keeping existing objects. Enable debug logging to see the raw /startup response."
@@ -1669,7 +1672,9 @@ class Icloud extends utils.Adapter {
           }
         }
       }
-      await this.cleanupCalendarObjects(activeCalendarIds, maxCount);
+      if (!startupResp.degraded) {
+        await this.cleanupCalendarObjects(activeCalendarIds, maxCount);
+      }
       await this.setState("calendar.lastSync", Date.now(), true);
       if (this.calendarFirstLoad) {
         this.calendarFirstLoad = false;
@@ -1683,6 +1688,43 @@ class Icloud extends utils.Adapter {
     } catch (err) {
       const msg = (_ja = err == null ? void 0 : err.message) != null ? _ja : String(err);
       this.log.warn(`Calendar refresh failed: ${msg}`);
+    }
+  }
+  /**
+   * Replace the guid placeholders of a reconstructed calendar list with the titles a previous
+   * successful refresh stored, matching by the `guid` state below each calendar folder.
+   * Calendars that were never seen before keep their guid as the title.
+   *
+   * @param collections - The reconstructed calendar list; entries are patched in place.
+   */
+  async restoreCalendarTitles(collections) {
+    var _a, _b;
+    try {
+      const guidStates = await this.getStatesAsync("calendar.*.guid");
+      const titleByGuid = /* @__PURE__ */ new Map();
+      for (const [id, state] of Object.entries(guidStates != null ? guidStates : {})) {
+        const guid = typeof (state == null ? void 0 : state.val) === "string" ? state.val : "";
+        if (!guid) {
+          continue;
+        }
+        const calId = id.slice(`${this.namespace}.calendar.`.length).split(".")[0];
+        const folder = await this.getObjectAsync(`calendar.${calId}`);
+        const name = (_a = folder == null ? void 0 : folder.common) == null ? void 0 : _a.name;
+        titleByGuid.set(guid, typeof name === "string" && name ? name : calId);
+      }
+      let restored = 0;
+      for (const col of collections) {
+        const title = titleByGuid.get(col.guid);
+        if (title) {
+          col.title = title;
+          restored++;
+        }
+      }
+      this.log.debug(
+        `Calendar: restored ${restored}/${collections.length} calendar title(s) from existing objects`
+      );
+    } catch (err) {
+      this.log.debug(`Calendar: could not restore calendar titles: ${(_b = err == null ? void 0 : err.message) != null ? _b : String(err)}`);
     }
   }
   async cleanupCalendarObjects(activeCalendarIds, maxCount) {

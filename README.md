@@ -46,6 +46,12 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (ticaki) fixed: the calendar could fail permanently with `WEBSERVICE_REAUTH_REQUIRED:calendar` although the session was still valid — the service re-authentication no longer posts the account password to Apple's `accountLogin` (which answers HTTP 421 for every account with two-factor authentication) but refreshes the webservices with the session token, the way FindMy has been doing it all along
+* (ticaki) fixed: an empty HTTP 500 is no longer mistaken for an expired session — only a real HTTP 401 triggers a calendar re-authentication now
+* (ticaki) fixed: when Apple refuses `/ca/startup`, the calendar list is now taken from a single-day `/startup` request and, if that fails too, reconstructed from the `pGuid`s of `/ca/events` — the adapter delivers the events instead of aborting the whole refresh, and a reconstructed list never deletes existing calendar objects
+* (ticaki) changed: the calendar service now picks up the calendar partition URL returned by a re-authentication instead of reusing the cached one
+
 ### 2.0.3 (2026-09-06)
 * (ticaki) fixed: requesting a 2FA code by SMS could fail with `SMS request failed (500)` — the session is now refreshed directly before the request and a rejected request is retried once with the complete phone number payload
 * (ticaki) fixed: calendar requests now carry the `clientBuildNumber` / `clientMasteringNumber` / `clientId` parameters that Apple's own web client sends — without them stricter calendar servers answered with an empty HTTP 500
