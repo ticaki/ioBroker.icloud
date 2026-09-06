@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "2.0.4",
+    "version": "2.0.5",
     "news": {
+      "2.0.5": {
+        "en": "New: when Apple refuses the calendar list, the titles, colours and flags of the calendars are now requested separately via /ca/collections — until now such calendars only showed up under their guid. Calendars without events in the queried period can reappear this way too.",
+        "de": "Neu: Verweigert Apple die Kalenderliste, werden Titel, Farben und Eigenschaften der Kalender jetzt einzeln über /ca/collections abgefragt — bisher tauchten solche Kalender nur unter ihrer GUID auf. Auch Kalender ohne Termine im abgefragten Zeitraum können so wieder erscheinen.",
+        "ru": "Новое: если Apple отказывает в списке календарей, названия, цвета и свойства календарей теперь запрашиваются отдельно через /ca/collections — раньше такие календари отображались только по своему guid. Так же могут вновь появиться календари без событий в запрошенном периоде.",
+        "pt": "Novo: quando a Apple recusa a lista de calendários, os títulos, as cores e as propriedades dos calendários passam a ser pedidos separadamente através de /ca/collections — até agora esses calendários apareciam apenas com o seu guid. Desta forma também podem voltar a aparecer calendários sem eventos no período consultado.",
+        "nl": "Nieuw: weigert Apple de agendalijst, dan worden de titels, kleuren en eigenschappen van de agenda's nu afzonderlijk via /ca/collections opgevraagd — tot nu toe verschenen zulke agenda's alleen onder hun guid. Ook agenda's zonder afspraken in de opgevraagde periode kunnen zo weer verschijnen.",
+        "fr": "Nouveau : lorsque Apple refuse la liste des calendriers, les titres, couleurs et propriétés des calendriers sont désormais demandés séparément via /ca/collections — jusqu'ici, ces calendriers n'apparaissaient que sous leur guid. Les calendriers sans événement dans la période interrogée peuvent ainsi réapparaître.",
+        "it": "Novità: se Apple rifiuta l'elenco dei calendari, i titoli, i colori e le proprietà dei calendari vengono ora richiesti separatamente tramite /ca/collections — finora tali calendari comparivano solo con il loro guid. In questo modo possono ricomparire anche i calendari senza eventi nel periodo richiesto.",
+        "es": "Nuevo: si Apple rechaza la lista de calendarios, los títulos, colores y propiedades de los calendarios se solicitan ahora por separado a través de /ca/collections; hasta ahora esos calendarios solo aparecían con su guid. Así también pueden volver a aparecer calendarios sin eventos en el periodo consultado.",
+        "pl": "Nowość: gdy Apple odmawia listy kalendarzy, tytuły, kolory i właściwości kalendarzy są teraz pobierane osobno przez /ca/collections — dotychczas takie kalendarze pojawiały się tylko pod swoim guid. W ten sposób mogą też ponownie pojawić się kalendarze bez wydarzeń w odpytywanym okresie.",
+        "uk": "Нове: якщо Apple відмовляє у списку календарів, назви, кольори та властивості календарів тепер запитуються окремо через /ca/collections — раніше такі календарі відображалися лише за своїм guid. Так само можуть знову з'явитися календарі без подій у запитаному періоді.",
+        "zh-cn": "新增：当 Apple 拒绝返回日历列表时，日历的名称、颜色和属性现在通过 /ca/collections 单独获取——此前这些日历只能以 guid 显示。查询时间段内没有日程的日历也可能借此重新出现。"
+      },
       "2.0.4": {
         "en": "Fixed: the calendar could fail permanently with \"WEBSERVICE_REAUTH_REQUIRED:calendar\" although the session was still valid — the service re-authentication no longer posts the account password to Apple's accountLogin (which answers HTTP 421 for every account with two-factor authentication) but refreshes the webservices with the session token. Fixed: an empty HTTP 500 is no longer mistaken for an expired session. New: when Apple refuses the calendar list, it is taken from a single-day request and, if that fails too, reconstructed from the events — the adapter delivers the events instead of aborting the whole refresh.",
         "de": "Behoben: Der Kalender konnte dauerhaft mit \"WEBSERVICE_REAUTH_REQUIRED:calendar\" fehlschlagen, obwohl die Session gültig war — die Neuanmeldung am Dienst schickt jetzt nicht mehr das Account-Passwort an Apples accountLogin (das bei jedem Konto mit Zwei-Faktor-Authentifizierung HTTP 421 antwortet), sondern frischt die Webservices mit dem Session-Token auf. Behoben: Ein leerer HTTP 500 wird nicht mehr für eine abgelaufene Session gehalten. Neu: Verweigert Apple die Kalenderliste, wird sie über eine Ein-Tages-Abfrage geholt und andernfalls aus den Terminen rekonstruiert — der Adapter liefert die Termine, statt die ganze Aktualisierung abzubrechen.",
@@ -80,19 +93,6 @@
         "pl": "Naprawiono: prawidłowy kod 2FA był odrzucany z błędem Apple -21669 — kod jest teraz sprawdzany w obu kanałach weryfikacji (zaufane urządzenie i SMS). Naprawiono: odświeżone dane sesji z żądań MFA Apple są teraz używane w kolejnych żądaniach.",
         "uk": "Виправлено: дійсний код 2FA відхилявся з помилкою Apple -21669 — тепер код перевіряється в обох каналах (довірений пристрій і SMS). Виправлено: оновлені дані сесії із MFA-запитів Apple тепер використовуються для наступних запитів.",
         "zh-cn": "修复：有效的双重验证代码被 Apple 错误 -21669 拒绝——现在会在两个验证通道（受信任设备和短信）上尝试该代码。修复：来自 Apple MFA 请求的最新会话数据现在会用于后续请求。"
-      },
-      "1.0.1": {
-        "en": "Fixed: a valid 2FA code could be rejected with error 409. Fixed: broken build scripts.",
-        "de": "Behoben: Ein gültiger 2FA-Code konnte mit Fehler 409 abgelehnt werden. Behoben: defekte Build-Skripte.",
-        "ru": "Исправлено: действительный код 2FA мог быть отклонён с ошибкой 409. Исправлено: неработающие скрипты сборки.",
-        "pt": "Corrigido: um código 2FA válido podia ser rejeitado com o erro 409. Corrigido: scripts de compilação com falhas.",
-        "nl": "Opgelost: een geldige 2FA-code kon worden geweigerd met fout 409. Opgelost: defecte build-scripts.",
-        "fr": "Corrigé : un code 2FA valide pouvait être rejeté avec l'erreur 409. Corrigé : scripts de compilation défectueux.",
-        "it": "Risolto: un codice 2FA valido poteva essere rifiutato con l'errore 409. Risolto: script di build non funzionanti.",
-        "es": "Corregido: un código 2FA válido podía ser rechazado con el error 409. Corregido: scripts de compilación defectuosos.",
-        "pl": "Naprawiono: prawidłowy kod 2FA mógł zostać odrzucony z błędem 409. Naprawiono: niedziałające skrypty kompilacji.",
-        "uk": "Виправлено: дійсний код 2FA міг бути відхилений з помилкою 409. Виправлено: непрацездатні скрипти збірки.",
-        "zh-cn": "修复：有效的双重验证代码可能因 409 错误被拒绝。修复：损坏的构建脚本。"
       }
     },
     "titleLang": {

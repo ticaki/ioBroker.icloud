@@ -1693,7 +1693,8 @@ class Icloud extends utils.Adapter {
   /**
    * Replace the guid placeholders of a reconstructed calendar list with the titles a previous
    * successful refresh stored, matching by the `guid` state below each calendar folder.
-   * Calendars that were never seen before keep their guid as the title.
+   * Calendars that were never seen before keep their guid as the title. Entries whose title
+   * Apple did deliver (via `/collections`) are left alone — the live name beats a stored one.
    *
    * @param collections - The reconstructed calendar list; entries are patched in place.
    */
@@ -1714,6 +1715,9 @@ class Icloud extends utils.Adapter {
       }
       let restored = 0;
       for (const col of collections) {
+        if (col.title && col.title !== col.guid) {
+          continue;
+        }
         const title = titleByGuid.get(col.guid);
         if (title) {
           col.title = title;

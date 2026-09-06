@@ -466,7 +466,9 @@ export class iCloudCalendarService {
      *    narrow request still yields the complete calendar list when the failure comes from the
      *    events inside the range,
      * 3. `/events` for the requested range, with the calendar list reconstructed from the events'
-     *    `pGuid`s and flagged as `degraded`.
+     *    `pGuid`s and flagged as `degraded`. For every guid found that way the metadata is then
+     *    asked for separately via `/collections` — `/startup` chokes on the whole list, but the
+     *    single collections behind it can still answer with their real title and colour.
      *
      * The fallbacks never re-authenticate (`retry = false`): the first request already settled
      * whether the session is valid, and a second reauth would only mask Apple's real error.
@@ -507,18 +509,40 @@ export class iCloudCalendarService {
                 const events = probe.Event ?? [];
                 const guids = [...new Set(events.map(ev => ev.pGuid).filter((g): g is string => !!g))];
                 if (guids.length) {
+                    const resolved = await this.fetchCollectionMetadata(guids, params);
+                    const collections = guids.map(guid => resolved.get(guid) ?? this.placeholderCollection(guid));
+                    // A list answer can also carry calendars that have no event in the queried
+                    // range — take them along, they are exactly what the reconstruction misses.
+                    for (const [guid, col] of resolved) {
+                        if (!guids.includes(guid)) {
+                            collections.push(col);
+                        }
+                    }
+                    const missing = guids.filter(guid => !resolved.has(guid)).length;
+                    const covered = guids.length - missing;
+                    const extra = collections.length - guids.length;
+                    let metadataNote = ` and no titles, colours or flags are available for them.`;
+                    if (missing === 0) {
+                        metadataNote = `, but titles and colours came from /collections.`;
+                    } else if (covered > 0) {
+                        metadataNote =
+                            `; titles and colours came from /collections for ${covered} of them, ` +
+                            `${missing} calendar(s) stay without metadata.`;
+                    }
+                    if (extra > 0) {
+                        metadataNote += ` /collections also added ${extra} calendar(s) without events in that range.`;
+                    }
                     this.service._log(
                         2 /* LogLevel.Warning */,
                         `[calendar] /startup failed but /events answered (${events.length} event(s) in ` +
                             `${guids.length} calendar(s)) — Apple serves this account's events but not its ` +
                             `calendar list. Continuing with a calendar list reconstructed from the events: ` +
-                            `calendars without events in the queried range are missing and no titles, colours ` +
-                            `or flags are available for the others.`,
+                            `calendars without events in the queried range are missing${metadataNote}`,
                     );
                     return {
                         Alarm: probe.Alarm ?? [],
                         Event: events,
-                        Collection: guids.map(guid => this.placeholderCollection(guid)),
+                        Collection: collections,
                         degraded: true,
                     };
                 }
@@ -534,6 +558,108 @@ export class iCloudCalendarService {
             }
             throw e;
         }
+    }
+
+    /**
+     * Title, colour and flags for calendars whose guid is all `/startup` left us with.
+     *
+     * `/ca/collections` is the endpoint Apple's own web client writes a calendar through
+     * (`POST /ca/collections/{guid}`); reading it is not part of the documented flow, so both
+     * shapes are tried and every failure is silently degraded back to a placeholder:
+     *
+     * 1. `GET /collections` once — a list answer covers every guid in a single request,
+     * 2. `GET /collections/{guid}` for whatever the list did not deliver.
+     *
+     * This runs only after `/startup` has already failed, so it costs a healthy account nothing.
+     *
+     * @param guids - The calendar guids taken from the events' `pGuid`s.
+     * @param params - The query parameters of the failed `/startup` request.
+     * @returns The collections that could be resolved, keyed by guid; possibly empty. A list
+     *   answer may contain more calendars than were asked for — those are returned too.
+     */
+    private async fetchCollectionMetadata(
+        guids: string[],
+        params: Record<string, string>,
+    ): Promise<Map<string, iCloudCalendarCollection>> {
+        const resolved = new Map<string, iCloudCalendarCollection>();
+
+        try {
+            const list = await this.fetchEndpoint<unknown>('/collections', params, false);
+            for (const col of this.extractCollections(list)) {
+                resolved.set(col.guid, col);
+            }
+            const hits = guids.filter(guid => resolved.has(guid)).length;
+            this.service._log(
+                0 /* LogLevel.Debug */,
+                `[calendar] GET /collections answered with ${resolved.size} collection(s), covering ` +
+                    `${hits}/${guids.length} of the calendars found in the events`,
+            );
+        } catch (err) {
+            this.service._log(
+                0 /* LogLevel.Debug */,
+                `[calendar] GET /collections failed: ${(err as Error)?.message ?? String(err)}`,
+            );
+        }
+
+        for (const guid of guids) {
+            if (resolved.has(guid)) {
+                continue;
+            }
+            try {
+                const single = await this.fetchEndpoint<unknown>(
+                    `/collections/${encodeURIComponent(guid)}`,
+                    params,
+                    false,
+                );
+                const col = this.extractCollections(single).find(c => c.guid === guid);
+                if (col) {
+                    resolved.set(guid, col);
+                } else {
+                    this.service._log(
+                        0 /* LogLevel.Debug */,
+                        `[calendar] GET /collections/${guid} answered without a usable collection`,
+                    );
+                }
+            } catch (err) {
+                this.service._log(
+                    0 /* LogLevel.Debug */,
+                    `[calendar] GET /collections/${guid} failed: ${(err as Error)?.message ?? String(err)}`,
+                );
+            }
+        }
+
+        return resolved;
+    }
+
+    /**
+     * Pick the calendar collections out of a `/collections` response, whichever shape it has:
+     * a bare array, a `/startup`-style `{ Collection: [...] }` envelope or a single collection
+     * object. Missing fields are filled from the placeholder so consumers can rely on the type.
+     *
+     * @param payload - The parsed response body.
+     * @returns Every entry that carries a guid, normalised to a full collection.
+     */
+    private extractCollections(payload: unknown): iCloudCalendarCollection[] {
+        const raw: unknown[] = Array.isArray(payload)
+            ? payload
+            : Array.isArray((payload as { Collection?: unknown })?.Collection)
+              ? (payload as { Collection: unknown[] }).Collection
+              : payload && typeof payload === 'object' && typeof (payload as { guid?: unknown }).guid === 'string'
+                ? [payload]
+                : [];
+
+        const collections: iCloudCalendarCollection[] = [];
+        for (const entry of raw) {
+            const guid = (entry as { guid?: unknown })?.guid;
+            if (typeof guid !== 'string' || !guid) {
+                continue;
+            }
+            const col = { ...this.placeholderCollection(guid), ...(entry as Partial<iCloudCalendarCollection>) };
+            // The placeholder uses the guid as the title; an empty title from Apple must not undo that.
+            col.title = col.title || guid;
+            collections.push(col);
+        }
+        return collections;
     }
 
     /**
