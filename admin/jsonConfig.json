@@ -242,6 +242,65 @@
                     "default": 60,
                     "disabled": "!data.calendarEnabled"
                 },
+                "_calendarAgendaHeader": {
+                    "type": "staticText",
+                    "text": "calendarAgendaHeader",
+                    "newLine": true,
+                    "xs": 12,
+                    "style": {
+                        "fontWeight": "bold",
+                        "marginTop": 8
+                    }
+                },
+                "calendarAgendaDaysBack": {
+                    "type": "number",
+                    "label": "calendarAgendaDaysBack",
+                    "help": "calendarAgendaDaysBackHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 0,
+                    "max": 31,
+                    "step": 1,
+                    "default": 0,
+                    "disabled": "!data.calendarEnabled"
+                },
+                "calendarAgendaDaysAhead": {
+                    "type": "number",
+                    "label": "calendarAgendaDaysAhead",
+                    "help": "calendarAgendaDaysAheadHelp",
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 3,
+                    "xl": 3,
+                    "min": 0,
+                    "max": 60,
+                    "step": 1,
+                    "default": 7,
+                    "disabled": "!data.calendarEnabled"
+                },
+                "calendarAgendaCalendars": {
+                    "type": "selectSendTo",
+                    "label": "calendarAgendaCalendars",
+                    "help": "calendarAgendaCalendarsHelp",
+                    "command": "getCalendarSelectOptions",
+                    "multiple": true,
+                    "noTranslation": true,
+                    "manual": false,
+                    "newLine": false,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 4,
+                    "lg": 6,
+                    "xl": 6,
+                    "default": [],
+                    "disabled": "!data.calendarEnabled"
+                },
                 "_remindersHeader": {
                     "type": "header",
                     "text": "remindersHeader",

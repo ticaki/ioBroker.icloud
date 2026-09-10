@@ -767,6 +767,7 @@ You can list calendars, browse events, create new events, and delete events usin
 | State | Type | Writable | Description |
 |-------|------|:--------:|-------------|
 | `calendar.lastSync` | `number` | | Timestamp (ms) of the last successful sync. |
+| `calendar.agenda` | `string` | | All events of the configured window as JSON, grouped by day — see [Agenda](#agenda-calendaragenda). |
 | `calendar.query` | `string` | | Cache for the last `queryCalendarEvents` result (JSON). **Not updated automatically** — quality is set to `0x01` (bad) to indicate stale data. Updated only when `queryCalendarEvents` is called. |
 | `calendar.<name>.guid` | `string` | | Calendar GUID. |
 | `calendar.<name>.color` | `string` | | Calendar color. |
@@ -784,6 +785,89 @@ You can list calendars, browse events, create new events, and delete events usin
 | `calendar.<name>.<slot>.json` | `string` | ✓ | All editable fields as a single JSON object. |
 
 Upcoming events are automatically synced at the configured refresh interval.
+
+### Agenda (`calendar.agenda`)
+
+`calendar.agenda` holds every event of a configurable window as one JSON object — one key per local day (`YYYY-MM-DD`), each listing the events that touch that day. It is rebuilt on every calendar refresh and shortly after midnight, and only written when its content changes: a trigger on value change fires when an event was added, moved or removed, while `calendar.lastSync` changes on every refresh.
+
+Settings (adapter settings → Calendar → Agenda):
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Days back | `0` | Past days in the agenda (0–31). Reaching into the previous month adds one API call. |
+| Days ahead | `7` | Days after today (0–60). Months beyond *Months to fetch* add one API call each. |
+| Calendars in the agenda | empty = all | Calendars to include. The list shows the calendars of the last refresh, so the adapter must be running. |
+
+- Every day of the window has a key — days without events are `[]`.
+- Multi-day events are listed on every day they touch; `start` and `end` keep their original values.
+- All-day events have empty `startTime`/`endTime` and an exclusive `end` (a one-day event on the 8th ends on the 9th at 00:00).
+- Within a day, all-day events come first, then the events by start time.
+- Recurring events appear as individual occurrences, each with its own `guid`.
+
+```json
+{
+    "2026-09-21": [
+        {
+            "title": "Kitchen installation",
+            "allDay": true,
+            "start": 1789941600000,
+            "end": 1790114400000,
+            "startTime": "",
+            "endTime": "",
+            "duration": 2880,
+            "location": "",
+            "description": "",
+            "calendar": "Work",
+            "calendarColor": "#63da38",
+            "alarms": [],
+            "alarmAt": [],
+            "guid": "0D2B5132-E6BA-408C-BFC1-AC0FCF195749",
+            "calendarGuid": "work"
+        },
+        {
+            "title": "Dentist",
+            "allDay": false,
+            "start": 1789981200000,
+            "end": 1789984800000,
+            "startTime": "11:00",
+            "endTime": "12:00",
+            "duration": 60,
+            "location": "Main Street 1",
+            "description": "",
+            "calendar": "Home",
+            "calendarColor": "#34aadc",
+            "alarms": [{ "before": true, "weeks": 0, "days": 0, "hours": 0, "minutes": 15, "seconds": 0 }],
+            "alarmAt": [1789980300000],
+            "guid": "4A65FC3B-93CB-4C23-8564-FDB3731507A9",
+            "calendarGuid": "home"
+        }
+    ],
+    "2026-09-22": []
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | `string` | Event title. |
+| `allDay` | `boolean` | Whether the event is all-day. |
+| `start` / `end` | `number` | Start and end timestamp (ms); `end` is exclusive for all-day events. |
+| `startTime` / `endTime` | `string` | Local time `HH:mm`, empty for all-day events. |
+| `duration` | `number` | Duration in minutes. |
+| `location` / `description` | `string` | Location and notes. |
+| `calendar` / `calendarColor` | `string` | Calendar title and colour. |
+| `alarms` | `array` | Alarms as `{before, weeks, days, hours, minutes, seconds}`. |
+| `alarmAt` | `number[]` | Absolute alarm timestamps (ms), in the order of `alarms`. |
+| `guid` / `calendarGuid` | `string` | Event and calendar GUID — usable with `updateCalendarEvent` / `deleteCalendarEvent`. |
+
+```javascript
+// Log today's events whenever the agenda changes
+on({ id: 'icloud.0.calendar.agenda', change: 'ne' }, obj => {
+    const agenda = JSON.parse(obj.state.val);
+    for (const ev of agenda[formatDate(new Date(), 'YYYY-MM-DD')] ?? []) {
+        log(`${ev.allDay ? 'all day' : ev.startTime} ${ev.title} (${ev.calendar})`);
+    }
+});
+```
 
 ### Editing events via states
 

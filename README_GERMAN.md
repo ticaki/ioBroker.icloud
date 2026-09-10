@@ -694,6 +694,7 @@ Du kannst Kalender auflisten, Termine durchsuchen, neue Termine erstellen und Te
 | State | Typ | Schreibbar | Beschreibung |
 |-------|-----|:----------:|---------------|
 | `calendar.lastSync` | `number` | | Zeitstempel (ms) der letzten erfolgreichen Synchronisierung. |
+| `calendar.agenda` | `string` | | Alle Termine des eingestellten Zeitraums als JSON, nach Tagen gruppiert — siehe [Agenda](#agenda-calendaragenda). |
 | `calendar.query` | `string` | | Cache für das letzte `queryCalendarEvents`-Ergebnis (JSON). **Wird nicht automatisch aktualisiert** — die Qualität wird auf `0x01` (schlecht) gesetzt, um veraltete Daten anzuzeigen. Wird nur beim Aufruf von `queryCalendarEvents` aktualisiert. |
 | `calendar.<name>.guid` | `string` | | Kalender-GUID. |
 | `calendar.<name>.color` | `string` | | Kalenderfarbe. |
@@ -711,6 +712,89 @@ Du kannst Kalender auflisten, Termine durchsuchen, neue Termine erstellen und Te
 | `calendar.<name>.<slot>.json` | `string` | ✓ | Alle editierbaren Felder als einzelnes JSON-Objekt. |
 
 Anstehende Termine werden automatisch im konfigurierten Aktualisierungsintervall synchronisiert.
+
+### Agenda (`calendar.agenda`)
+
+`calendar.agenda` enthält alle Termine eines einstellbaren Zeitraums als ein JSON-Objekt — ein Schlüssel pro lokalem Tag (`YYYY-MM-DD`), darunter die Termine, die diesen Tag berühren. Der State wird bei jeder Kalender-Aktualisierung und kurz nach Mitternacht neu berechnet und nur geschrieben, wenn sich der Inhalt ändert: Ein Trigger auf Wertänderung feuert also, wenn ein Termin hinzukam, verschoben oder gelöscht wurde, während sich `calendar.lastSync` bei jeder Aktualisierung ändert.
+
+Einstellungen (Adaptereinstellungen → Kalender → Agenda):
+
+| Einstellung | Standard | Beschreibung |
+|-------------|----------|--------------|
+| Tage zurück | `0` | Vergangene Tage in der Agenda (0–31). Reicht der Zeitraum in den Vormonat, kostet das einen zusätzlichen API-Aufruf. |
+| Tage voraus | `7` | Tage nach heute (0–60). Jeder Monat über *Monate abrufen* hinaus kostet einen zusätzlichen API-Aufruf. |
+| Kalender in der Agenda | leer = alle | Einzubeziehende Kalender. Die Liste zeigt die Kalender der letzten Aktualisierung, der Adapter muss also laufen. |
+
+- Jeder Tag des Zeitraums hat einen Schlüssel — Tage ohne Termine sind `[]`.
+- Mehrtägige Termine stehen an jedem Tag, den sie berühren; `start` und `end` behalten ihre Originalwerte.
+- Ganztagestermine haben leere `startTime`/`endTime` und ein exklusives `end` (ein eintägiger Termin am 8. endet am 9. um 00:00).
+- Innerhalb eines Tages stehen Ganztagestermine vorne, danach die Termine nach Startzeit.
+- Serientermine erscheinen als einzelne Vorkommen, jedes mit eigener `guid`.
+
+```json
+{
+    "2026-09-21": [
+        {
+            "title": "Küchenmontage",
+            "allDay": true,
+            "start": 1789941600000,
+            "end": 1790114400000,
+            "startTime": "",
+            "endTime": "",
+            "duration": 2880,
+            "location": "",
+            "description": "",
+            "calendar": "Arbeit",
+            "calendarColor": "#63da38",
+            "alarms": [],
+            "alarmAt": [],
+            "guid": "0D2B5132-E6BA-408C-BFC1-AC0FCF195749",
+            "calendarGuid": "work"
+        },
+        {
+            "title": "Zahnarzt",
+            "allDay": false,
+            "start": 1789981200000,
+            "end": 1789984800000,
+            "startTime": "11:00",
+            "endTime": "12:00",
+            "duration": 60,
+            "location": "Hauptstraße 1",
+            "description": "",
+            "calendar": "Privat",
+            "calendarColor": "#34aadc",
+            "alarms": [{ "before": true, "weeks": 0, "days": 0, "hours": 0, "minutes": 15, "seconds": 0 }],
+            "alarmAt": [1789980300000],
+            "guid": "4A65FC3B-93CB-4C23-8564-FDB3731507A9",
+            "calendarGuid": "home"
+        }
+    ],
+    "2026-09-22": []
+}
+```
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| `title` | `string` | Terminbezeichnung. |
+| `allDay` | `boolean` | Ob es ein Ganztagestermin ist. |
+| `start` / `end` | `number` | Start- und Endzeitstempel (ms); bei Ganztagesterminen ist `end` exklusiv. |
+| `startTime` / `endTime` | `string` | Lokale Uhrzeit `HH:mm`, leer bei Ganztagesterminen. |
+| `duration` | `number` | Dauer in Minuten. |
+| `location` / `description` | `string` | Ort und Notizen. |
+| `calendar` / `calendarColor` | `string` | Kalendername und -farbe. |
+| `alarms` | `array` | Erinnerungen als `{before, weeks, days, hours, minutes, seconds}`. |
+| `alarmAt` | `number[]` | Absolute Erinnerungszeitpunkte (ms), in der Reihenfolge von `alarms`. |
+| `guid` / `calendarGuid` | `string` | Termin- und Kalender-GUID — verwendbar mit `updateCalendarEvent` / `deleteCalendarEvent`. |
+
+```javascript
+// Die heutigen Termine loggen, sobald sich die Agenda ändert
+on({ id: 'icloud.0.calendar.agenda', change: 'ne' }, obj => {
+    const agenda = JSON.parse(obj.state.val);
+    for (const ev of agenda[formatDate(new Date(), 'YYYY-MM-DD')] ?? []) {
+        log(`${ev.allDay ? 'ganztägig' : ev.startTime} ${ev.title} (${ev.calendar})`);
+    }
+});
+```
 
 ### Termine über States bearbeiten
 

@@ -6,6 +6,8 @@ process.env.TS_NODE_IGNORE_WARNINGS = 'TRUE';
 process.env.TS_NODE_PROJECT = 'tsconfig.json';
 // Make ts-node respect the "include" key in tsconfig.json
 process.env.TS_NODE_FILES = 'TRUE';
+// TypeScript 6 refuses to compile without an explicit rootDir once test files import modules (TS5011)
+process.env.TS_NODE_COMPILER_OPTIONS = JSON.stringify({ rootDir: '.' });
 
 // Don't silently swallow unhandled rejections
 process.on('unhandledRejection', (e) => {

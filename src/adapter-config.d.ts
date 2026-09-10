@@ -24,6 +24,9 @@ declare global {
 			calendarEventCount: number;
 			calendarMonths: number;
 			calendarInterval: number;
+			calendarAgendaDaysBack: number;
+			calendarAgendaDaysAhead: number;
+			calendarAgendaCalendars: string[];
 			remindersEnabled: boolean;
 			remindersItemCount: number;
 			remindersInterval: number;

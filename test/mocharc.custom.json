@@ -1,4 +1,7 @@
 {
+	"node-option": [
+		"no-experimental-strip-types"
+	],
 	"require": [
 		"test/mocha.setup.js",
 		"ts-node/register",

@@ -25,6 +25,7 @@ var path = __toESM(require("node:path"));
 var fs = __toESM(require("node:fs"));
 var utils = __toESM(require("@iobroker/adapter-core"));
 var import_lib = __toESM(require("./lib/index"));
+var import_calendar_agenda = require("./lib/calendar-agenda");
 var import_geo = require("./lib/geo");
 var import_geocoding = require("./lib/geocoding");
 const FINDMY_FEATURE_NAMES = {
@@ -223,6 +224,7 @@ class Icloud extends utils.Adapter {
   securityKeyAuthRunning = false;
   sessionRecoveryInProgress = false;
   calendarRefreshTimer = null;
+  calendarMidnightTimer = null;
   remindersRefreshTimer = null;
   remindersSyncMapLoaded = false;
   contactsRefreshTimer = null;
@@ -763,6 +765,10 @@ class Icloud extends utils.Adapter {
       this.clearTimeout(this.calendarRefreshTimer);
       this.calendarRefreshTimer = null;
     }
+    if (this.calendarMidnightTimer) {
+      this.clearTimeout(this.calendarMidnightTimer);
+      this.calendarMidnightTimer = null;
+    }
     if (this.remindersRefreshTimer) {
       this.clearTimeout(this.remindersRefreshTimer);
       this.remindersRefreshTimer = null;
@@ -854,6 +860,7 @@ class Icloud extends utils.Adapter {
     if (activeServices.includes("calendar") && this.config.calendarEnabled) {
       await this.refreshCalendarEvents();
       this.scheduleCalendarRefresh();
+      this.scheduleCalendarMidnightRefresh();
     }
     if (activeServices.includes("reminders") && this.config.remindersEnabled) {
       this.refreshReminders().catch((err) => {
@@ -1424,14 +1431,10 @@ class Icloud extends utils.Adapter {
     return (name || "unknown").replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
   }
   localDateArrayToTimestamp(arr) {
-    var _a, _b;
-    if (!arr || arr.length < 4) {
-      return null;
-    }
-    return new Date(arr[1], arr[2] - 1, arr[3], (_a = arr[4]) != null ? _a : 0, (_b = arr[5]) != null ? _b : 0, 0).getTime();
+    return (0, import_calendar_agenda.localDateArrayToTimestamp)(arr);
   }
   async refreshCalendarEvents() {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$, _aa, _ba, _ca, _da, _ea, _fa, _ga, _ha, _ia, _ja;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$, _aa, _ba, _ca, _da, _ea, _fa, _ga, _ha, _ia, _ja, _ka, _la;
     if (!this.icloud) {
       return;
     }
@@ -1451,11 +1454,19 @@ class Icloud extends utils.Adapter {
         return;
       }
       const months = Math.max(1, Math.min(12, Math.floor((_b = this.config.calendarMonths) != null ? _b : 2)));
-      const eventsResp = await calService.eventsForMonths(months);
-      const events = (_c = eventsResp.Event) != null ? _c : [];
-      const maxCount = Math.max(1, Math.floor((_d = this.config.calendarEventCount) != null ? _d : 10));
+      const slotFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+      const slotTo = new Date(now.getFullYear(), now.getMonth() + months, 1);
+      const agendaDaysBack = Math.max(0, Math.min(31, Math.floor((_c = this.config.calendarAgendaDaysBack) != null ? _c : 0)));
+      const agendaDaysAhead = Math.max(0, Math.min(60, Math.floor((_d = this.config.calendarAgendaDaysAhead) != null ? _d : 7)));
+      const agendaWindow = (0, import_calendar_agenda.agendaRange)(now, agendaDaysBack, agendaDaysAhead);
+      const eventsResp = await calService.eventsForRange(
+        agendaWindow.from < slotFrom ? agendaWindow.from : slotFrom,
+        agendaWindow.to > slotTo ? agendaWindow.to : slotTo
+      );
+      const events = (_e = eventsResp.Event) != null ? _e : [];
+      const maxCount = Math.max(1, Math.floor((_f = this.config.calendarEventCount) != null ? _f : 10));
       const alarmsByGuid = /* @__PURE__ */ new Map();
-      for (const a of (_e = eventsResp.Alarm) != null ? _e : []) {
+      for (const a of (_g = eventsResp.Alarm) != null ? _g : []) {
         alarmsByGuid.set(a.guid, {
           before: a.measurement.before,
           hours: a.measurement.hours,
@@ -1471,7 +1482,11 @@ class Icloud extends utils.Adapter {
           continue;
         }
         const startTs = this.localDateArrayToTimestamp(ev.localStartDate);
-        if (startTs !== null && startTs < todayStart) {
+        const endTs = this.localDateArrayToTimestamp(ev.localEndDate);
+        if (startTs !== null && startTs < todayStart && (endTs === null || endTs <= todayStart)) {
+          continue;
+        }
+        if (startTs !== null && startTs >= slotTo.getTime()) {
           continue;
         }
         if (!eventsByCalendar.has(ev.pGuid)) {
@@ -1503,6 +1518,32 @@ class Icloud extends utils.Adapter {
         },
         native: {}
       });
+      await this.extendObject("calendar.agenda", {
+        type: "state",
+        common: {
+          name: "Agenda (JSON by day)",
+          type: "string",
+          role: "json",
+          read: true,
+          write: false
+        },
+        native: {}
+      });
+      const agendaCalendars = this.config.calendarAgendaCalendars;
+      await this.setStateIfChanged(
+        "calendar.agenda",
+        JSON.stringify(
+          (0, import_calendar_agenda.buildCalendarAgenda)({
+            events,
+            alarmsByGuid,
+            calendars: collections,
+            calendarGuids: Array.isArray(agendaCalendars) ? agendaCalendars : [],
+            now,
+            daysBack: agendaDaysBack,
+            daysAhead: agendaDaysAhead
+          })
+        )
+      );
       const activeCalendarIds = /* @__PURE__ */ new Set();
       for (const col of collections) {
         const calId = this.sanitizeCalendarId(col.title);
@@ -1519,47 +1560,47 @@ class Icloud extends utils.Adapter {
             native: {}
           });
         }
-        await this.setStateIfChanged(`calendar.${calId}.guid`, (_f = col.guid) != null ? _f : "");
-        await this.setStateIfChanged(`calendar.${calId}.ctag`, (_g = col.ctag) != null ? _g : "");
-        await this.setStateIfChanged(`calendar.${calId}.etag`, (_h = col.etag) != null ? _h : "");
-        await this.setStateIfChanged(`calendar.${calId}.color`, (_i = col.color) != null ? _i : "");
-        await this.setStateIfChanged(`calendar.${calId}.symbolicColor`, (_j = col.symbolicColor) != null ? _j : "");
-        await this.setStateIfChanged(`calendar.${calId}.order`, (_k = col.order) != null ? _k : 0);
-        await this.setStateIfChanged(`calendar.${calId}.enabled`, (_l = col.enabled) != null ? _l : false);
-        await this.setStateIfChanged(`calendar.${calId}.visible`, (_m = col.visible) != null ? _m : false);
-        await this.setStateIfChanged(`calendar.${calId}.readOnly`, (_n = col.readOnly) != null ? _n : false);
-        await this.setStateIfChanged(`calendar.${calId}.isDefault`, (_o = col.isDefault) != null ? _o : false);
-        await this.setStateIfChanged(`calendar.${calId}.isFamily`, (_p = col.isFamily) != null ? _p : false);
-        await this.setStateIfChanged(`calendar.${calId}.isPublished`, (_q = col.isPublished) != null ? _q : false);
-        await this.setStateIfChanged(`calendar.${calId}.isPrivatelyShared`, (_r = col.isPrivatelyShared) != null ? _r : false);
+        await this.setStateIfChanged(`calendar.${calId}.guid`, (_h = col.guid) != null ? _h : "");
+        await this.setStateIfChanged(`calendar.${calId}.ctag`, (_i = col.ctag) != null ? _i : "");
+        await this.setStateIfChanged(`calendar.${calId}.etag`, (_j = col.etag) != null ? _j : "");
+        await this.setStateIfChanged(`calendar.${calId}.color`, (_k = col.color) != null ? _k : "");
+        await this.setStateIfChanged(`calendar.${calId}.symbolicColor`, (_l = col.symbolicColor) != null ? _l : "");
+        await this.setStateIfChanged(`calendar.${calId}.order`, (_m = col.order) != null ? _m : 0);
+        await this.setStateIfChanged(`calendar.${calId}.enabled`, (_n = col.enabled) != null ? _n : false);
+        await this.setStateIfChanged(`calendar.${calId}.visible`, (_o = col.visible) != null ? _o : false);
+        await this.setStateIfChanged(`calendar.${calId}.readOnly`, (_p = col.readOnly) != null ? _p : false);
+        await this.setStateIfChanged(`calendar.${calId}.isDefault`, (_q = col.isDefault) != null ? _q : false);
+        await this.setStateIfChanged(`calendar.${calId}.isFamily`, (_r = col.isFamily) != null ? _r : false);
+        await this.setStateIfChanged(`calendar.${calId}.isPublished`, (_s = col.isPublished) != null ? _s : false);
+        await this.setStateIfChanged(`calendar.${calId}.isPrivatelyShared`, (_t = col.isPrivatelyShared) != null ? _t : false);
         await this.setStateIfChanged(
           `calendar.${calId}.extendedDetailsAreIncluded`,
-          (_s = col.extendedDetailsAreIncluded) != null ? _s : false
+          (_u = col.extendedDetailsAreIncluded) != null ? _u : false
         );
         await this.setStateIfChanged(
           `calendar.${calId}.shouldShowJunkUIWhenAppropriate`,
-          (_t = col.shouldShowJunkUIWhenAppropriate) != null ? _t : false
+          (_v = col.shouldShowJunkUIWhenAppropriate) != null ? _v : false
         );
-        await this.setStateIfChanged(`calendar.${calId}.shareTitle`, (_u = col.shareTitle) != null ? _u : "");
-        await this.setStateIfChanged(`calendar.${calId}.prePublishedUrl`, (_v = col.prePublishedUrl) != null ? _v : "");
-        await this.setStateIfChanged(`calendar.${calId}.supportedType`, (_w = col.supportedType) != null ? _w : "");
-        await this.setStateIfChanged(`calendar.${calId}.objectType`, (_x = col.objectType) != null ? _x : "");
+        await this.setStateIfChanged(`calendar.${calId}.shareTitle`, (_w = col.shareTitle) != null ? _w : "");
+        await this.setStateIfChanged(`calendar.${calId}.prePublishedUrl`, (_x = col.prePublishedUrl) != null ? _x : "");
+        await this.setStateIfChanged(`calendar.${calId}.supportedType`, (_y = col.supportedType) != null ? _y : "");
+        await this.setStateIfChanged(`calendar.${calId}.objectType`, (_z = col.objectType) != null ? _z : "");
         await this.setStateIfChanged(
           `calendar.${calId}.createdDate`,
-          (_y = this.localDateArrayToTimestamp(col.createdDate)) != null ? _y : null
+          (_A = this.localDateArrayToTimestamp(col.createdDate)) != null ? _A : null
         );
         await this.setStateIfChanged(
           `calendar.${calId}.lastModifiedDate`,
-          (_z = this.localDateArrayToTimestamp(col.lastModifiedDate)) != null ? _z : null
+          (_B = this.localDateArrayToTimestamp(col.lastModifiedDate)) != null ? _B : null
         );
-        const calEvents = (_A = eventsByCalendar.get(col.guid)) != null ? _A : [];
+        const calEvents = (_C = eventsByCalendar.get(col.guid)) != null ? _C : [];
         for (let i = 1; i <= maxCount; i++) {
           const slotId = String(i).padStart(6, "0");
           const basePath = `calendar.${calId}.${slotId}`;
           const ev = calEvents[i - 1];
           await this.extendObject(basePath, {
             type: "folder",
-            common: { name: (_B = ev == null ? void 0 : ev.title) != null ? _B : `Event ${slotId}` },
+            common: { name: (_D = ev == null ? void 0 : ev.title) != null ? _D : `Event ${slotId}` },
             native: {}
           });
           for (const s of CALENDAR_EVENT_STATES) {
@@ -1570,7 +1611,7 @@ class Icloud extends utils.Adapter {
                 type: s.type,
                 role: s.role,
                 read: true,
-                write: (_C = s.write) != null ? _C : false,
+                write: (_E = s.write) != null ? _E : false,
                 ...s.unit ? { unit: s.unit } : {}
               },
               native: {}
@@ -1588,79 +1629,79 @@ class Icloud extends utils.Adapter {
             native: {}
           });
           if (ev) {
-            await this.setStateIfChanged(`${basePath}.title`, (_D = ev.title) != null ? _D : "");
-            await this.setStateIfChanged(`${basePath}.guid`, (_E = ev.guid) != null ? _E : "");
-            await this.setStateIfChanged(`${basePath}.etag`, (_F = ev.etag) != null ? _F : "");
-            await this.setStateIfChanged(`${basePath}.pGuid`, (_G = ev.pGuid) != null ? _G : "");
+            await this.setStateIfChanged(`${basePath}.title`, (_F = ev.title) != null ? _F : "");
+            await this.setStateIfChanged(`${basePath}.guid`, (_G = ev.guid) != null ? _G : "");
+            await this.setStateIfChanged(`${basePath}.etag`, (_H = ev.etag) != null ? _H : "");
+            await this.setStateIfChanged(`${basePath}.pGuid`, (_I = ev.pGuid) != null ? _I : "");
             await this.setStateIfChanged(
               `${basePath}.startDate`,
-              (_H = this.localDateArrayToTimestamp(ev.localStartDate)) != null ? _H : null
+              (_J = this.localDateArrayToTimestamp(ev.localStartDate)) != null ? _J : null
             );
             await this.setStateIfChanged(
               `${basePath}.endDate`,
-              (_I = this.localDateArrayToTimestamp(ev.localEndDate)) != null ? _I : null
+              (_K = this.localDateArrayToTimestamp(ev.localEndDate)) != null ? _K : null
             );
             await this.setStateIfChanged(
               `${basePath}.masterStartDate`,
-              (_J = this.localDateArrayToTimestamp(ev.masterStartDate)) != null ? _J : null
+              (_L = this.localDateArrayToTimestamp(ev.masterStartDate)) != null ? _L : null
             );
             await this.setStateIfChanged(
               `${basePath}.masterEndDate`,
-              (_K = this.localDateArrayToTimestamp(ev.masterEndDate)) != null ? _K : null
+              (_M = this.localDateArrayToTimestamp(ev.masterEndDate)) != null ? _M : null
             );
             await this.setStateIfChanged(
               `${basePath}.createdDate`,
-              (_L = this.localDateArrayToTimestamp(ev.createdDate)) != null ? _L : null
+              (_N = this.localDateArrayToTimestamp(ev.createdDate)) != null ? _N : null
             );
             await this.setStateIfChanged(
               `${basePath}.lastModifiedDate`,
-              (_M = this.localDateArrayToTimestamp(ev.lastModifiedDate)) != null ? _M : null
+              (_O = this.localDateArrayToTimestamp(ev.lastModifiedDate)) != null ? _O : null
             );
-            await this.setStateIfChanged(`${basePath}.allDay`, (_N = ev.allDay) != null ? _N : false);
-            await this.setStateIfChanged(`${basePath}.duration`, (_O = ev.duration) != null ? _O : null);
-            await this.setStateIfChanged(`${basePath}.url`, (_P = ev.url) != null ? _P : "");
-            await this.setStateIfChanged(`${basePath}.tz`, (_Q = ev.tz) != null ? _Q : "");
-            await this.setStateIfChanged(`${basePath}.tzname`, (_R = ev.tzname) != null ? _R : "");
-            await this.setStateIfChanged(`${basePath}.startDateTZOffset`, (_S = ev.startDateTZOffset) != null ? _S : "");
-            await this.setStateIfChanged(`${basePath}.icon`, (_T = ev.icon) != null ? _T : 0);
-            await this.setStateIfChanged(`${basePath}.readOnly`, (_U = ev.readOnly) != null ? _U : false);
-            await this.setStateIfChanged(`${basePath}.transparent`, (_V = ev.transparent) != null ? _V : false);
-            await this.setStateIfChanged(`${basePath}.hasAttachments`, (_W = ev.hasAttachments) != null ? _W : false);
+            await this.setStateIfChanged(`${basePath}.allDay`, (_P = ev.allDay) != null ? _P : false);
+            await this.setStateIfChanged(`${basePath}.duration`, (_Q = ev.duration) != null ? _Q : null);
+            await this.setStateIfChanged(`${basePath}.url`, (_R = ev.url) != null ? _R : "");
+            await this.setStateIfChanged(`${basePath}.tz`, (_S = ev.tz) != null ? _S : "");
+            await this.setStateIfChanged(`${basePath}.tzname`, (_T = ev.tzname) != null ? _T : "");
+            await this.setStateIfChanged(`${basePath}.startDateTZOffset`, (_U = ev.startDateTZOffset) != null ? _U : "");
+            await this.setStateIfChanged(`${basePath}.icon`, (_V = ev.icon) != null ? _V : 0);
+            await this.setStateIfChanged(`${basePath}.readOnly`, (_W = ev.readOnly) != null ? _W : false);
+            await this.setStateIfChanged(`${basePath}.transparent`, (_X = ev.transparent) != null ? _X : false);
+            await this.setStateIfChanged(`${basePath}.hasAttachments`, (_Y = ev.hasAttachments) != null ? _Y : false);
             await this.setStateIfChanged(
               `${basePath}.recurrenceException`,
-              (_X = ev.recurrenceException) != null ? _X : false
+              (_Z = ev.recurrenceException) != null ? _Z : false
             );
-            await this.setStateIfChanged(`${basePath}.recurrenceMaster`, (_Y = ev.recurrenceMaster) != null ? _Y : false);
+            await this.setStateIfChanged(`${basePath}.recurrenceMaster`, (__ = ev.recurrenceMaster) != null ? __ : false);
             await this.setStateIfChanged(
               `${basePath}.birthdayIsYearlessBday`,
-              (_Z = ev.birthdayIsYearlessBday) != null ? _Z : false
+              (_$ = ev.birthdayIsYearlessBday) != null ? _$ : false
             );
             await this.setStateIfChanged(
               `${basePath}.birthdayShowAsCompany`,
-              (__ = ev.birthdayShowAsCompany) != null ? __ : false
+              (_aa = ev.birthdayShowAsCompany) != null ? _aa : false
             );
             await this.setStateIfChanged(
               `${basePath}.extendedDetailsAreIncluded`,
-              (_$ = ev.extendedDetailsAreIncluded) != null ? _$ : false
+              (_ba = ev.extendedDetailsAreIncluded) != null ? _ba : false
             );
             await this.setStateIfChanged(
               `${basePath}.shouldShowJunkUIWhenAppropriate`,
-              (_aa = ev.shouldShowJunkUIWhenAppropriate) != null ? _aa : false
+              (_ca = ev.shouldShowJunkUIWhenAppropriate) != null ? _ca : false
             );
-            const alarmDetails = ((_ba = ev.alarms) != null ? _ba : []).map((guid) => alarmsByGuid.get(guid)).filter((m) => m !== void 0);
+            const alarmDetails = ((_da = ev.alarms) != null ? _da : []).map((guid) => alarmsByGuid.get(guid)).filter((m) => m !== void 0);
             await this.setStateIfChanged(`${basePath}.alarms`, JSON.stringify(alarmDetails));
-            await this.setStateIfChanged(`${basePath}.location`, (_ca = ev.location) != null ? _ca : "");
-            await this.setStateIfChanged(`${basePath}.description`, (_da = ev.description) != null ? _da : "");
+            await this.setStateIfChanged(`${basePath}.location`, (_ea = ev.location) != null ? _ea : "");
+            await this.setStateIfChanged(`${basePath}.description`, (_fa = ev.description) != null ? _fa : "");
             await this.setStateIfChanged(
               `${basePath}.json`,
               JSON.stringify({
-                title: (_ea = ev.title) != null ? _ea : "",
+                title: (_ga = ev.title) != null ? _ga : "",
                 startDate: this.localDateArrayToTimestamp(ev.localStartDate),
                 endDate: this.localDateArrayToTimestamp(ev.localEndDate),
-                allDay: (_fa = ev.allDay) != null ? _fa : false,
-                location: (_ga = ev.location) != null ? _ga : "",
-                description: (_ha = ev.description) != null ? _ha : "",
-                url: (_ia = ev.url) != null ? _ia : "",
+                allDay: (_ha = ev.allDay) != null ? _ha : false,
+                location: (_ia = ev.location) != null ? _ia : "",
+                description: (_ja = ev.description) != null ? _ja : "",
+                url: (_ka = ev.url) != null ? _ka : "",
                 alarms: alarmDetails
               })
             );
@@ -1686,7 +1727,7 @@ class Icloud extends utils.Adapter {
         this.log.debug(`Calendar refresh done \u2014 ${collections.length} calendar(s), ${events.length} event(s)`);
       }
     } catch (err) {
-      const msg = (_ja = err == null ? void 0 : err.message) != null ? _ja : String(err);
+      const msg = (_la = err == null ? void 0 : err.message) != null ? _la : String(err);
       this.log.warn(`Calendar refresh failed: ${msg}`);
     }
   }
@@ -1787,6 +1828,24 @@ class Icloud extends utils.Adapter {
     };
     schedule();
     this.log.debug(`Calendar refresh scheduled every ${intervalMin} min`);
+  }
+  /** Refresh shortly after local midnight so the day keys of `calendar.agenda` follow the date. */
+  scheduleCalendarMidnightRefresh() {
+    if (this.calendarMidnightTimer) {
+      this.clearTimeout(this.calendarMidnightTimer);
+      this.calendarMidnightTimer = null;
+    }
+    const now = /* @__PURE__ */ new Date();
+    const delayMs = (0, import_calendar_agenda.startOfLocalDay)(now, 1).getTime() + 30 * 1e3 - now.getTime();
+    this.calendarMidnightTimer = this.setTimeout(async () => {
+      this.calendarMidnightTimer = null;
+      if (!this.icloud) {
+        return;
+      }
+      this.log.debug("Calendar midnight refresh starting...");
+      await this.refreshCalendarEvents();
+      this.scheduleCalendarMidnightRefresh();
+    }, delayMs);
   }
   // ── Calendar event write helpers ──────────────────────────────────────────
   async applyCalendarEventUpdate(calId, slotId) {
@@ -3292,6 +3351,8 @@ class Icloud extends utils.Adapter {
       this.handleGetDevices(obj);
     } else if (obj.command === "refreshFindMyNow") {
       void this.handleRefreshFindMyNow(obj);
+    } else if (obj.command === "getCalendarSelectOptions") {
+      this.handleGetCalendarSelectOptions(obj);
     } else if (obj.command === "getCalendars") {
       this.handleGetCalendars(obj);
     } else if (obj.command === "getCalendarEvents") {
@@ -4146,6 +4207,41 @@ class Icloud extends utils.Adapter {
     this.sendCallback(obj, { success: true, groups });
   }
   // ── onMessage Calendar handlers ─────────────────────────────────────────
+  /**
+   * Options for the calendar multi-select in the admin (`selectSendTo`): the calendars of the
+   * last refresh, read from the objects so opening the settings never sends a request to Apple.
+   *
+   * @param obj — The ioBroker message; answered with `[{ value: guid, label: title }]`.
+   */
+  handleGetCalendarSelectOptions(obj) {
+    const load = async () => {
+      var _a;
+      const guidStates = await this.getStatesAsync("calendar.*.guid");
+      const labels = /* @__PURE__ */ new Map();
+      for (const [id, state] of Object.entries(guidStates != null ? guidStates : {})) {
+        const parts = id.slice(`${this.namespace}.calendar.`.length).split(".");
+        const guid = typeof (state == null ? void 0 : state.val) === "string" ? state.val : "";
+        if (parts.length !== 2 || !guid) {
+          continue;
+        }
+        const folder = await this.getObjectAsync(`calendar.${parts[0]}`);
+        const name = (_a = folder == null ? void 0 : folder.common) == null ? void 0 : _a.name;
+        labels.set(guid, typeof name === "string" && name ? name : parts[0]);
+      }
+      return [...labels].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+    };
+    load().then((options) => {
+      if (obj.callback) {
+        this.sendTo(obj.from, obj.command, options, obj.callback);
+      }
+    }).catch((err) => {
+      var _a;
+      this.log.debug(`Calendar select options failed: ${(_a = err == null ? void 0 : err.message) != null ? _a : String(err)}`);
+      if (obj.callback) {
+        this.sendTo(obj.from, obj.command, [], obj.callback);
+      }
+    });
+  }
   handleGetCalendars(obj) {
     if (!this.config.calendarEnabled) {
       this.sendCallback(obj, {
@@ -4413,37 +4509,12 @@ class Icloud extends utils.Adapter {
     const fromDate = new Date(fromTs);
     const toDate = new Date(toTs);
     const calService = this.icloud.getService("calendar");
-    const chunks = [];
-    const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
-    const lastMonth = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
-    while (cursor <= lastMonth) {
-      chunks.push({
-        start: new Date(cursor.getFullYear(), cursor.getMonth(), 1),
-        end: new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59)
-      });
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
     const fetchAll = async () => {
       var _a2, _b, _c;
-      const allEvents = [];
-      const allAlarms = [];
-      const allRecurrences = [];
-      const seenGuids = /* @__PURE__ */ new Set();
-      for (const chunk of chunks) {
-        const resp = await calService.events(chunk.start, chunk.end);
-        for (const ev of (_a2 = resp.Event) != null ? _a2 : []) {
-          if (!seenGuids.has(ev.guid)) {
-            seenGuids.add(ev.guid);
-            allEvents.push(ev);
-          }
-        }
-        for (const a of (_b = resp.Alarm) != null ? _b : []) {
-          allAlarms.push(a);
-        }
-        for (const r of (_c = resp.Recurrence) != null ? _c : []) {
-          allRecurrences.push(r);
-        }
-      }
+      const resp = await calService.eventsForRange(fromDate, toDate);
+      const allEvents = (_a2 = resp.Event) != null ? _a2 : [];
+      const allAlarms = (_b = resp.Alarm) != null ? _b : [];
+      const allRecurrences = (_c = resp.Recurrence) != null ? _c : [];
       const filtered = allEvents.filter((ev) => {
         const startTs = this.localDateArrayToTimestamp(ev.localStartDate);
         const endTs = this.localDateArrayToTimestamp(ev.localEndDate);

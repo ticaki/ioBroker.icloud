@@ -407,26 +407,29 @@ export class iCloudCalendarService {
     }
 
     /**
-     * Fetch events across multiple months by issuing one /events request per month,
-     * similar to timlaing/pyicloud's `refresh_client()` approach.
+     * Fetch events for a range by issuing one /events request per calendar month the range
+     * touches, similar to timlaing/pyicloud's `refresh_client()` approach.
      * Apple's API silently returns empty results when the date range exceeds ~30 days,
-     * so we chunk the request into individual calendar months.
+     * so we chunk the request into individual calendar months. Events are deduplicated by
+     * guid — recurring events arrive as occurrences with a guid of their own.
      *
-     * @param months Number of months to fetch (1 = current month only).
+     * @param from Start of the range; the request starts at the first day of its month.
+     * @param to End of the range (exclusive); the request ends with the last day of its month.
      */
-    async eventsForMonths(months: number): Promise<iCloudCalendarEventsResponse> {
+    async eventsForRange(from: Date, to: Date): Promise<iCloudCalendarEventsResponse> {
         const allEvents: iCloudCalendarEvent[] = [];
         const allAlarms: iCloudCalendarAlarm[] = [];
         const allRecurrences: iCloudCalendarRecurrence[] = [];
         const seenGuids = new Set<string>();
 
-        const now = new Date();
-        for (let i = 0; i < months; i++) {
-            const year = now.getFullYear();
-            const month = now.getMonth() + i;
-            const from = new Date(year, month, 1);
-            const to = new Date(year, month + 1, 0); // last day of that month
-            const resp = await this.events(from, to);
+        const last = new Date(to.getTime() - 1);
+        for (
+            let month = new Date(from.getFullYear(), from.getMonth(), 1);
+            month <= last;
+            month = new Date(month.getFullYear(), month.getMonth() + 1, 1)
+        ) {
+            const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0); // last day of that month
+            const resp = await this.events(month, monthEnd);
 
             for (const ev of resp.Event ?? []) {
                 if (!seenGuids.has(ev.guid)) {

@@ -13,6 +13,7 @@ import type { iCloudContactsService, Contact } from './lib/services/contacts';
 import type { iCloudNotesService, NotesSyncMap } from './lib/services/notes';
 import type { iCloudPhotosService, PhotoAssetInfo } from './lib/services/photos';
 import type { AlarmMeasurement, UpdateEventOptions } from './lib/services/calendar';
+import { agendaRange, buildCalendarAgenda, localDateArrayToTimestamp, startOfLocalDay } from './lib/calendar-agenda';
 import { GeoLookup } from './lib/geo';
 import { ExternalGeocoder } from './lib/geocoding';
 
@@ -317,6 +318,7 @@ class Icloud extends utils.Adapter {
     private securityKeyAuthRunning = false;
     private sessionRecoveryInProgress = false;
     private calendarRefreshTimer: ioBroker.Timeout | null | undefined = null;
+    private calendarMidnightTimer: ioBroker.Timeout | null | undefined = null;
     private remindersRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private remindersSyncMapLoaded = false;
     private contactsRefreshTimer: ioBroker.Timeout | null | undefined = null;
@@ -978,6 +980,10 @@ class Icloud extends utils.Adapter {
             this.clearTimeout(this.calendarRefreshTimer);
             this.calendarRefreshTimer = null;
         }
+        if (this.calendarMidnightTimer) {
+            this.clearTimeout(this.calendarMidnightTimer);
+            this.calendarMidnightTimer = null;
+        }
         if (this.remindersRefreshTimer) {
             this.clearTimeout(this.remindersRefreshTimer);
             this.remindersRefreshTimer = null;
@@ -1088,6 +1094,7 @@ class Icloud extends utils.Adapter {
         if (activeServices.includes('calendar') && this.config.calendarEnabled) {
             await this.refreshCalendarEvents();
             this.scheduleCalendarRefresh();
+            this.scheduleCalendarMidnightRefresh();
         }
 
         // ── Reminders ─────────────────────────────────────────────────────────
@@ -1738,12 +1745,7 @@ class Icloud extends utils.Adapter {
     }
 
     private localDateArrayToTimestamp(arr: number[]): number | null {
-        // Array format: [YYYYMMDD, YYYY, MM, DD, HH, mm, sss]
-        // arr[0] is the compact YYYYMMDD integer — skip it; use positional fields.
-        if (!arr || arr.length < 4) {
-            return null;
-        }
-        return new Date(arr[1], arr[2] - 1, arr[3], arr[4] ?? 0, arr[5] ?? 0, 0).getTime();
+        return localDateArrayToTimestamp(arr);
     }
 
     private async refreshCalendarEvents(): Promise<void> {
@@ -1774,10 +1776,18 @@ class Icloud extends utils.Adapter {
                 return;
             }
 
-            // Fetch events month-by-month via /events (Apple silently returns empty
-            // results when the date range exceeds ~30 days, so we chunk by month).
+            // Fetch the slot months and the agenda window in one pass — month by month, since
+            // Apple silently returns empty results when the date range exceeds ~30 days.
             const months = Math.max(1, Math.min(12, Math.floor(this.config.calendarMonths ?? 2)));
-            const eventsResp = await calService.eventsForMonths(months);
+            const slotFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+            const slotTo = new Date(now.getFullYear(), now.getMonth() + months, 1);
+            const agendaDaysBack = Math.max(0, Math.min(31, Math.floor(this.config.calendarAgendaDaysBack ?? 0)));
+            const agendaDaysAhead = Math.max(0, Math.min(60, Math.floor(this.config.calendarAgendaDaysAhead ?? 7)));
+            const agendaWindow = agendaRange(now, agendaDaysBack, agendaDaysAhead);
+            const eventsResp = await calService.eventsForRange(
+                agendaWindow.from < slotFrom ? agendaWindow.from : slotFrom,
+                agendaWindow.to > slotTo ? agendaWindow.to : slotTo,
+            );
             const events = eventsResp.Event ?? [];
             const maxCount = Math.max(1, Math.floor(this.config.calendarEventCount ?? 10));
 
@@ -1795,14 +1805,20 @@ class Icloud extends utils.Adapter {
                 });
             }
 
-            // Group events by pGuid (calendar guid), skip already-ended events
+            // Group events by pGuid (calendar guid) for the slots. Skip events that ended before
+            // today — one that started earlier and is still running stays — and events beyond the
+            // slot months, which are only fetched for the agenda.
             const eventsByCalendar = new Map<string, typeof events>();
             for (const ev of events) {
                 if (!ev.pGuid) {
                     continue;
                 }
                 const startTs = this.localDateArrayToTimestamp(ev.localStartDate);
-                if (startTs !== null && startTs < todayStart) {
+                const endTs = this.localDateArrayToTimestamp(ev.localEndDate);
+                if (startTs !== null && startTs < todayStart && (endTs === null || endTs <= todayStart)) {
+                    continue;
+                }
+                if (startTs !== null && startTs >= slotTo.getTime()) {
                     continue;
                 }
                 if (!eventsByCalendar.has(ev.pGuid)) {
@@ -1836,6 +1852,32 @@ class Icloud extends utils.Adapter {
                 },
                 native: {},
             });
+            await this.extendObject('calendar.agenda', {
+                type: 'state',
+                common: {
+                    name: 'Agenda (JSON by day)',
+                    type: 'string',
+                    role: 'json',
+                    read: true,
+                    write: false,
+                },
+                native: {},
+            });
+            const agendaCalendars = this.config.calendarAgendaCalendars;
+            await this.setStateIfChanged(
+                'calendar.agenda',
+                JSON.stringify(
+                    buildCalendarAgenda({
+                        events,
+                        alarmsByGuid,
+                        calendars: collections,
+                        calendarGuids: Array.isArray(agendaCalendars) ? agendaCalendars : [],
+                        now,
+                        daysBack: agendaDaysBack,
+                        daysAhead: agendaDaysAhead,
+                    }),
+                ),
+            );
 
             const activeCalendarIds = new Set<string>();
             for (const col of collections) {
@@ -2141,6 +2183,25 @@ class Icloud extends utils.Adapter {
         };
         schedule();
         this.log.debug(`Calendar refresh scheduled every ${intervalMin} min`);
+    }
+
+    /** Refresh shortly after local midnight so the day keys of `calendar.agenda` follow the date. */
+    private scheduleCalendarMidnightRefresh(): void {
+        if (this.calendarMidnightTimer) {
+            this.clearTimeout(this.calendarMidnightTimer);
+            this.calendarMidnightTimer = null;
+        }
+        const now = new Date();
+        const delayMs = startOfLocalDay(now, 1).getTime() + 30 * 1000 - now.getTime();
+        this.calendarMidnightTimer = this.setTimeout(async () => {
+            this.calendarMidnightTimer = null;
+            if (!this.icloud) {
+                return;
+            }
+            this.log.debug('Calendar midnight refresh starting...');
+            await this.refreshCalendarEvents();
+            this.scheduleCalendarMidnightRefresh();
+        }, delayMs);
     }
 
     // ── Calendar event write helpers ──────────────────────────────────────────
@@ -3845,6 +3906,8 @@ class Icloud extends utils.Adapter {
             this.handleGetDevices(obj);
         } else if (obj.command === 'refreshFindMyNow') {
             void this.handleRefreshFindMyNow(obj);
+        } else if (obj.command === 'getCalendarSelectOptions') {
+            this.handleGetCalendarSelectOptions(obj);
         } else if (obj.command === 'getCalendars') {
             this.handleGetCalendars(obj);
         } else if (obj.command === 'getCalendarEvents') {
@@ -4758,6 +4821,45 @@ class Icloud extends utils.Adapter {
 
     // ── onMessage Calendar handlers ─────────────────────────────────────────
 
+    /**
+     * Options for the calendar multi-select in the admin (`selectSendTo`): the calendars of the
+     * last refresh, read from the objects so opening the settings never sends a request to Apple.
+     *
+     * @param obj — The ioBroker message; answered with `[{ value: guid, label: title }]`.
+     */
+    private handleGetCalendarSelectOptions(obj: ioBroker.Message): void {
+        const load = async (): Promise<Array<{ value: string; label: string }>> => {
+            const guidStates = await this.getStatesAsync('calendar.*.guid');
+            const labels = new Map<string, string>();
+            for (const [id, state] of Object.entries(guidStates ?? {})) {
+                const parts = id.slice(`${this.namespace}.calendar.`.length).split('.');
+                const guid = typeof state?.val === 'string' ? state.val : '';
+                // Event slots carry a guid state one level deeper — only calendar folders count.
+                if (parts.length !== 2 || !guid) {
+                    continue;
+                }
+                const folder = await this.getObjectAsync(`calendar.${parts[0]}`);
+                const name = folder?.common?.name;
+                labels.set(guid, typeof name === 'string' && name ? name : parts[0]);
+            }
+            return [...labels]
+                .map(([value, label]) => ({ value, label }))
+                .sort((a, b) => a.label.localeCompare(b.label));
+        };
+        load()
+            .then(options => {
+                if (obj.callback) {
+                    this.sendTo(obj.from, obj.command, options, obj.callback);
+                }
+            })
+            .catch((err: unknown) => {
+                this.log.debug(`Calendar select options failed: ${(err as Error)?.message ?? String(err)}`);
+                if (obj.callback) {
+                    this.sendTo(obj.from, obj.command, [], obj.callback);
+                }
+            });
+    }
+
     private handleGetCalendars(obj: ioBroker.Message): void {
         if (!this.config.calendarEnabled) {
             this.sendCallback(obj, {
@@ -5032,40 +5134,12 @@ class Icloud extends utils.Adapter {
         const toDate = new Date(toTs);
         const calService = this.icloud.getService('calendar');
 
-        // Build one-month-wide chunks — Apple silently returns empty results for
-        // ranges longer than ~30 days, so we issue one /events request per calendar month.
-        const chunks: Array<{ start: Date; end: Date }> = [];
-        const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
-        const lastMonth = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
-        while (cursor <= lastMonth) {
-            chunks.push({
-                start: new Date(cursor.getFullYear(), cursor.getMonth(), 1),
-                end: new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59),
-            });
-            cursor.setMonth(cursor.getMonth() + 1);
-        }
-
         const fetchAll = async (): Promise<void> => {
-            const allEvents: Record<string, unknown>[] = [];
-            const allAlarms: Record<string, unknown>[] = [];
-            const allRecurrences: Record<string, unknown>[] = [];
-            const seenGuids = new Set<string>();
-
-            for (const chunk of chunks) {
-                const resp = await calService.events(chunk.start, chunk.end);
-                for (const ev of resp.Event ?? []) {
-                    if (!seenGuids.has(ev.guid)) {
-                        seenGuids.add(ev.guid);
-                        allEvents.push(ev as unknown as Record<string, unknown>);
-                    }
-                }
-                for (const a of resp.Alarm ?? []) {
-                    allAlarms.push(a as unknown as Record<string, unknown>);
-                }
-                for (const r of resp.Recurrence ?? []) {
-                    allRecurrences.push(r as unknown as Record<string, unknown>);
-                }
-            }
+            // eventsForRange issues one /events request per calendar month of the range.
+            const resp = await calService.eventsForRange(fromDate, toDate);
+            const allEvents = (resp.Event ?? []) as unknown as Record<string, unknown>[];
+            const allAlarms = (resp.Alarm ?? []) as unknown as Record<string, unknown>[];
+            const allRecurrences = (resp.Recurrence ?? []) as unknown as Record<string, unknown>[];
 
             // Keep only events whose local start is before `to` and local end is after `from`
             const filtered = allEvents.filter(ev => {
