@@ -131,6 +131,18 @@ class iCloudService extends import_node_events.default {
   /** Set after requestSmsMfaCode() — routes provideMfaCode to /verify/phone/securitycode */
   _smsPhoneNumberId;
   /**
+   * The channel Apple actually used for the last accepted PUT /appleauth/auth/verify/phone,
+   * together with the exact `phoneNumber` payload that request carried.
+   *
+   * Apple echoes the delivery channel back as `mode` ("sms" or "voice"), and
+   * POST verify/phone/securitycode is only accepted when it repeats that very mode — a code that
+   * arrived by SMS but is verified with `mode: "voice"` is answered with -21669 ("incorrect
+   * verification code"), indistinguishable from a genuinely wrong code. The `pushMode` of the
+   * trusted phone from GET /appleauth/auth is NOT that channel: Apple reports German mobile
+   * numbers as `pushMode: "voice"` while still delivering the requested code by SMS.
+   */
+  _smsVerification;
+  /**
    * Parsed FIDO2 security-key challenge from GET /appleauth/auth (Apple's `fsaChallenge`).
    * Present only for accounts that have hardware security keys enrolled — for those accounts
    * SMS / trusted-device 2FA is disabled by Apple and this is the ONLY way to satisfy MFA.
@@ -519,7 +531,7 @@ class iCloudService extends import_node_events.default {
    * @param phoneNumberId - Optional explicit phone number ID. When omitted, the ID from Apple's auth response is used.
    */
   async requestSmsMfaCode(phoneNumberId) {
-    var _a;
+    var _a, _b;
     try {
       await this._refreshAuthOptions();
     } catch (e) {
@@ -541,6 +553,7 @@ class iCloudService extends import_node_events.default {
     if (((_a = this._trustedPhone) == null ? void 0 : _a.nonFTEU) !== void 0) {
       phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
     }
+    let sentPayload = phonePayload;
     let attempt = await this._putVerifyPhone(phonePayload);
     if (!attempt.ok && attempt.status >= 500 && this._trustedPhoneRaw) {
       const fullPayload = { ...this._trustedPhoneRaw, id };
@@ -551,12 +564,14 @@ class iCloudService extends import_node_events.default {
           `[auth] SMS request rejected with HTTP ${attempt.status} \u2014 retrying with full phone payload`
         );
         attempt = await this._putVerifyPhone(fullPayload);
+        sentPayload = fullPayload;
       }
     }
     if (!attempt.ok) {
       throw new Error(this._describeSmsFailure(attempt.status, attempt.body));
     }
     this._smsPhoneNumberId = id;
+    this._smsVerification = { mode: (_b = this._parseVerifyPhoneMode(attempt.body)) != null ? _b : "sms", phonePayload: sentPayload };
   }
   /**
    * Single PUT /appleauth/auth/verify/phone round trip.
@@ -577,6 +592,27 @@ class iCloudService extends import_node_events.default {
     const body = await resp.text();
     this._log(LogLevel.Debug, `[auth] SMS request \u2192 ${resp.status}: ${body.slice(0, 2e3)}`);
     return { ok: resp.ok, status: resp.status, body };
+  }
+  /**
+   * Extract the delivery channel Apple confirmed for a PUT /appleauth/auth/verify/phone response.
+   * Apple reports it as the top-level `mode`, and repeats it in the echoed phone number's
+   * `pushMode`. Returns undefined when the body is not the expected JSON.
+   *
+   * @param body - Raw response body of the verify/phone request.
+   */
+  _parseVerifyPhoneMode(body) {
+    var _a;
+    try {
+      const parsed = JSON.parse(body);
+      if (typeof (parsed == null ? void 0 : parsed.mode) === "string" && parsed.mode) {
+        return parsed.mode;
+      }
+      if (typeof ((_a = parsed == null ? void 0 : parsed.phoneNumber) == null ? void 0 : _a.pushMode) === "string" && parsed.phoneNumber.pushMode) {
+        return parsed.phoneNumber.pushMode;
+      }
+    } catch {
+    }
+    return void 0;
   }
   /**
    * Turn a failed SMS request into a message the user can act on instead of Apple's raw JSON
@@ -804,6 +840,7 @@ class iCloudService extends import_node_events.default {
     }
     this._securityKeyChallenge = void 0;
     this._smsPhoneNumberId = void 0;
+    this._smsVerification = void 0;
     this._setState("Authenticated" /* Authenticated */);
     if (this.options.trustDevice) {
       void this._getTrustToken().then(this._getiCloudCookies.bind(this));
@@ -859,6 +896,7 @@ class iCloudService extends import_node_events.default {
       throw new Error(this._describeCodeFailure(last));
     }
     this._smsPhoneNumberId = void 0;
+    this._smsVerification = void 0;
     this._setState("Authenticated" /* Authenticated */);
     if (this.options.trustDevice) {
       void this._getTrustToken().then(this._getiCloudCookies.bind(this));
@@ -873,15 +911,20 @@ class iCloudService extends import_node_events.default {
    * @param code - The six digit MFA code.
    */
   async _submitSecurityCode(channel, code) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     let response;
     if (channel === "sms") {
       const id = (_c = (_b = this._smsPhoneNumberId) != null ? _b : (_a = this._trustedPhone) == null ? void 0 : _a.id) != null ? _c : 1;
-      const phonePayload = { id };
-      if (((_d = this._trustedPhone) == null ? void 0 : _d.nonFTEU) !== void 0) {
-        phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
+      let phonePayload;
+      if (this._smsVerification) {
+        phonePayload = { ...this._smsVerification.phonePayload, id };
+      } else {
+        phonePayload = { id };
+        if (((_d = this._trustedPhone) == null ? void 0 : _d.nonFTEU) !== void 0) {
+          phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
+        }
       }
-      const mode = (_f = (_e = this._trustedPhone) == null ? void 0 : _e.pushMode) != null ? _f : "sms";
+      const mode = (_h = (_g = (_e = this._smsVerification) == null ? void 0 : _e.mode) != null ? _g : (_f = this._trustedPhone) == null ? void 0 : _f.pushMode) != null ? _h : "sms";
       this._log(LogLevel.Debug, `[auth] POST /verify/phone/securitycode (phone id ${id}, mode ${mode})`);
       response = await this.fetch(`${import_consts.AUTH_ENDPOINT}verify/phone/securitycode`, {
         headers: this.authStore.getMfaHeaders(),

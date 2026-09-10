@@ -46,6 +46,9 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 2.0.6 (2026-09-10)
+* (ticaki) fixed: an MFA code requested via SMS was rejected with Apple error -21669 ("incorrect verification code") on accounts whose trusted phone number Apple reports with `pushMode: "voice"` — the code was submitted with `mode: "voice"` although Apple had confirmed SMS delivery for the request; the verification now repeats the channel and the phone payload that Apple accepted for the code request
+
 ### 2.0.5 (2026-09-06)
 * (ticaki) new: when Apple refuses `/ca/startup`, the titles, colours and flags of the reconstructed calendars are now fetched separately via `/ca/collections` — such calendars only appeared under their guid before, and a list answer also brings back calendars that have no event in the queried range
 * (ticaki) changed: the warning about a reconstructed calendar list now states how many calendars could be completed with their real metadata, and a title delivered by Apple is no longer overwritten by the one stored from an earlier refresh
@@ -63,10 +66,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 
 ### 2.0.2 (2026-09-05)
 * (ticaki) fixed: a failed calendar request no longer deleted all calendar objects and left only `calendar.lastSync` behind — an empty calendar list is now treated as an error, the existing objects are kept and the failure is logged
-
-### 2.0.1 (2026-09-03)
-* (ticaki) fixed: login failed with `SRP init failed (409)` when a leftover session from an aborted 2FA attempt was still on disk — the stale session is now discarded and the sign-in retried once
-* (ticaki) fixed: the fresh scnt / session id returned by Apple's SRP init response is now used for the following `signin/complete` request
 
 Older changes are listed in [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 

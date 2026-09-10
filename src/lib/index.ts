@@ -268,6 +268,19 @@ export default class iCloudService extends EventEmitter {
     private _smsPhoneNumberId?: number | string;
 
     /**
+     * The channel Apple actually used for the last accepted PUT /appleauth/auth/verify/phone,
+     * together with the exact `phoneNumber` payload that request carried.
+     *
+     * Apple echoes the delivery channel back as `mode` ("sms" or "voice"), and
+     * POST verify/phone/securitycode is only accepted when it repeats that very mode — a code that
+     * arrived by SMS but is verified with `mode: "voice"` is answered with -21669 ("incorrect
+     * verification code"), indistinguishable from a genuinely wrong code. The `pushMode` of the
+     * trusted phone from GET /appleauth/auth is NOT that channel: Apple reports German mobile
+     * numbers as `pushMode: "voice"` while still delivering the requested code by SMS.
+     */
+    private _smsVerification?: { mode: string; phonePayload: Record<string, unknown> };
+
+    /**
      * Parsed FIDO2 security-key challenge from GET /appleauth/auth (Apple's `fsaChallenge`).
      * Present only for accounts that have hardware security keys enrolled — for those accounts
      * SMS / trusted-device 2FA is disabled by Apple and this is the ONLY way to satisfy MFA.
@@ -779,6 +792,7 @@ export default class iCloudService extends EventEmitter {
             phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
         }
 
+        let sentPayload = phonePayload;
         let attempt = await this._putVerifyPhone(phonePayload);
 
         // Apple answers 5xx when it dislikes the minimal payload. Retry once with the complete
@@ -793,14 +807,18 @@ export default class iCloudService extends EventEmitter {
                     `[auth] SMS request rejected with HTTP ${attempt.status} — retrying with full phone payload`,
                 );
                 attempt = await this._putVerifyPhone(fullPayload);
+                sentPayload = fullPayload;
             }
         }
 
         if (!attempt.ok) {
             throw new Error(this._describeSmsFailure(attempt.status, attempt.body));
         }
-        // Remember that next MFA code submission must go to the phone endpoint
+        // Remember that next MFA code submission must go to the phone endpoint …
         this._smsPhoneNumberId = id;
+        // … and with which channel / payload, so the verification repeats exactly what Apple just
+        // accepted instead of guessing from the trusted phone's pushMode.
+        this._smsVerification = { mode: this._parseVerifyPhoneMode(attempt.body) ?? 'sms', phonePayload: sentPayload };
     }
 
     /**
@@ -829,6 +847,28 @@ export default class iCloudService extends EventEmitter {
         // decisive `serviceErrors` block sits well beyond the first few hundred characters.
         this._log(LogLevel.Debug, `[auth] SMS request → ${resp.status}: ${body.slice(0, 2000)}`);
         return { ok: resp.ok, status: resp.status, body };
+    }
+
+    /**
+     * Extract the delivery channel Apple confirmed for a PUT /appleauth/auth/verify/phone response.
+     * Apple reports it as the top-level `mode`, and repeats it in the echoed phone number's
+     * `pushMode`. Returns undefined when the body is not the expected JSON.
+     *
+     * @param body - Raw response body of the verify/phone request.
+     */
+    private _parseVerifyPhoneMode(body: string): string | undefined {
+        try {
+            const parsed = JSON.parse(body) as { mode?: unknown; phoneNumber?: { pushMode?: unknown } };
+            if (typeof parsed?.mode === 'string' && parsed.mode) {
+                return parsed.mode;
+            }
+            if (typeof parsed?.phoneNumber?.pushMode === 'string' && parsed.phoneNumber.pushMode) {
+                return parsed.phoneNumber.pushMode;
+            }
+        } catch {
+            /* not JSON — caller falls back to 'sms' */
+        }
+        return undefined;
     }
 
     /**
@@ -1101,6 +1141,7 @@ export default class iCloudService extends EventEmitter {
 
         this._securityKeyChallenge = undefined;
         this._smsPhoneNumberId = undefined;
+        this._smsVerification = undefined;
         this._setState(iCloudServiceStatus.Authenticated);
         if (this.options.trustDevice) {
             void this._getTrustToken().then(this._getiCloudCookies.bind(this));
@@ -1180,6 +1221,7 @@ export default class iCloudService extends EventEmitter {
         }
 
         this._smsPhoneNumberId = undefined; // reset after successful use
+        this._smsVerification = undefined;
         this._setState(iCloudServiceStatus.Authenticated);
         if (this.options.trustDevice) {
             void this._getTrustToken().then(this._getiCloudCookies.bind(this));
@@ -1200,13 +1242,22 @@ export default class iCloudService extends EventEmitter {
     ): Promise<{ status: number; body: string }> {
         let response: Response;
         if (channel === 'sms') {
-            // pyiCloud: _validate_sms_code — trustedPhoneNumber payload incl. nonFTEU, phone's pushMode
+            // pyiCloud: _validate_sms_code — trustedPhoneNumber payload incl. nonFTEU, plus the
+            // channel the code was actually sent through. Repeat what the accepted verify/phone
+            // request carried; only when the code arrived without us requesting it (Apple's own
+            // fallback) is there nothing to repeat and the trusted phone's pushMode is the best
+            // guess left. See _smsVerification.
             const id = this._smsPhoneNumberId ?? this._trustedPhone?.id ?? 1;
-            const phonePayload: Record<string, unknown> = { id };
-            if (this._trustedPhone?.nonFTEU !== undefined) {
-                phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
+            let phonePayload: Record<string, unknown>;
+            if (this._smsVerification) {
+                phonePayload = { ...this._smsVerification.phonePayload, id };
+            } else {
+                phonePayload = { id };
+                if (this._trustedPhone?.nonFTEU !== undefined) {
+                    phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
+                }
             }
-            const mode = this._trustedPhone?.pushMode ?? 'sms';
+            const mode = this._smsVerification?.mode ?? this._trustedPhone?.pushMode ?? 'sms';
             this._log(LogLevel.Debug, `[auth] POST /verify/phone/securitycode (phone id ${id}, mode ${mode})`);
             response = await this.fetch(`${AUTH_ENDPOINT}verify/phone/securitycode`, {
                 headers: this.authStore.getMfaHeaders(),

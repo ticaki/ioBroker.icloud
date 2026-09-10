@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "icloud",
-    "version": "2.0.5",
+    "version": "2.0.6",
     "news": {
+      "2.0.6": {
+        "en": "Fixed: an MFA code requested via SMS was rejected with Apple error -21669 (\"incorrect verification code\") on accounts whose trusted phone number Apple reports with pushMode \"voice\" — the code was submitted with mode \"voice\" although Apple had confirmed SMS delivery; the verification now repeats the channel Apple accepted for the code request.",
+        "de": "Behoben: Ein per SMS angeforderter MFA-Code wurde mit Apple-Fehler -21669 (\"incorrect verification code\") abgelehnt, wenn Apple die vertrauenswürdige Rufnummer mit pushMode \"voice\" meldet — der Code wurde mit mode \"voice\" eingereicht, obwohl Apple den Versand per SMS bestätigt hatte; die Prüfung verwendet jetzt den Kanal, den Apple für die Code-Anforderung akzeptiert hat.",
+        "ru": "Исправлено: код MFA, запрошенный по SMS, отклонялся с ошибкой Apple -21669 (\"incorrect verification code\") у учётных записей, для которых Apple сообщает доверенный номер с pushMode \"voice\" — код отправлялся с mode \"voice\", хотя Apple подтвердила доставку по SMS; теперь проверка использует канал, принятый Apple при запросе кода.",
+        "pt": "Corrigido: um código MFA pedido por SMS era recusado com o erro Apple -21669 (\"incorrect verification code\") em contas cujo número de telefone fidedigno a Apple indica com pushMode \"voice\" — o código era enviado com mode \"voice\" apesar de a Apple ter confirmado o envio por SMS; a verificação passa a repetir o canal que a Apple aceitou no pedido do código.",
+        "nl": "Opgelost: een via sms aangevraagde MFA-code werd geweigerd met Apple-fout -21669 (\"incorrect verification code\") bij accounts waarvan Apple het vertrouwde telefoonnummer met pushMode \"voice\" meldt — de code werd met mode \"voice\" ingediend hoewel Apple sms-bezorging had bevestigd; de verificatie gebruikt nu het kanaal dat Apple bij de code-aanvraag heeft geaccepteerd.",
+        "fr": "Corrigé : un code MFA demandé par SMS était refusé avec l'erreur Apple -21669 (« incorrect verification code ») pour les comptes dont Apple signale le numéro de confiance avec pushMode « voice » — le code était soumis avec mode « voice » alors qu'Apple avait confirmé l'envoi par SMS ; la vérification reprend désormais le canal accepté par Apple lors de la demande du code.",
+        "it": "Corretto: un codice MFA richiesto via SMS veniva rifiutato con l'errore Apple -21669 (\"incorrect verification code\") sugli account per cui Apple indica il numero attendibile con pushMode \"voice\" — il codice veniva inviato con mode \"voice\" benché Apple avesse confermato l'invio via SMS; la verifica ora ripete il canale accettato da Apple per la richiesta del codice.",
+        "es": "Corregido: un código MFA solicitado por SMS se rechazaba con el error de Apple -21669 (\"incorrect verification code\") en cuentas cuyo número de teléfono de confianza Apple indica con pushMode \"voice\" — el código se enviaba con mode \"voice\" aunque Apple había confirmado el envío por SMS; la verificación repite ahora el canal que Apple aceptó al solicitar el código.",
+        "pl": "Naprawiono: kod MFA zamówiony przez SMS był odrzucany z błędem Apple -21669 (\"incorrect verification code\") na kontach, dla których Apple podaje zaufany numer telefonu z pushMode \"voice\" — kod wysyłano z mode \"voice\", choć Apple potwierdziło dostarczenie przez SMS; weryfikacja używa teraz kanału zaakceptowanego przez Apple przy żądaniu kodu.",
+        "uk": "Виправлено: код MFA, запитаний через SMS, відхилявся з помилкою Apple -21669 (\"incorrect verification code\") в облікових записах, для яких Apple повідомляє довірений номер із pushMode \"voice\" — код надсилався з mode \"voice\", хоча Apple підтвердила доставку через SMS; перевірка тепер використовує канал, який Apple прийняла під час запиту коду.",
+        "zh-cn": "修复：在 Apple 将受信任电话号码报告为 pushMode \"voice\" 的账户上，通过短信请求的 MFA 验证码会被 Apple 错误 -21669（\"incorrect verification code\"）拒绝——尽管 Apple 已确认通过短信发送，验证码仍以 mode \"voice\" 提交；现在验证会沿用 Apple 在请求验证码时接受的通道。"
+      },
       "2.0.5": {
         "en": "New: when Apple refuses the calendar list, the titles, colours and flags of the calendars are now requested separately via /ca/collections — until now such calendars only showed up under their guid. Calendars without events in the queried period can reappear this way too.",
         "de": "Neu: Verweigert Apple die Kalenderliste, werden Titel, Farben und Eigenschaften der Kalender jetzt einzeln über /ca/collections abgefragt — bisher tauchten solche Kalender nur unter ihrer GUID auf. Auch Kalender ohne Termine im abgefragten Zeitraum können so wieder erscheinen.",
@@ -80,19 +93,6 @@
         "pl": "BREAKING: wymagany jest teraz admin >= 8.0.1. Własne komponenty konfiguracji zostały przeniesione na @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 i React 19 — ze starszym adminem strony ustawień iCloud nie będą się już ładować.",
         "uk": "BREAKING: тепер потрібен admin >= 8.0.1. Власні компоненти налаштувань переведено на @iobroker/gui-components 10, @iobroker/json-config 9, MUI 9 та React 19 — зі старішим admin сторінки налаштувань iCloud більше не завантажуються.",
         "zh-cn": "BREAKING：现在需要 admin >= 8.0.1。自定义配置组件已迁移到 @iobroker/gui-components 10、@iobroker/json-config 9、MUI 9 和 React 19 — 使用旧版 admin 时 iCloud 设置页面将无法加载。"
-      },
-      "1.0.2": {
-        "en": "Fixed: a valid 2FA code was rejected with Apple error -21669 — the code is now tried on both verification channels (trusted device and SMS). Fixed: the refreshed session data from Apple's MFA requests is now used for the following requests.",
-        "de": "Behoben: Ein gültiger 2FA-Code wurde mit dem Apple-Fehler -21669 abgelehnt — der Code wird jetzt auf beiden Prüfwegen (vertrautes Gerät und SMS) versucht. Behoben: Die aktualisierten Sitzungsdaten aus Apples MFA-Anfragen werden jetzt für die folgenden Anfragen verwendet.",
-        "ru": "Исправлено: действительный код 2FA отклонялся с ошибкой Apple -21669 — теперь код проверяется по обоим каналам (доверенное устройство и SMS). Исправлено: обновлённые данные сессии из MFA-запросов Apple теперь используются для последующих запросов.",
-        "pt": "Corrigido: um código 2FA válido era rejeitado com o erro -21669 da Apple — o código passa agora a ser testado nos dois canais de verificação (dispositivo fidedigno e SMS). Corrigido: os dados de sessão atualizados dos pedidos MFA da Apple são agora usados nos pedidos seguintes.",
-        "nl": "Opgelost: een geldige 2FA-code werd geweigerd met Apple-fout -21669 — de code wordt nu via beide verificatiekanalen (vertrouwd apparaat en sms) geprobeerd. Opgelost: de vernieuwde sessiegegevens uit Apple's MFA-verzoeken worden nu voor de volgende verzoeken gebruikt.",
-        "fr": "Corrigé : un code 2FA valide était rejeté avec l'erreur Apple -21669 — le code est désormais essayé sur les deux canaux de vérification (appareil de confiance et SMS). Corrigé : les données de session actualisées issues des requêtes MFA d'Apple sont maintenant utilisées pour les requêtes suivantes.",
-        "it": "Risolto: un codice 2FA valido veniva rifiutato con l'errore Apple -21669 — il codice viene ora provato su entrambi i canali di verifica (dispositivo attendibile e SMS). Risolto: i dati di sessione aggiornati dalle richieste MFA di Apple vengono ora usati per le richieste successive.",
-        "es": "Corregido: un código 2FA válido se rechazaba con el error de Apple -21669 — ahora el código se prueba en ambos canales de verificación (dispositivo de confianza y SMS). Corregido: los datos de sesión actualizados de las solicitudes MFA de Apple ahora se usan en las solicitudes siguientes.",
-        "pl": "Naprawiono: prawidłowy kod 2FA był odrzucany z błędem Apple -21669 — kod jest teraz sprawdzany w obu kanałach weryfikacji (zaufane urządzenie i SMS). Naprawiono: odświeżone dane sesji z żądań MFA Apple są teraz używane w kolejnych żądaniach.",
-        "uk": "Виправлено: дійсний код 2FA відхилявся з помилкою Apple -21669 — тепер код перевіряється в обох каналах (довірений пристрій і SMS). Виправлено: оновлені дані сесії із MFA-запитів Apple тепер використовуються для наступних запитів.",
-        "zh-cn": "修复：有效的双重验证代码被 Apple 错误 -21669 拒绝——现在会在两个验证通道（受信任设备和短信）上尝试该代码。修复：来自 Apple MFA 请求的最新会话数据现在会用于后续请求。"
       }
     },
     "titleLang": {
