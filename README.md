@@ -46,6 +46,10 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (ticaki) fixed: the adapter crashed with `UNCAUGHT_EXCEPTION` (unhandled promise rejection `HTTP 450`) when Find My rejected the session — the Find My service started a second, unmonitored `refresh()` in its constructor in parallel to the adapter's own call; the adapter's error handling and session recovery now apply
+* (ticaki) fixed: reminders text containing U+2028/U+2029 line separators or control characters is normalised before being stored
+
 ### 2.1.0 (2026-09-10)
 * (ticaki) new: `calendar.agenda` — every event of a configurable window (days back / days ahead, selectable calendars) as one JSON object keyed by local day, with calendar title and colour and absolute alarm times; rebuilt on every refresh and shortly after midnight, written only when it changes
 * (ticaki) fixed: an event that started before today and is still running (e.g. a multi-day all-day event) no longer disappears from the calendar slots
