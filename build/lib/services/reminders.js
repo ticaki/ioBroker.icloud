@@ -58,6 +58,9 @@ function tsToMs(timestamp) {
   }
   return null;
 }
+function sanitizeText(text) {
+  return text.replace(/\u2028|\u2029/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "");
+}
 function readVarint(buf, offset) {
   if (offset >= buf.length) {
     return null;
@@ -304,9 +307,9 @@ function decodeCrdtDocument(value, debugLog) {
     data = Buffer.from(value);
   } else {
     if (typeof value === "object") {
-      return { text: JSON.stringify(value), looksEncrypted: false };
+      return { text: sanitizeText(JSON.stringify(value)), looksEncrypted: false };
     }
-    return { text: `${value}`, looksEncrypted: false };
+    return { text: sanitizeText(`${value}`), looksEncrypted: false };
   }
   let decompressed = false;
   try {
@@ -339,7 +342,7 @@ function decodeCrdtDocument(value, debugLog) {
     );
   }
   const looksEncrypted = parseFailed && !decompressed && data.length >= 16;
-  return { text, looksEncrypted };
+  return { text: sanitizeText(text), looksEncrypted };
 }
 class iCloudRemindersService {
   service;
@@ -580,7 +583,7 @@ class iCloudRemindersService {
       }
       this.listsById.set(rec.recordName, {
         id: rec.recordName,
-        title: name != null ? name : "Untitled",
+        title: name ? sanitizeText(name) : "Untitled",
         color: color != null ? color : null,
         count
       });

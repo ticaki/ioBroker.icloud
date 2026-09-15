@@ -108,6 +108,22 @@ function tsToMs(timestamp: unknown): number | null {
 }
 
 /**
+ * Normalise decoded reminder text for storage in ioBroker objects/states.
+ *
+ * Apple text fields emit U+2028 (LINE SEPARATOR) for soft line breaks and
+ * U+2029 (PARAGRAPH SEPARATOR) for paragraphs. Both are legal inside JSON
+ * strings and `JSON.stringify` leaves them unescaped, which breaks any tooling
+ * that splits JSON line-wise (e.g. backup/restore). Map them to `\n` and drop
+ * remaining C0/C1 control characters except tab, LF and CR.
+ *
+ * @param text - decoded plain text
+ */
+function sanitizeText(text: string): string {
+    // eslint-disable-next-line no-control-regex
+    return text.replace(/\u2028|\u2029/g, '\n').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
+}
+
+/**
  * Read a protobuf varint at the given offset.
  *
  * @param buf - buffer to read from
@@ -480,9 +496,9 @@ function decodeCrdtDocument(value: unknown, debugLog?: (msg: string) => void): C
         data = Buffer.from(value);
     } else {
         if (typeof value === 'object') {
-            return { text: JSON.stringify(value), looksEncrypted: false };
+            return { text: sanitizeText(JSON.stringify(value)), looksEncrypted: false };
         }
-        return { text: `${value as string | number | boolean}`, looksEncrypted: false };
+        return { text: sanitizeText(`${value as string | number | boolean}`), looksEncrypted: false };
     }
 
     let decompressed = false;
@@ -525,7 +541,7 @@ function decodeCrdtDocument(value: unknown, debugLog?: (msg: string) => void): C
     // succeeded, and protobuf parsing also failed → almost certainly E2E
     // encrypted (ADP) rather than a normal CRDT payload.
     const looksEncrypted = parseFailed && !decompressed && data.length >= 16;
-    return { text, looksEncrypted };
+    return { text: sanitizeText(text), looksEncrypted };
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -797,7 +813,7 @@ export class iCloudRemindersService {
             }
             this.listsById.set(rec.recordName, {
                 id: rec.recordName,
-                title: name ?? 'Untitled',
+                title: name ? sanitizeText(name) : 'Untitled',
                 color: color ?? null,
                 count,
             });

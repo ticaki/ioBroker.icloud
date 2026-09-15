@@ -224,7 +224,10 @@ export class iCloudFindMyService {
     constructor(service: iCloudService, serviceUri: string) {
         this.service = service;
         this.serviceUri = serviceUri;
-        void this.refresh();
+        // No eager refresh here: the adapter calls refresh() explicitly and handles its errors.
+        // A fire-and-forget refresh in the constructor ran in parallel to that call, raced it
+        // through refreshWebservices() and — on a persistent HTTP 450 — crashed the adapter
+        // with an unhandled promise rejection.
     }
     devices: Map<string, iCloudFindMyDevice> = new Map();
     membersInfo: Record<

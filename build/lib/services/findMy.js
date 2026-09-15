@@ -43,7 +43,6 @@ class iCloudFindMyService {
   constructor(service, serviceUri) {
     this.service = service;
     this.serviceUri = serviceUri;
-    void this.refresh();
   }
   devices = /* @__PURE__ */ new Map();
   membersInfo = {};
