@@ -2,6 +2,8 @@
 	"icloud adapter settings": "icloud的适配器设置",
 	"username": "Apple ID（用户名）",
 	"password": "密码",
+	"acceptTermsAutomatically": "自动接受更新后的 iCloud 条款",
+	"acceptTermsAutomaticallyHelp": "当 Apple 发布新的 iCloud 条款时，在账户持有人接受之前 Apple 会拒绝服务请求（例如“查找”返回 HTTP 450）。启用此选项后，适配器将代表您接受当前条款——即您在未阅读的情况下同意 Apple 的条款。否则适配器会以错误信息停止，您需要在 icloud.com 或 Apple 设备上接受条款。",
 	"locationPointsHeader": "位置点",
 	"locationPoints": "位置列表",
 	"locationPointsHelp": "用于计算到 FindMy 设备的距离。",

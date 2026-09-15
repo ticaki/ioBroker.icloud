@@ -26,6 +26,18 @@
                     "lg": 6,
                     "xl": 6
                 },
+                "acceptTermsAutomatically": {
+                    "type": "checkbox",
+                    "label": "acceptTermsAutomatically",
+                    "help": "acceptTermsAutomaticallyHelp",
+                    "newLine": true,
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 6,
+                    "lg": 6,
+                    "xl": 6,
+                    "default": false
+                },
                 "_smsMfaPanel": {
                     "type": "custom",
                     "name": "ConfigCustomIcloudSet/Components/SmsMfaPanel",

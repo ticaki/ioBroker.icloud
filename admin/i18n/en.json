@@ -2,6 +2,8 @@
 	"icloud adapter settings": "Adapter settings for icloud",
 	"username": "Apple ID (username)",
 	"password": "Password",
+	"acceptTermsAutomatically": "Accept updated iCloud terms automatically",
+	"acceptTermsAutomaticallyHelp": "When Apple publishes new iCloud terms and conditions, Apple rejects service requests (e.g. Find My answers HTTP 450) until the account holder accepts them. With this option the adapter accepts the current terms on your behalf — you are agreeing to Apple's terms without reading them. Otherwise the adapter stops with an error message and you accept them at icloud.com or on an Apple device.",
 	"locationPointsHeader": "Location points",
 	"locationPoints": "Location list",
 	"locationPointsHelp": "Used to calculate distances to FindMy devices. Index = state ID, Name = label of the state.",

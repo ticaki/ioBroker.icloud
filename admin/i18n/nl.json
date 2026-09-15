@@ -2,6 +2,8 @@
 	"icloud adapter settings": "Adapterinstellingen voor icloud",
 	"username": "Apple ID (gebruikersnaam)",
 	"password": "Wachtwoord",
+	"acceptTermsAutomatically": "Bijgewerkte iCloud-voorwaarden automatisch accepteren",
+	"acceptTermsAutomaticallyHelp": "Wanneer Apple nieuwe iCloud-voorwaarden publiceert, wijst Apple serviceverzoeken af (bijv. Zoek mijn antwoordt HTTP 450) totdat de accounthouder ze accepteert. Met deze optie accepteert de adapter de huidige voorwaarden namens jou — je gaat akkoord met de voorwaarden van Apple zonder ze te lezen. Anders stopt de adapter met een foutmelding en accepteer je ze op icloud.com of op een Apple-apparaat.",
 	"locationPointsHeader": "Locatiepunten",
 	"locationPoints": "Locatielijst",
 	"locationPointsHelp": "Gebruikt om afstanden tot FindMy-apparaten te berekenen.",

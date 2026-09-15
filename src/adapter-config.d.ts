@@ -12,6 +12,8 @@ declare global {
 		interface AdapterConfig {
 			username: string;
 			password: string;
+			/** Accept updated iCloud terms and conditions on the account holder's behalf */
+			acceptTermsAutomatically: boolean;
 			locationPoints: LocationPoint[];
 			findMyEnabled: boolean;
 			findMyInterval: number;

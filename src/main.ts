@@ -962,6 +962,31 @@ class Icloud extends utils.Adapter {
     }
 
     /**
+     * Accept updated iCloud terms on the account holder's behalf (config option
+     * `acceptTermsAutomatically`). Returns true when Apple confirmed the acceptance.
+     */
+    private async acceptUpdatedTerms(): Promise<boolean> {
+        if (!this.icloud) {
+            return false;
+        }
+        this.log.warn(
+            'Apple has published updated iCloud terms and conditions — accepting them automatically as configured',
+        );
+        try {
+            const accepted = await this.icloud.acceptUpdatedTerms();
+            if (accepted) {
+                this.log.info('Updated iCloud terms and conditions accepted');
+            } else {
+                this.log.warn('Apple still reports the iCloud terms as not accepted after the automatic acceptance');
+            }
+            return accepted;
+        } catch (err) {
+            this.log.error(`Accepting the updated iCloud terms failed: ${(err as Error)?.message ?? String(err)}`);
+            return false;
+        }
+    }
+
+    /**
      * Stop the instance because Apple requires the account holder to accept updated iCloud terms.
      * Nothing the adapter does can repair this, so it exits without restart (the user restarts
      * the instance after accepting the terms) and says exactly what to do.
@@ -970,7 +995,8 @@ class Icloud extends utils.Adapter {
         this.log.error(
             'Apple has published updated iCloud terms and conditions that this account has not accepted yet — ' +
                 'Apple rejects service requests (Find My answers HTTP 450) until they are accepted. ' +
-                'Sign in at https://www.icloud.com or confirm the "New iCloud Terms and Conditions" prompt on one of your Apple devices, then start this instance again.',
+                'Sign in at https://www.icloud.com or confirm the "New iCloud Terms and Conditions" prompt on one of your Apple devices, then start this instance again. ' +
+                'Alternatively enable "Accept updated iCloud terms automatically" in the instance settings.',
         );
         void this.setState('info.connection', false, true);
         this.icloud = null;
@@ -1629,6 +1655,10 @@ class Icloud extends utils.Adapter {
                 // the session is fine, no re-authentication can fix this. Stop with a clear message
                 // instead of looping through recoveries.
                 if (this.icloud?.accountInfo?.termsUpdateNeeded) {
+                    if (this.config.acceptTermsAutomatically && (await this.acceptUpdatedTerms())) {
+                        // Terms accepted — the scheduled refresh picks up from here
+                        return;
+                    }
                     this.terminateForUpdatedTerms();
                     return;
                 }

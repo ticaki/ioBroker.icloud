@@ -2,6 +2,8 @@
 	"icloud adapter settings": "Ustawienia adaptera dla icloud",
 	"username": "Apple ID (nazwa użytkownika)",
 	"password": "Hasło",
+	"acceptTermsAutomatically": "Automatycznie akceptuj zaktualizowane warunki iCloud",
+	"acceptTermsAutomaticallyHelp": "Gdy Apple publikuje nowe warunki iCloud, Apple odrzuca żądania do usług (np. Lokalizator odpowiada HTTP 450), dopóki właściciel konta ich nie zaakceptuje. Z tą opcją adapter akceptuje aktualne warunki w Twoim imieniu — zgadzasz się na warunki Apple bez ich czytania. W przeciwnym razie adapter zatrzymuje się z komunikatem błędu, a Ty akceptujesz je na icloud.com lub na urządzeniu Apple.",
 	"locationPointsHeader": "Punkty lokalizacji",
 	"locationPoints": "Lista lokalizacji",
 	"locationPointsHelp": "Używane do obliczania odległości do urządzeń FindMy.",

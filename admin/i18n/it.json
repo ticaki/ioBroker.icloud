@@ -2,6 +2,8 @@
 	"icloud adapter settings": "Impostazioni dell'adattatore per icloud",
 	"username": "Apple ID (nome utente)",
 	"password": "Password",
+	"acceptTermsAutomatically": "Accetta automaticamente i termini iCloud aggiornati",
+	"acceptTermsAutomaticallyHelp": "Quando Apple pubblica nuovi termini iCloud, Apple rifiuta le richieste ai servizi (ad es. Dov'è risponde HTTP 450) finché il titolare dell'account non li accetta. Con questa opzione l'adattatore accetta i termini correnti per tuo conto — accetti i termini di Apple senza leggerli. Altrimenti l'adattatore si arresta con un messaggio di errore e li accetti su icloud.com o su un dispositivo Apple.",
 	"locationPointsHeader": "Punti di localizzazione",
 	"locationPoints": "Elenco posizioni",
 	"locationPointsHelp": "Utilizzato per calcolare le distanze dai dispositivi FindMy.",

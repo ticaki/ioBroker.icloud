@@ -2,6 +2,8 @@
 	"icloud adapter settings": "Paramètres d'adaptateur pour icloud",
 	"username": "Apple ID (nom d'utilisateur)",
 	"password": "Mot de passe",
+	"acceptTermsAutomatically": "Accepter automatiquement les conditions iCloud mises à jour",
+	"acceptTermsAutomaticallyHelp": "Lorsque Apple publie de nouvelles conditions iCloud, Apple rejette les requêtes de service (par ex. Localiser répond HTTP 450) jusqu'à ce que le titulaire du compte les accepte. Avec cette option, l'adaptateur accepte les conditions en vigueur en votre nom — vous acceptez les conditions d'Apple sans les lire. Sinon, l'adaptateur s'arrête avec un message d'erreur et vous les acceptez sur icloud.com ou sur un appareil Apple.",
 	"locationPointsHeader": "Points de localisation",
 	"locationPoints": "Liste des emplacements",
 	"locationPointsHelp": "Utilisé pour calculer les distances vers les appareils FindMy.",

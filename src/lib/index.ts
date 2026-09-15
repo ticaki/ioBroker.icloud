@@ -1710,6 +1710,54 @@ export default class iCloudService extends EventEmitter {
     }
 
     /**
+     * Accept updated iCloud terms and conditions on behalf of the account holder.
+     *
+     * Mirrors pyicloud's `_handle_accept_terms()`: fetch the current terms version from
+     * `/getTerms`, confirm it via `/repairDone` and re-run accountLogin so `accountInfo`
+     * (and `termsUpdateNeeded`) reflect the new state. Apple answers these setup endpoints
+     * for POST exactly as for pyicloud's GET-with-body, which native fetch cannot send.
+     *
+     * @returns true when Apple no longer reports `termsUpdateNeeded` afterwards.
+     */
+    async acceptUpdatedTerms(): Promise<boolean> {
+        const setupBase = SETUP_ENDPOINT.replace(/\/accountLogin$/, '');
+        const locale = (this.accountInfo as any)?.dsInfo?.languageCode ?? 'en_US';
+
+        this._log(LogLevel.Debug, '[setup] getTerms → POST', `${setupBase}/getTerms`);
+        const termsResp = await this.fetch(`${setupBase}/getTerms`, {
+            headers: DEFAULT_HEADERS,
+            method: 'POST',
+            body: JSON.stringify({ locale }),
+        });
+        if (!termsResp.ok) {
+            throw new Error(`getTerms failed (HTTP ${termsResp.status}): ${(await termsResp.text()).slice(0, 200)}`);
+        }
+        const terms = (await termsResp.json()) as { iCloudTerms?: { version?: number } };
+        const version = terms.iCloudTerms?.version;
+        if (typeof version !== 'number') {
+            throw new Error('getTerms did not return an iCloud terms version');
+        }
+
+        this._log(LogLevel.Debug, `[setup] repairDone → POST ${setupBase}/repairDone (acceptedICloudTerms=${version})`);
+        const doneResp = await this.fetch(`${setupBase}/repairDone`, {
+            headers: DEFAULT_HEADERS,
+            method: 'POST',
+            body: JSON.stringify({ acceptedICloudTerms: version }),
+        });
+        const doneBody = (await doneResp.text()).slice(0, 200);
+        if (!doneResp.ok) {
+            throw new Error(`repairDone failed (HTTP ${doneResp.status}): ${doneBody}`);
+        }
+        this._log(LogLevel.Debug, `[setup] repairDone response: HTTP ${doneResp.status} ${doneBody}`);
+
+        // Re-run accountLogin so accountInfo/webservices reflect the accepted terms
+        if (!(await this.refreshWebservices())) {
+            throw new Error('accountLogin after accepting the terms failed');
+        }
+        return (this.accountInfo as any)?.termsUpdateNeeded !== true;
+    }
+
+    /**
      * Drop the current session token and cookies but keep the trust token, so that the next
      * authenticate() performs a full sign-in without asking for MFA again.
      *
