@@ -46,7 +46,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 2.1.1 (2026-09-15)
 * (ticaki) fixed: the adapter crashed with `UNCAUGHT_EXCEPTION` (unhandled promise rejection `HTTP 450`) when Find My rejected the session — the Find My service started a second, unmonitored `refresh()` in its constructor in parallel to the adapter's own call; the adapter's error handling and session recovery now apply
 * (ticaki) fixed: reminders text containing U+2028/U+2029 line separators or control characters is normalised before being stored
 
@@ -67,11 +67,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 * (ticaki) fixed: an empty HTTP 500 is no longer mistaken for an expired session — only a real HTTP 401 triggers a calendar re-authentication now
 * (ticaki) fixed: when Apple refuses `/ca/startup`, the calendar list is now taken from a single-day `/startup` request and, if that fails too, reconstructed from the `pGuid`s of `/ca/events` — the adapter delivers the events instead of aborting the whole refresh, and a reconstructed list never deletes existing calendar objects
 * (ticaki) changed: the calendar service now picks up the calendar partition URL returned by a re-authentication instead of reusing the cached one
-
-### 2.0.3 (2026-09-06)
-* (ticaki) fixed: requesting a 2FA code by SMS could fail with `SMS request failed (500)` — the session is now refreshed directly before the request and a rejected request is retried once with the complete phone number payload
-* (ticaki) fixed: calendar requests now carry the `clientBuildNumber` / `clientMasteringNumber` / `clientId` parameters that Apple's own web client sends — without them stricter calendar servers answered with an empty HTTP 500
-* (ticaki) changed: failed SMS and calendar requests now report Apple's actual error (service errors, edge headers) instead of a truncated JSON fragment, and all adapter messages are English now
 
 Older changes are listed in [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 

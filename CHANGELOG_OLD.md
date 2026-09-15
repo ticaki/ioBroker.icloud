@@ -1,6 +1,11 @@
 # Older Changelog
 
 Older changelog entries will be moved here from the [README](README.md) once the changelog section there grows too long.
+## 2.0.3 (2026-09-06)
+* (ticaki) fixed: requesting a 2FA code by SMS could fail with `SMS request failed (500)` — the session is now refreshed directly before the request and a rejected request is retried once with the complete phone number payload
+* (ticaki) fixed: calendar requests now carry the `clientBuildNumber` / `clientMasteringNumber` / `clientId` parameters that Apple's own web client sends — without them stricter calendar servers answered with an empty HTTP 500
+* (ticaki) changed: failed SMS and calendar requests now report Apple's actual error (service errors, edge headers) instead of a truncated JSON fragment, and all adapter messages are English now
+
 ## 2.0.2 (2026-09-05)
 * (ticaki) fixed: a failed calendar request no longer deleted all calendar objects and left only `calendar.lastSync` behind — an empty calendar list is now treated as an error, the existing objects are kept and the failure is logged
 
