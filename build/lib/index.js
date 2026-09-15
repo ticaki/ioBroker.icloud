@@ -1017,7 +1017,7 @@ class iCloudService extends import_node_events.default {
     }
   }
   async _getiCloudCookies() {
-    var _a;
+    var _a, _b, _c;
     try {
       const data = {
         accountCountryCode: this.authStore.accountCountry,
@@ -1036,6 +1036,11 @@ class iCloudService extends import_node_events.default {
         if (this.authStore.processCloudSetupResponse(response, this.options.username)) {
           try {
             this.accountInfo = await response.json();
+            const ai = this.accountInfo;
+            this._log(
+              LogLevel.Debug,
+              `[setup] accountLogin: hsaTrustedBrowser=${ai == null ? void 0 : ai.hsaTrustedBrowser}, hsaChallengeRequired=${ai == null ? void 0 : ai.hsaChallengeRequired}, hsaVersion=${(_b = ai == null ? void 0 : ai.dsInfo) == null ? void 0 : _b.hsaVersion}, apps.find=${JSON.stringify((_c = ai == null ? void 0 : ai.apps) == null ? void 0 : _c.find)}, termsUpdateNeeded=${ai == null ? void 0 : ai.termsUpdateNeeded}`
+            );
           } catch (e) {
             this._log(LogLevel.Warning, "Could not get account info:", e);
           }
@@ -1311,6 +1316,19 @@ class iCloudService extends import_node_events.default {
   invalidatePersistedAuth() {
     if (this.options.username) {
       this.authStore.clearPersistedSession(this.options.username);
+    }
+  }
+  /**
+   * Drop the current session token and cookies but keep the trust token, so that the next
+   * authenticate() performs a full sign-in without asking for MFA again.
+   *
+   * Used for session recovery when Apple keeps rejecting a service session (e.g. FindMy
+   * HTTP 450) although /validate and the token-based accountLogin still answer 200 — re-using
+   * the same session token would just reproduce the identical state.
+   */
+  invalidateSession() {
+    if (this.options.username) {
+      this.authStore.clearStaleSession(this.options.username);
     }
   }
   _storage;

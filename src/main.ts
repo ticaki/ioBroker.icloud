@@ -18,6 +18,11 @@ import { GeoLookup } from './lib/geo';
 import { ExternalGeocoder } from './lib/geocoding';
 
 /** Best-effort human-readable names for Apple FindMy feature flags (not officially documented). */
+/** Delays before a session recovery re-authenticates: fast first, then backing off so Apple is not hammered. */
+const SESSION_RECOVERY_DELAYS_MS = [10_000, 60_000, 5 * 60_000, 15 * 60_000, 30 * 60_000];
+/** A recovery this long after the previous one is treated as a fresh incident (backoff restarts). */
+const SESSION_RECOVERY_RESET_MS = 60 * 60_000;
+
 const FINDMY_FEATURE_NAMES: Record<string, string> = {
     BTR: 'Battery Reporting',
     LLC: 'Low-power Location Capability',
@@ -317,6 +322,10 @@ class Icloud extends utils.Adapter {
     /** True while a security-key authentication run is in flight — prevents concurrent starts. */
     private securityKeyAuthRunning = false;
     private sessionRecoveryInProgress = false;
+    /** Consecutive session recoveries — drives the re-auth backoff */
+    private sessionRecoveryAttempts = 0;
+    /** Timestamp of the last triggered session recovery */
+    private sessionRecoveryLastAt = 0;
     private calendarRefreshTimer: ioBroker.Timeout | null | undefined = null;
     private calendarMidnightTimer: ioBroker.Timeout | null | undefined = null;
     private remindersRefreshTimer: ioBroker.Timeout | null | undefined = null;
@@ -953,6 +962,25 @@ class Icloud extends utils.Adapter {
     }
 
     /**
+     * Stop the instance because Apple requires the account holder to accept updated iCloud terms.
+     * Nothing the adapter does can repair this, so it exits without restart (the user restarts
+     * the instance after accepting the terms) and says exactly what to do.
+     */
+    private terminateForUpdatedTerms(): void {
+        this.log.error(
+            'Apple has published updated iCloud terms and conditions that this account has not accepted yet — ' +
+                'Apple rejects service requests (Find My answers HTTP 450) until they are accepted. ' +
+                'Sign in at https://www.icloud.com or confirm the "New iCloud Terms and Conditions" prompt on one of your Apple devices, then start this instance again.',
+        );
+        void this.setState('info.connection', false, true);
+        this.icloud = null;
+        this.terminate(
+            'updated iCloud terms and conditions must be accepted by the account holder',
+            utils.EXIT_CODES.ADAPTER_REQUESTED_TERMINATION,
+        );
+    }
+
+    /**
      * Triggers a full re-authentication when the iCloud session is permanently dead.
      * Called when a service (FindMy, Reminders, …) detects that refreshWebservices()
      * could not recover the session. Prevents duplicate concurrent recovery attempts.
@@ -964,8 +992,28 @@ class Icloud extends utils.Adapter {
             return;
         }
         this.sessionRecoveryInProgress = true;
-        this.log.warn(`iCloud session permanently expired (${reason}) — triggering full re-authentication in 10 s`);
+
+        // Backoff: a recovery that is re-triggered right after the previous one did not help.
+        // Start over after a quiet period so a session that expires days later is retried fast again.
+        const now = Date.now();
+        if (now - this.sessionRecoveryLastAt > SESSION_RECOVERY_RESET_MS) {
+            this.sessionRecoveryAttempts = 0;
+        }
+        this.sessionRecoveryLastAt = now;
+        const delayMs =
+            SESSION_RECOVERY_DELAYS_MS[Math.min(this.sessionRecoveryAttempts, SESSION_RECOVERY_DELAYS_MS.length - 1)];
+        this.sessionRecoveryAttempts++;
+        const delayText = delayMs < 60_000 ? `${Math.round(delayMs / 1000)} s` : `${Math.round(delayMs / 60_000)} min`;
+        const attemptText = this.sessionRecoveryAttempts > 1 ? ` (attempt ${this.sessionRecoveryAttempts})` : '';
+        this.log.warn(
+            `iCloud session permanently expired (${reason}) — triggering full re-authentication in ${delayText}${attemptText}`,
+        );
         void this.setState('info.connection', false, true);
+
+        // Drop the session token + cookies (trust token stays, so no new MFA prompt). Without this
+        // the re-auth would validate the very same session token, get HTTP 200 from /validate and
+        // run into the identical service rejection again — an endless recovery loop.
+        this.icloud?.invalidateSession();
 
         // Null out the iCloud instance so pending refresh callbacks bail out early
         // (they all guard with `if (!this.icloud) return`).
@@ -1011,7 +1059,7 @@ class Icloud extends utils.Adapter {
             this.connectToiCloud().catch((err: unknown) => {
                 this.log.error(`Session recovery re-auth failed: ${(err as Error)?.message ?? String(err)}`);
             });
-        }, 10_000);
+        }, delayMs);
     }
 
     /**
@@ -1087,6 +1135,10 @@ class Icloud extends utils.Adapter {
             await this.initGeocoding();
             await this.loadFindMyIdMap();
             await this.refreshFindMyDevices(locationPoints);
+            if (!this.icloud) {
+                // refreshFindMyDevices() triggered a session recovery — the rest runs after re-auth
+                return;
+            }
             this.scheduleFindMyRefresh(locationPoints);
         }
 
@@ -1135,6 +1187,11 @@ class Icloud extends utils.Adapter {
         if (this.config.accountStorageEnabled) {
             await this.refreshAccountStorage();
             this.scheduleAccountStorageRefresh();
+        }
+
+        if (!this.icloud) {
+            // A service refresh above triggered a session recovery — do not report a working connection
+            return;
         }
 
         // ── Done: mark connection as established ──────────────────────────────
@@ -1567,9 +1624,16 @@ class Icloud extends utils.Adapter {
             }
         } catch (err) {
             this.log.warn(`FindMy refresh failed: ${(err as Error)?.message ?? String(err)}`);
-            // HTTP 450/421 propagates here only when refreshWebservices() also failed,
-            // meaning the session token itself is dead — trigger full re-authentication.
             if (err instanceof Error && /HTTP (421|450)/.test(err.message)) {
+                // Apple answers 450 while the account holder has not accepted updated iCloud terms —
+                // the session is fine, no re-authentication can fix this. Stop with a clear message
+                // instead of looping through recoveries.
+                if (this.icloud?.accountInfo?.termsUpdateNeeded) {
+                    this.terminateForUpdatedTerms();
+                    return;
+                }
+                // Otherwise HTTP 450/421 propagates here only when refreshWebservices() also failed,
+                // meaning the session token itself is dead — trigger full re-authentication.
                 this.triggerSessionRecovery(err.message);
             }
         } finally {

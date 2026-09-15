@@ -28,6 +28,8 @@ var import_lib = __toESM(require("./lib/index"));
 var import_calendar_agenda = require("./lib/calendar-agenda");
 var import_geo = require("./lib/geo");
 var import_geocoding = require("./lib/geocoding");
+const SESSION_RECOVERY_DELAYS_MS = [1e4, 6e4, 5 * 6e4, 15 * 6e4, 30 * 6e4];
+const SESSION_RECOVERY_RESET_MS = 60 * 6e4;
 const FINDMY_FEATURE_NAMES = {
   BTR: "Battery Reporting",
   LLC: "Low-power Location Capability",
@@ -223,6 +225,10 @@ class Icloud extends utils.Adapter {
   /** True while a security-key authentication run is in flight — prevents concurrent starts. */
   securityKeyAuthRunning = false;
   sessionRecoveryInProgress = false;
+  /** Consecutive session recoveries — drives the re-auth backoff */
+  sessionRecoveryAttempts = 0;
+  /** Timestamp of the last triggered session recovery */
+  sessionRecoveryLastAt = 0;
   calendarRefreshTimer = null;
   calendarMidnightTimer = null;
   remindersRefreshTimer = null;
@@ -743,6 +749,22 @@ class Icloud extends utils.Adapter {
     }
   }
   /**
+   * Stop the instance because Apple requires the account holder to accept updated iCloud terms.
+   * Nothing the adapter does can repair this, so it exits without restart (the user restarts
+   * the instance after accepting the terms) and says exactly what to do.
+   */
+  terminateForUpdatedTerms() {
+    this.log.error(
+      'Apple has published updated iCloud terms and conditions that this account has not accepted yet \u2014 Apple rejects service requests (Find My answers HTTP 450) until they are accepted. Sign in at https://www.icloud.com or confirm the "New iCloud Terms and Conditions" prompt on one of your Apple devices, then start this instance again.'
+    );
+    void this.setState("info.connection", false, true);
+    this.icloud = null;
+    this.terminate(
+      "updated iCloud terms and conditions must be accepted by the account holder",
+      utils.EXIT_CODES.ADAPTER_REQUESTED_TERMINATION
+    );
+  }
+  /**
    * Triggers a full re-authentication when the iCloud session is permanently dead.
    * Called when a service (FindMy, Reminders, …) detects that refreshWebservices()
    * could not recover the session. Prevents duplicate concurrent recovery attempts.
@@ -750,12 +772,25 @@ class Icloud extends utils.Adapter {
    * @param reason - Short description of the error that triggered recovery, for logging.
    */
   triggerSessionRecovery(reason) {
+    var _a;
     if (this.sessionRecoveryInProgress) {
       return;
     }
     this.sessionRecoveryInProgress = true;
-    this.log.warn(`iCloud session permanently expired (${reason}) \u2014 triggering full re-authentication in 10 s`);
+    const now = Date.now();
+    if (now - this.sessionRecoveryLastAt > SESSION_RECOVERY_RESET_MS) {
+      this.sessionRecoveryAttempts = 0;
+    }
+    this.sessionRecoveryLastAt = now;
+    const delayMs = SESSION_RECOVERY_DELAYS_MS[Math.min(this.sessionRecoveryAttempts, SESSION_RECOVERY_DELAYS_MS.length - 1)];
+    this.sessionRecoveryAttempts++;
+    const delayText = delayMs < 6e4 ? `${Math.round(delayMs / 1e3)} s` : `${Math.round(delayMs / 6e4)} min`;
+    const attemptText = this.sessionRecoveryAttempts > 1 ? ` (attempt ${this.sessionRecoveryAttempts})` : "";
+    this.log.warn(
+      `iCloud session permanently expired (${reason}) \u2014 triggering full re-authentication in ${delayText}${attemptText}`
+    );
     void this.setState("info.connection", false, true);
+    (_a = this.icloud) == null ? void 0 : _a.invalidateSession();
     this.icloud = null;
     if (this.findMyRefreshTimer) {
       this.clearTimeout(this.findMyRefreshTimer);
@@ -793,10 +828,10 @@ class Icloud extends utils.Adapter {
       this.sessionRecoveryInProgress = false;
       this.log.info("Session recovery: re-authenticating with iCloud now");
       this.connectToiCloud().catch((err) => {
-        var _a;
-        this.log.error(`Session recovery re-auth failed: ${(_a = err == null ? void 0 : err.message) != null ? _a : String(err)}`);
+        var _a2;
+        this.log.error(`Session recovery re-auth failed: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
       });
-    }, 1e4);
+    }, delayMs);
   }
   /**
    * Called after the iCloud session reaches Ready state.
@@ -855,6 +890,9 @@ class Icloud extends utils.Adapter {
       await this.initGeocoding();
       await this.loadFindMyIdMap();
       await this.refreshFindMyDevices(locationPoints);
+      if (!this.icloud) {
+        return;
+      }
       this.scheduleFindMyRefresh(locationPoints);
     }
     if (activeServices.includes("calendar") && this.config.calendarEnabled) {
@@ -893,6 +931,9 @@ class Icloud extends utils.Adapter {
     if (this.config.accountStorageEnabled) {
       await this.refreshAccountStorage();
       this.scheduleAccountStorageRefresh();
+    }
+    if (!this.icloud) {
+      return;
     }
     this.log.info("iCloud connection established successfully");
     await this.setState("info.connection", true, true);
@@ -1021,7 +1062,7 @@ class Icloud extends utils.Adapter {
    * @param locationPoints - configured location points for distance calculation
    */
   async refreshFindMyDevices(locationPoints) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
     if (!this.icloud) {
       return;
     }
@@ -1276,6 +1317,10 @@ class Icloud extends utils.Adapter {
     } catch (err) {
       this.log.warn(`FindMy refresh failed: ${(_v = err == null ? void 0 : err.message) != null ? _v : String(err)}`);
       if (err instanceof Error && /HTTP (421|450)/.test(err.message)) {
+        if ((_x = (_w = this.icloud) == null ? void 0 : _w.accountInfo) == null ? void 0 : _x.termsUpdateNeeded) {
+          this.terminateForUpdatedTerms();
+          return;
+        }
         this.triggerSessionRecovery(err.message);
       }
     } finally {

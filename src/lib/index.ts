@@ -1378,6 +1378,11 @@ export default class iCloudService extends EventEmitter {
                 if (this.authStore.processCloudSetupResponse(response, this.options.username)) {
                     try {
                         this.accountInfo = (await response.json()) as any;
+                        const ai = this.accountInfo as any;
+                        this._log(
+                            LogLevel.Debug,
+                            `[setup] accountLogin: hsaTrustedBrowser=${ai?.hsaTrustedBrowser}, hsaChallengeRequired=${ai?.hsaChallengeRequired}, hsaVersion=${ai?.dsInfo?.hsaVersion}, apps.find=${JSON.stringify(ai?.apps?.find)}, termsUpdateNeeded=${ai?.termsUpdateNeeded}`,
+                        );
                     } catch (e) {
                         this._log(LogLevel.Warning, 'Could not get account info:', e);
                     }
@@ -1701,6 +1706,20 @@ export default class iCloudService extends EventEmitter {
     invalidatePersistedAuth(): void {
         if (this.options.username) {
             this.authStore.clearPersistedSession(this.options.username);
+        }
+    }
+
+    /**
+     * Drop the current session token and cookies but keep the trust token, so that the next
+     * authenticate() performs a full sign-in without asking for MFA again.
+     *
+     * Used for session recovery when Apple keeps rejecting a service session (e.g. FindMy
+     * HTTP 450) although /validate and the token-based accountLogin still answer 200 — re-using
+     * the same session token would just reproduce the identical state.
+     */
+    invalidateSession(): void {
+        if (this.options.username) {
+            this.authStore.clearStaleSession(this.options.username);
         }
     }
 

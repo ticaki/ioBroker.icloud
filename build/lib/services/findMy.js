@@ -63,6 +63,10 @@ class iCloudFindMyService {
       });
       if (!request.ok) {
         const body = (await request.text()).slice(0, 200);
+        this.service._log(
+          0,
+          `[findmy] refreshClient HTTP ${request.status} \u2014 response headers: ${JSON.stringify(Object.fromEntries(request.headers.entries()))}`
+        );
         throw new Error(`HTTP ${request.status}: ${body || "(empty body)"}`);
       }
       return request.json();

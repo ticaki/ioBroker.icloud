@@ -205,6 +205,8 @@ export type AccountInfo = {
         accountCreateEnabled: boolean;
     };
     hsaTrustedBrowser: boolean;
+    /** Apple published new iCloud terms the account holder has not accepted yet — services answer HTTP 450 until then */
+    termsUpdateNeeded?: boolean;
     appsOrder: Array<string>;
     version: number;
     isExtendedLogin: boolean;
