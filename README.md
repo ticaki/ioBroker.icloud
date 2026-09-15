@@ -46,7 +46,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 2.1.2 (2026-09-15)
 * (ticaki) fixed: when Apple requires the account holder to accept updated iCloud terms and conditions (`termsUpdateNeeded`; Find My answers `HTTP 450` although the session is valid), the adapter stops with a clear error message — accept the terms at icloud.com or on an Apple device and start the instance again — instead of re-authenticating in an endless loop
 * (ticaki) fixed: a session recovery now performs a real re-login — session token and cookies are dropped, the trust token is kept so no new MFA is required — and backs off (10 s, 1 min, 5 min, 15 min, 30 min) when it keeps failing, instead of re-validating the same session token every 10 s
 * (ticaki) new: option "Accept updated iCloud terms automatically" (off by default) — when Apple flags the account with `termsUpdateNeeded`, the adapter fetches the current terms version via `/getTerms`, confirms it via `/repairDone` and re-runs `accountLogin`, the way pyicloud's `accept_terms` does; enabling it means agreeing to Apple's terms without reading them
@@ -67,12 +67,6 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 ### 2.0.5 (2026-09-06)
 * (ticaki) new: when Apple refuses `/ca/startup`, the titles, colours and flags of the reconstructed calendars are now fetched separately via `/ca/collections` — such calendars only appeared under their guid before, and a list answer also brings back calendars that have no event in the queried range
 * (ticaki) changed: the warning about a reconstructed calendar list now states how many calendars could be completed with their real metadata, and a title delivered by Apple is no longer overwritten by the one stored from an earlier refresh
-
-### 2.0.4 (2026-09-06)
-* (ticaki) fixed: the calendar could fail permanently with `WEBSERVICE_REAUTH_REQUIRED:calendar` although the session was still valid — the service re-authentication no longer posts the account password to Apple's `accountLogin` (which answers HTTP 421 for every account with two-factor authentication) but refreshes the webservices with the session token, the way FindMy has been doing it all along
-* (ticaki) fixed: an empty HTTP 500 is no longer mistaken for an expired session — only a real HTTP 401 triggers a calendar re-authentication now
-* (ticaki) fixed: when Apple refuses `/ca/startup`, the calendar list is now taken from a single-day `/startup` request and, if that fails too, reconstructed from the `pGuid`s of `/ca/events` — the adapter delivers the events instead of aborting the whole refresh, and a reconstructed list never deletes existing calendar objects
-* (ticaki) changed: the calendar service now picks up the calendar partition URL returned by a re-authentication instead of reusing the cached one
 
 Older changes are listed in [CHANGELOG_OLD.md](CHANGELOG_OLD.md).
 
