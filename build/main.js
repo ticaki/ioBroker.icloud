@@ -30,6 +30,7 @@ var import_geo = require("./lib/geo");
 var import_geocoding = require("./lib/geocoding");
 const SESSION_RECOVERY_DELAYS_MS = [1e4, 6e4, 5 * 6e4, 15 * 6e4, 30 * 6e4];
 const SESSION_RECOVERY_RESET_MS = 60 * 6e4;
+const SESSION_RECOVERY_MAX_ATTEMPTS = SESSION_RECOVERY_DELAYS_MS.length;
 const FINDMY_FEATURE_NAMES = {
   BTR: "Battery Reporting",
   LLC: "Low-power Location Capability",
@@ -227,6 +228,8 @@ class Icloud extends utils.Adapter {
   sessionRecoveryInProgress = false;
   /** Consecutive session recoveries — drives the re-auth backoff */
   sessionRecoveryAttempts = 0;
+  /** Set once terminateForLockedAccount() runs — the lock surfaces through several paths */
+  accountLockedTerminating = false;
   /** Timestamp of the last triggered session recovery */
   sessionRecoveryLastAt = 0;
   calendarRefreshTimer = null;
@@ -694,6 +697,10 @@ class Icloud extends utils.Adapter {
     this.icloud.on("Error", (err) => {
       var _a2;
       const msg = (_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err);
+      if (msg.startsWith("ACCOUNT_LOCKED")) {
+        this.terminateForLockedAccount(msg);
+        return;
+      }
       const isHandledRetry = msg.startsWith("STALE_SESSION_401") || msg.startsWith("RATE_LIMITED");
       if (isHandledRetry) {
         this.log.debug(
@@ -713,7 +720,8 @@ class Icloud extends utils.Adapter {
       this.log.debug(`authenticate() returned \u2014 status: ${this.icloud.status}`);
     } catch (err) {
       const msg = (_a = err == null ? void 0 : err.message) != null ? _a : String(err);
-      if (msg.startsWith("RATE_LIMITED")) {
+      if (msg.startsWith("ACCOUNT_LOCKED")) {
+      } else if (msg.startsWith("RATE_LIMITED")) {
         const retryMinutes = 61;
         const retryTime = new Date((/* @__PURE__ */ new Date()).getTime() + retryMinutes * 60 * 1e3);
         this.log.warn(`Apple rate limit detected \u2014 next attempt at ${retryTime.toISOString()}`);
@@ -790,6 +798,27 @@ class Icloud extends utils.Adapter {
     );
   }
   /**
+   * Stop the instance because Apple has locked the account (service error -20209).
+   * Every further login attempt only prolongs the lock, so the instance exits without restart;
+   * the user unlocks the account at iForgot, updates the password if Apple demanded a new one
+   * and starts the instance again.
+   *
+   * @param detail - The ACCOUNT_LOCKED error message, for the debug log.
+   */
+  terminateForLockedAccount(detail) {
+    if (this.accountLockedTerminating) {
+      return;
+    }
+    this.accountLockedTerminating = true;
+    this.log.error(
+      "Apple has locked this Apple Account for security reasons (Apple error -20209) \u2014 the adapter stops all login attempts, because every further attempt only prolongs the lock. Unlock the account at https://iforgot.apple.com, enter the new password in the instance settings if Apple asked you to change it, then start this instance again."
+    );
+    this.log.debug(`Account lock details: ${detail}`);
+    void this.setState("info.connection", false, true);
+    this.icloud = null;
+    this.terminate("Apple Account is locked", utils.EXIT_CODES.ADAPTER_REQUESTED_TERMINATION);
+  }
+  /**
    * Triggers a full re-authentication when the iCloud session is permanently dead.
    * Called when a service (FindMy, Reminders, …) detects that refreshWebservices()
    * could not recover the session. Prevents duplicate concurrent recovery attempts.
@@ -807,6 +836,15 @@ class Icloud extends utils.Adapter {
       this.sessionRecoveryAttempts = 0;
     }
     this.sessionRecoveryLastAt = now;
+    if (this.sessionRecoveryAttempts >= SESSION_RECOVERY_MAX_ATTEMPTS) {
+      this.log.error(
+        `iCloud session keeps failing right after ${this.sessionRecoveryAttempts} re-authentications (${reason}) \u2014 stopping the instance so that repeated logins do not get the Apple Account locked. Check the iCloud account (e.g. sign in at https://www.icloud.com) and start this instance again.`
+      );
+      void this.setState("info.connection", false, true);
+      this.icloud = null;
+      this.terminate("iCloud session recovery failed repeatedly", utils.EXIT_CODES.ADAPTER_REQUESTED_TERMINATION);
+      return;
+    }
     const delayMs = SESSION_RECOVERY_DELAYS_MS[Math.min(this.sessionRecoveryAttempts, SESSION_RECOVERY_DELAYS_MS.length - 1)];
     this.sessionRecoveryAttempts++;
     const delayText = delayMs < 6e4 ? `${Math.round(delayMs / 1e3)} s` : `${Math.round(delayMs / 6e4)} min`;
@@ -874,6 +912,11 @@ class Icloud extends utils.Adapter {
       return;
     }
     const ds = info.dsInfo;
+    if (ds.locked) {
+      this.log.warn(
+        "Apple reports this Apple Account as locked \u2014 unlock it at https://iforgot.apple.com, otherwise the next login will fail"
+      );
+    }
     this.log.info(`Logged in as: ${(_a = ds.fullName) != null ? _a : "(no name)"} (${(_b = ds.appleId) != null ? _b : "(no appleId)"})`);
     this.log.info(`Country: ${(_c = ds.countryCode) != null ? _c : "?"}, Locale: ${(_d = ds.locale) != null ? _d : "?"}`);
     this.log.debug(`Full dsInfo: ${JSON.stringify(ds)}`);

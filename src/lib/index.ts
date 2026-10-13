@@ -31,6 +31,42 @@ import type { AccountInfo } from './types';
 
 export type { iCloudAuthenticationStore } from './auth/authStore';
 export type { AccountInfo } from './types';
+
+/** Apple service error code for an account Apple has locked for security reasons. */
+const ERROR_ACCOUNT_LOCKED = '-20209';
+
+/**
+ * True when an Apple error body reports a locked account (`serviceErrors[].code == -20209`).
+ * Checked on the raw text regardless of HTTP status / content type — like pyicloud, which found
+ * the mimetype of these 403 answers not dependable. Every further login against a locked account
+ * only prolongs the lock, so callers must stop instead of retrying.
+ *
+ * @param body - Full (untruncated) response body
+ */
+function isAccountLockedBody(body: string): boolean {
+    try {
+        const data = JSON.parse(body) as { serviceErrors?: unknown };
+        if (Array.isArray(data?.serviceErrors)) {
+            return data.serviceErrors.some(
+                e => !!e && typeof e === 'object' && String((e as { code?: unknown }).code) === ERROR_ACCOUNT_LOCKED,
+            );
+        }
+    } catch {
+        /* not JSON — fall through to the plain-text check */
+    }
+    return new RegExp(`"code"\\s*:\\s*"?${ERROR_ACCOUNT_LOCKED}"?`).test(body);
+}
+
+/**
+ * Error raised (prefix `ACCOUNT_LOCKED:`) when Apple reports the account as locked.
+ *
+ * @param body - Apple's response body, quoted (truncated) in the message
+ */
+function accountLockedError(body: string): Error {
+    return new Error(
+        `ACCOUNT_LOCKED: Apple has locked this Apple Account for security reasons (Apple error ${ERROR_ACCOUNT_LOCKED}): ${body.slice(0, 300)}`,
+    );
+}
 export const LogLevel = {
     Debug: 0,
     Info: 1,
@@ -508,8 +544,12 @@ export default class iCloudService extends EventEmitter {
                         };
                         break;
                     }
+                    const initBody = await initRaw.text();
+                    if (isAccountLockedBody(initBody)) {
+                        throw accountLockedError(initBody);
+                    }
                     if (initRaw.status === 409 && attempt === 0) {
-                        const staleBody = (await initRaw.text()).slice(0, 200);
+                        const staleBody = initBody.slice(0, 200);
                         this._log(
                             LogLevel.Debug,
                             `[auth] SRP init returned 409 (${staleBody}) — discarding stale session and retrying once`,
@@ -517,7 +557,7 @@ export default class iCloudService extends EventEmitter {
                         this.authStore.clearStaleSession(this.options.username);
                         continue;
                     }
-                    const errBody = (await initRaw.text()).slice(0, 200);
+                    const errBody = initBody.slice(0, 200);
                     if (initRaw.status === 409) {
                         // Second 409 in a row: the retry already ran without any persisted session
                         // data, so this is not something a further retry can fix.
@@ -666,7 +706,13 @@ export default class iCloudService extends EventEmitter {
                     throw new Error('Unable to process auth response (409) — missing session headers!');
                 }
             } else {
-                const body = (await authResponse.text()).slice(0, 300);
+                const fullBody = await authResponse.text();
+                if (isAccountLockedBody(fullBody)) {
+                    // Not a stale session — keep session and trust token untouched and do not retry.
+                    this._log(LogLevel.Debug, '[auth] signin response body:', fullBody.slice(0, 300));
+                    throw accountLockedError(fullBody);
+                }
+                const body = fullBody.slice(0, 300);
                 // 401/403/503 are handled below — log at debug to avoid noise in the UI.
                 // Any other status is genuinely unexpected and warrants an error.
                 const knownErrorStatus =
@@ -1490,6 +1536,10 @@ export default class iCloudService extends EventEmitter {
                     throw new Error('Unable to process cloud setup response!');
                 }
             } else {
+                const body = await response.text().catch(() => '');
+                if (isAccountLockedBody(body)) {
+                    throw accountLockedError(body);
+                }
                 throw new Error(`Invalid status code: ${response.status}`);
             }
         } catch (e) {

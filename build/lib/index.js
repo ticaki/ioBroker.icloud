@@ -53,6 +53,24 @@ var import_reminders = require("./services/reminders");
 var import_contacts = require("./services/contacts");
 var import_notes = require("./services/notes");
 var import_ubiquity = require("./services/ubiquity");
+const ERROR_ACCOUNT_LOCKED = "-20209";
+function isAccountLockedBody(body) {
+  try {
+    const data = JSON.parse(body);
+    if (Array.isArray(data == null ? void 0 : data.serviceErrors)) {
+      return data.serviceErrors.some(
+        (e) => !!e && typeof e === "object" && String(e.code) === ERROR_ACCOUNT_LOCKED
+      );
+    }
+  } catch {
+  }
+  return new RegExp(`"code"\\s*:\\s*"?${ERROR_ACCOUNT_LOCKED}"?`).test(body);
+}
+function accountLockedError(body) {
+  return new Error(
+    `ACCOUNT_LOCKED: Apple has locked this Apple Account for security reasons (Apple error ${ERROR_ACCOUNT_LOCKED}): ${body.slice(0, 300)}`
+  );
+}
 const LogLevel = {
   Debug: 0,
   Info: 1,
@@ -317,8 +335,12 @@ class iCloudService extends import_node_events.default {
             };
             break;
           }
+          const initBody = await initRaw.text();
+          if (isAccountLockedBody(initBody)) {
+            throw accountLockedError(initBody);
+          }
           if (initRaw.status === 409 && attempt === 0) {
-            const staleBody = (await initRaw.text()).slice(0, 200);
+            const staleBody = initBody.slice(0, 200);
             this._log(
               LogLevel.Debug,
               `[auth] SRP init returned 409 (${staleBody}) \u2014 discarding stale session and retrying once`
@@ -326,7 +348,7 @@ class iCloudService extends import_node_events.default {
             this.authStore.clearStaleSession(this.options.username);
             continue;
           }
-          const errBody = (await initRaw.text()).slice(0, 200);
+          const errBody = initBody.slice(0, 200);
           if (initRaw.status === 409) {
             this.authStore.clearStaleSession(this.options.username);
             throw new Error(
@@ -451,7 +473,12 @@ class iCloudService extends import_node_events.default {
           throw new Error("Unable to process auth response (409) \u2014 missing session headers!");
         }
       } else {
-        const body = (await authResponse.text()).slice(0, 300);
+        const fullBody = await authResponse.text();
+        if (isAccountLockedBody(fullBody)) {
+          this._log(LogLevel.Debug, "[auth] signin response body:", fullBody.slice(0, 300));
+          throw accountLockedError(fullBody);
+        }
+        const body = fullBody.slice(0, 300);
         const knownErrorStatus = authResponse.status === 401 || authResponse.status === 403 || authResponse.status === 503;
         this._log(knownErrorStatus ? LogLevel.Debug : LogLevel.Error, "[auth] signin response body:", body);
         if (authResponse.status == 401 || authResponse.status == 403) {
@@ -1114,6 +1141,10 @@ class iCloudService extends import_node_events.default {
           throw new Error("Unable to process cloud setup response!");
         }
       } else {
+        const body = await response.text().catch(() => "");
+        if (isAccountLockedBody(body)) {
+          throw accountLockedError(body);
+        }
         throw new Error(`Invalid status code: ${response.status}`);
       }
     } catch (e) {
