@@ -46,6 +46,11 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (ticaki) new: when an Apple account has more than one trusted phone number, the instance configuration now offers them for selection before the SMS code is requested — Apple confirms a request to its own default number with `HTTP 200` even when that number is no longer reachable, so no SMS arriving was indistinguishable from a broken request
+* (ticaki) fixed: the SMS request now carries the `nonFTEU` flag and the full retry payload of the *selected* number instead of always those of Apple's default
+* (ticaki) new: the log and the admin UI name the number a code was actually requested for, and the log lists the account's remaining trusted numbers when the SMS does not arrive
+
 ### 2.1.2 (2026-09-15)
 * (ticaki) fixed: when Apple requires the account holder to accept updated iCloud terms and conditions (`termsUpdateNeeded`; Find My answers `HTTP 450` although the session is valid), the adapter stops with a clear error message — accept the terms at icloud.com or on an Apple device and start the instance again — instead of re-authenticating in an endless loop
 * (ticaki) fixed: a session recovery now performs a real re-login — session token and cookies are dropped, the trust token is kept so no new MFA is required — and backs off (10 s, 1 min, 5 min, 15 min, 30 min) when it keeps failing, instead of re-validating the same session token every 10 s

@@ -128,6 +128,15 @@ class iCloudService extends import_node_events.default {
    * the minimal `{ id, nonFTEU }` form.
    */
   _trustedPhoneRaw;
+  /**
+   * Every trusted phone number Apple listed in GET /appleauth/auth, raw and in Apple's order.
+   *
+   * Accounts may have more than one number registered, and Apple's `trustedPhoneNumber` field
+   * only names its own default — an SMS to it is acknowledged with HTTP 200 even when the
+   * number is no longer reachable. Keeping the full list lets the user pick the number the code
+   * should be sent to (requestSmsMfaCode(id) / the admin UI's selector).
+   */
+  _trustedPhones = [];
   /** Set after requestSmsMfaCode() — routes provideMfaCode to /verify/phone/securitycode */
   _smsPhoneNumberId;
   /**
@@ -490,12 +499,22 @@ class iCloudService extends import_node_events.default {
    * @param authRespText - Raw body of a GET /appleauth/auth response.
    */
   _parseAuthOptions(authRespText) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c;
     try {
       const authOptions = JSON.parse(authRespText);
       const phoneVerification = authOptions == null ? void 0 : authOptions.phoneNumberVerification;
-      const phoneData = (_e = (_c = (_a = authOptions == null ? void 0 : authOptions.trustedPhoneNumber) != null ? _a : phoneVerification == null ? void 0 : phoneVerification.trustedPhoneNumber) != null ? _c : (_b = authOptions == null ? void 0 : authOptions.trustedPhoneNumbers) == null ? void 0 : _b[0]) != null ? _e : (_d = phoneVerification == null ? void 0 : phoneVerification.trustedPhoneNumbers) == null ? void 0 : _d[0];
+      const phoneList = (_a = authOptions == null ? void 0 : authOptions.trustedPhoneNumbers) != null ? _a : phoneVerification == null ? void 0 : phoneVerification.trustedPhoneNumbers;
+      if (Array.isArray(phoneList)) {
+        const usable = phoneList.filter((p) => p && typeof p === "object" && p.id !== void 0);
+        if (usable.length) {
+          this._trustedPhones = usable;
+        }
+      }
+      const phoneData = (_c = (_b = authOptions == null ? void 0 : authOptions.trustedPhoneNumber) != null ? _b : phoneVerification == null ? void 0 : phoneVerification.trustedPhoneNumber) != null ? _c : this._trustedPhones[0];
       if ((phoneData == null ? void 0 : phoneData.id) !== void 0) {
+        if (!this._trustedPhones.length) {
+          this._trustedPhones = [phoneData];
+        }
         this._trustedPhoneRaw = phoneData;
         this._trustedPhone = {
           id: phoneData.id,
@@ -506,6 +525,16 @@ class iCloudService extends import_node_events.default {
           LogLevel.Debug,
           `[auth] Trusted phone: id=${this._trustedPhone.id}, nonFTEU=${this._trustedPhone.nonFTEU}, pushMode=${this._trustedPhone.pushMode}`
         );
+        if (this._trustedPhones.length > 1) {
+          const listed = this.trustedPhoneNumbers.map((n) => {
+            var _a2, _b2;
+            return `id=${String(n.id)} (${(_b2 = (_a2 = n.obfuscatedNumber) != null ? _a2 : n.numberWithDialCode) != null ? _b2 : "?"})`;
+          }).join(", ");
+          this._log(
+            LogLevel.Debug,
+            `[auth] ${this._trustedPhones.length} trusted phone numbers available: ${listed} \u2014 default is id=${String(this._trustedPhone.id)}`
+          );
+        }
       }
       const fsa = authOptions == null ? void 0 : authOptions.fsaChallenge;
       const keyHandles = fsa == null ? void 0 : fsa.keyHandles;
@@ -528,10 +557,11 @@ class iCloudService extends import_node_events.default {
    * Use this when no push notification arrives on trusted devices.
    * Mirrors pyiCloud's `_request_sms_2fa_code`: throws if no trusted phone number is available.
    *
-   * @param phoneNumberId - Optional explicit phone number ID. When omitted, the ID from Apple's auth response is used.
+   * @param phoneNumberId - Optional explicit phone number ID, as listed by {@link trustedPhoneNumbers}. When omitted, Apple's own default is used.
+   * @returns The number the code was actually addressed to, so the caller can name it to the user.
    */
   async requestSmsMfaCode(phoneNumberId) {
-    var _a, _b;
+    var _a, _b, _c, _d, _e;
     try {
       await this._refreshAuthOptions();
     } catch (e) {
@@ -549,14 +579,21 @@ class iCloudService extends import_node_events.default {
         "[auth] No trusted phone number in auth options \u2014 trying SMS fallback with phone id=1"
       );
     }
+    const selectedRaw = (_b = this._trustedPhones.find((p) => String(p.id) === String(id))) != null ? _b : String((_a = this._trustedPhone) == null ? void 0 : _a.id) === String(id) ? this._trustedPhoneRaw : void 0;
+    const selected = this.trustedPhoneNumbers.find((p) => String(p.id) === String(id));
+    this._log(
+      LogLevel.Debug,
+      `[auth] Requesting SMS code for phone id=${String(id)}${(selected == null ? void 0 : selected.obfuscatedNumber) ? ` (${selected.obfuscatedNumber})` : ""}${phoneNumberId !== void 0 ? " \u2014 explicitly selected" : " \u2014 Apple's default"}`
+    );
     const phonePayload = { id };
-    if (((_a = this._trustedPhone) == null ? void 0 : _a.nonFTEU) !== void 0) {
-      phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
+    const nonFTEU = (_d = selectedRaw == null ? void 0 : selectedRaw.nonFTEU) != null ? _d : (_c = this._trustedPhone) == null ? void 0 : _c.nonFTEU;
+    if (typeof nonFTEU === "boolean") {
+      phonePayload.nonFTEU = nonFTEU;
     }
     let sentPayload = phonePayload;
     let attempt = await this._putVerifyPhone(phonePayload);
-    if (!attempt.ok && attempt.status >= 500 && this._trustedPhoneRaw) {
-      const fullPayload = { ...this._trustedPhoneRaw, id };
+    if (!attempt.ok && attempt.status >= 500 && selectedRaw) {
+      const fullPayload = { ...selectedRaw, id };
       const addsFields = Object.keys(fullPayload).some((k) => !(k in phonePayload));
       if (addsFields) {
         this._log(
@@ -571,7 +608,8 @@ class iCloudService extends import_node_events.default {
       throw new Error(this._describeSmsFailure(attempt.status, attempt.body));
     }
     this._smsPhoneNumberId = id;
-    this._smsVerification = { mode: (_b = this._parseVerifyPhoneMode(attempt.body)) != null ? _b : "sms", phonePayload: sentPayload };
+    this._smsVerification = { mode: (_e = this._parseVerifyPhoneMode(attempt.body)) != null ? _e : "sms", phonePayload: sentPayload };
+    return selected;
   }
   /**
    * Single PUT /appleauth/auth/verify/phone round trip.
@@ -660,6 +698,26 @@ class iCloudService extends import_node_events.default {
     } catch {
       return body.slice(0, 300);
     }
+  }
+  /**
+   * All phone numbers Apple will send a 2FA code to for the current login, in Apple's order.
+   * Empty until the MFA challenge has been parsed. Intended for the admin UI, which offers them
+   * for selection and passes the chosen id back to {@link requestSmsMfaCode} — Apple confirms an
+   * SMS to its own default with HTTP 200 even when that number is no longer reachable, so the
+   * user needs to be able to pick a different one.
+   */
+  get trustedPhoneNumbers() {
+    var _a;
+    const defaultId = (_a = this._trustedPhone) == null ? void 0 : _a.id;
+    return this._trustedPhones.map((p) => ({
+      id: p.id,
+      obfuscatedNumber: typeof p.obfuscatedNumber === "string" ? p.obfuscatedNumber : void 0,
+      numberWithDialCode: typeof p.numberWithDialCode === "string" ? p.numberWithDialCode : void 0,
+      lastTwoDigits: typeof p.lastTwoDigits === "string" ? p.lastTwoDigits : void 0,
+      pushMode: typeof p.pushMode === "string" ? p.pushMode : void 0,
+      nonFTEU: typeof p.nonFTEU === "boolean" ? p.nonFTEU : void 0,
+      isDefault: defaultId !== void 0 && String(p.id) === String(defaultId)
+    }));
   }
   /**
    * True when Apple's MFA challenge for the current login requires a hardware security key
@@ -841,6 +899,7 @@ class iCloudService extends import_node_events.default {
     this._securityKeyChallenge = void 0;
     this._smsPhoneNumberId = void 0;
     this._smsVerification = void 0;
+    this._trustedPhones = [];
     this._setState("Authenticated" /* Authenticated */);
     if (this.options.trustDevice) {
       void this._getTrustToken().then(this._getiCloudCookies.bind(this));
@@ -897,6 +956,7 @@ class iCloudService extends import_node_events.default {
     }
     this._smsPhoneNumberId = void 0;
     this._smsVerification = void 0;
+    this._trustedPhones = [];
     this._setState("Authenticated" /* Authenticated */);
     if (this.options.trustDevice) {
       void this._getTrustToken().then(this._getiCloudCookies.bind(this));

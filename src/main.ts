@@ -3767,8 +3767,23 @@ class Icloud extends utils.Adapter {
             this.log.info('Requesting MFA code via SMS...');
             this.icloud
                 .requestSmsMfaCode()
-                .then(() => {
-                    this.log.info('SMS code requested — check your phone and enter the code into mfa.code');
+                .then(phone => {
+                    // Naming the number matters when the account has several registered: Apple
+                    // confirms the request for its own default even when that number is unreachable.
+                    const target = phone?.obfuscatedNumber ?? phone?.numberWithDialCode;
+                    this.log.info(
+                        `SMS code requested${target ? ` for ${target}` : ''} — check your phone and enter the code into mfa.code`,
+                    );
+                    const others = (this.icloud?.trustedPhoneNumbers ?? []).filter(
+                        p => String(p.id) !== String(phone?.id),
+                    );
+                    if (others.length) {
+                        this.log.info(
+                            `No SMS arriving? This account has other trusted numbers (${others
+                                .map(p => p.obfuscatedNumber ?? p.numberWithDialCode ?? `id ${String(p.id)}`)
+                                .join(', ')}) — pick one in the instance configuration.`,
+                        );
+                    }
                 })
                 .catch((err: unknown) => {
                     this.log.error(`Failed to request SMS code: ${(err as Error)?.message ?? String(err)}`);
@@ -4053,6 +4068,10 @@ class Icloud extends utils.Adapter {
             securityKeySupported = cap.supported;
             securityKeyReason = cap.reason;
         }
+        // Apple may have several numbers registered for the account. It acknowledges an SMS to its
+        // own default with HTTP 200 even when that number is unreachable, so the UI offers the full
+        // list and the user picks — see requestSmsMfa / handleRequestSmsMfa.
+        const trustedPhones = mfaRequested && !securityKeyRequested ? (this.icloud?.trustedPhoneNumbers ?? []) : [];
         this.sendTo(
             obj.from,
             obj.command,
@@ -4065,6 +4084,7 @@ class Icloud extends utils.Adapter {
                 securityKeyStatusKey: this.securityKeyStatusKey,
                 securityKeyStatusDetail: this.securityKeyStatusDetail,
                 securityKeyRunning: this.securityKeyAuthRunning,
+                trustedPhones,
             },
             obj.callback,
         );
@@ -4082,12 +4102,23 @@ class Icloud extends utils.Adapter {
             }
             return;
         }
-        this.log.info('Admin UI: requesting MFA code via SMS');
+        // The UI sends the id of the number the user picked; without one Apple's default is used.
+        const message = obj.message as { phoneId?: number | string } | undefined;
+        const phoneId =
+            typeof message?.phoneId === 'number' || (typeof message?.phoneId === 'string' && message.phoneId)
+                ? message.phoneId
+                : undefined;
+        this.log.info(
+            `Admin UI: requesting MFA code via SMS${phoneId !== undefined ? ` to phone id ${String(phoneId)}` : ''}`,
+        );
         this.icloud
-            .requestSmsMfaCode()
-            .then(() => {
+            .requestSmsMfaCode(phoneId)
+            .then(phone => {
+                if (phone?.obfuscatedNumber) {
+                    this.log.info(`Admin UI: Apple accepted the SMS request for ${phone.obfuscatedNumber}`);
+                }
                 if (obj.callback) {
-                    this.sendTo(obj.from, obj.command, { success: true }, obj.callback);
+                    this.sendTo(obj.from, obj.command, { success: true, phone }, obj.callback);
                 }
             })
             .catch((err: unknown) => {

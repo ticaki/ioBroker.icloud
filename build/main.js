@@ -3218,8 +3218,23 @@ class Icloud extends utils.Adapter {
         return;
       }
       this.log.info("Requesting MFA code via SMS...");
-      this.icloud.requestSmsMfaCode().then(() => {
-        this.log.info("SMS code requested \u2014 check your phone and enter the code into mfa.code");
+      this.icloud.requestSmsMfaCode().then((phone) => {
+        var _a2, _b, _c;
+        const target = (_a2 = phone == null ? void 0 : phone.obfuscatedNumber) != null ? _a2 : phone == null ? void 0 : phone.numberWithDialCode;
+        this.log.info(
+          `SMS code requested${target ? ` for ${target}` : ""} \u2014 check your phone and enter the code into mfa.code`
+        );
+        const others = ((_c = (_b = this.icloud) == null ? void 0 : _b.trustedPhoneNumbers) != null ? _c : []).filter(
+          (p) => String(p.id) !== String(phone == null ? void 0 : phone.id)
+        );
+        if (others.length) {
+          this.log.info(
+            `No SMS arriving? This account has other trusted numbers (${others.map((p) => {
+              var _a3, _b2;
+              return (_b2 = (_a3 = p.obfuscatedNumber) != null ? _a3 : p.numberWithDialCode) != null ? _b2 : `id ${String(p.id)}`;
+            }).join(", ")}) \u2014 pick one in the instance configuration.`
+          );
+        }
       }).catch((err) => {
         var _a2;
         this.log.error(`Failed to request SMS code: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
@@ -3463,7 +3478,7 @@ class Icloud extends utils.Adapter {
    * @param obj - The incoming ioBroker message object.
    */
   handleGetMfaStatus(obj) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     if (!obj.callback) {
       return;
     }
@@ -3476,6 +3491,7 @@ class Icloud extends utils.Adapter {
       securityKeySupported = cap.supported;
       securityKeyReason = cap.reason;
     }
+    const trustedPhones = mfaRequested && !securityKeyRequested ? (_d = (_c = this.icloud) == null ? void 0 : _c.trustedPhoneNumbers) != null ? _d : [] : [];
     this.sendTo(
       obj.from,
       obj.command,
@@ -3487,7 +3503,8 @@ class Icloud extends utils.Adapter {
         securityKeyStatus: this.securityKeyStatusText,
         securityKeyStatusKey: this.securityKeyStatusKey,
         securityKeyStatusDetail: this.securityKeyStatusDetail,
-        securityKeyRunning: this.securityKeyAuthRunning
+        securityKeyRunning: this.securityKeyAuthRunning,
+        trustedPhones
       },
       obj.callback
     );
@@ -3504,10 +3521,17 @@ class Icloud extends utils.Adapter {
       }
       return;
     }
-    this.log.info("Admin UI: requesting MFA code via SMS");
-    this.icloud.requestSmsMfaCode().then(() => {
+    const message = obj.message;
+    const phoneId = typeof (message == null ? void 0 : message.phoneId) === "number" || typeof (message == null ? void 0 : message.phoneId) === "string" && message.phoneId ? message.phoneId : void 0;
+    this.log.info(
+      `Admin UI: requesting MFA code via SMS${phoneId !== void 0 ? ` to phone id ${String(phoneId)}` : ""}`
+    );
+    this.icloud.requestSmsMfaCode(phoneId).then((phone) => {
+      if (phone == null ? void 0 : phone.obfuscatedNumber) {
+        this.log.info(`Admin UI: Apple accepted the SMS request for ${phone.obfuscatedNumber}`);
+      }
       if (obj.callback) {
-        this.sendTo(obj.from, obj.command, { success: true }, obj.callback);
+        this.sendTo(obj.from, obj.command, { success: true, phone }, obj.callback);
       }
     }).catch((err) => {
       var _a, _b;
