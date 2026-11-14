@@ -42,6 +42,7 @@ var import_node_crypto = __toESM(require("node:crypto"));
 var import_tough_cookie = require("tough-cookie");
 var import_authStore = require("./auth/authStore");
 var import_iCSRPAuthenticator = require("./auth/iCSRPAuthenticator.js");
+var import_serviceErrors = require("./auth/serviceErrors");
 var import_fido2 = require("./auth/fido2");
 var import_consts = require("./consts");
 var import_account = require("./services/account");
@@ -874,7 +875,16 @@ class iCloudService extends import_node_events.default {
       const resp = await this.fetch(import_consts.AUTH_ENDPOINT.replace(/\/$/, ""), {
         headers: this.authStore.getMfaHeaders()
       });
-      const authOptions = JSON.parse(await resp.text());
+      this.authStore.extractSessionHeaders(resp);
+      const text = await resp.text();
+      if (!text.trim()) {
+        this._log(
+          LogLevel.Warning,
+          `[auth] GET /appleauth/auth returned an empty body (HTTP ${resp.status}) on security-key challenge refresh`
+        );
+        return void 0;
+      }
+      const authOptions = JSON.parse(text);
       const fsa = authOptions == null ? void 0 : authOptions.fsaChallenge;
       const keyHandles = fsa == null ? void 0 : fsa.keyHandles;
       if (fsa && typeof fsa.challenge === "string" && typeof fsa.rpId === "string" && Array.isArray(keyHandles) && keyHandles.every((k) => typeof k === "string")) {
@@ -920,7 +930,13 @@ class iCloudService extends import_node_events.default {
     });
     const text = await resp.text();
     this._log(LogLevel.Debug, `[auth] verify/security/key \u2192 ${resp.status}: ${text.slice(0, 300)}`);
-    if (resp.status !== 200 && resp.status !== 204) {
+    const outcome = (0, import_serviceErrors.classifySecurityKeyVerification)(resp.status, text);
+    if (outcome === "conflict") {
+      this._log(
+        LogLevel.Debug,
+        "[auth] Security-key verification answered 409 without a service error \u2014 continuing with the trust flow"
+      );
+    } else if (outcome === "rejected") {
       throw new Error(`Security-key verification failed (HTTP ${resp.status}): ${text.slice(0, 300)}`);
     }
     this._securityKeyChallenge = void 0;
@@ -1038,13 +1054,7 @@ class iCloudService extends import_node_events.default {
    * @param body - The raw response body of an auth request.
    */
   _parseServiceErrors(body) {
-    var _a, _b;
-    try {
-      const parsed = JSON.parse(body);
-      return [...(_a = parsed == null ? void 0 : parsed.serviceErrors) != null ? _a : [], ...(_b = parsed == null ? void 0 : parsed.service_errors) != null ? _b : []];
-    } catch {
-      return [];
-    }
+    return (0, import_serviceErrors.parseServiceErrors)(body);
   }
   /**
    * True when Apple's error body states that the code itself was refused (wrong, expired or

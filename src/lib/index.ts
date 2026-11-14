@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { CookieJar } from 'tough-cookie';
 import { iCloudAuthenticationStore } from './auth/authStore';
 import { GSASRPAuthenticator } from './auth/iCSRPAuthenticator.js';
+import { classifySecurityKeyVerification, parseServiceErrors } from './auth/serviceErrors';
 import {
     detectFido2Support,
     listFido2Devices,
@@ -1213,7 +1214,18 @@ export default class iCloudService extends EventEmitter {
             const resp = await this.fetch(AUTH_ENDPOINT.replace(/\/$/, ''), {
                 headers: this.authStore.getMfaHeaders(),
             });
-            const authOptions = JSON.parse(await resp.text()) as Record<string, unknown>;
+            // Keep scnt / session id in sync like _refreshAuthOptions() — stale rotating headers
+            // make later auth requests fail.
+            this.authStore.extractSessionHeaders(resp);
+            const text = await resp.text();
+            if (!text.trim()) {
+                this._log(
+                    LogLevel.Warning,
+                    `[auth] GET /appleauth/auth returned an empty body (HTTP ${resp.status}) on security-key challenge refresh`,
+                );
+                return undefined;
+            }
+            const authOptions = JSON.parse(text) as Record<string, unknown>;
             const fsa = authOptions?.fsaChallenge as Record<string, unknown> | undefined;
             const keyHandles = fsa?.keyHandles;
             if (
@@ -1271,7 +1283,16 @@ export default class iCloudService extends EventEmitter {
         });
         const text = await resp.text();
         this._log(LogLevel.Debug, `[auth] verify/security/key → ${resp.status}: ${text.slice(0, 300)}`);
-        if (resp.status !== 200 && resp.status !== 204) {
+        const outcome = classifySecurityKeyVerification(resp.status, text);
+        if (outcome === 'conflict') {
+            // Apple answers a valid assertion with 409 and no service error (observed live; pyicloud
+            // does not check the status at all). Same handling as provideMfaCode(): continue with the
+            // trust flow — 2sv/trust and accountLogin decide whether the session is authenticated.
+            this._log(
+                LogLevel.Debug,
+                '[auth] Security-key verification answered 409 without a service error — continuing with the trust flow',
+            );
+        } else if (outcome === 'rejected') {
             throw new Error(`Security-key verification failed (HTTP ${resp.status}): ${text.slice(0, 300)}`);
         }
 
@@ -1425,15 +1446,7 @@ export default class iCloudService extends EventEmitter {
      * @param body - The raw response body of an auth request.
      */
     private _parseServiceErrors(body: string): { code?: unknown; message?: unknown }[] {
-        try {
-            const parsed = JSON.parse(body) as {
-                serviceErrors?: { code?: unknown; message?: unknown }[];
-                service_errors?: { code?: unknown; message?: unknown }[];
-            };
-            return [...(parsed?.serviceErrors ?? []), ...(parsed?.service_errors ?? [])];
-        } catch {
-            return [];
-        }
+        return parseServiceErrors(body);
     }
 
     /**

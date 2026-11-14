@@ -52,6 +52,8 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 * (ticaki) new: the log and the admin UI name the number a code was actually requested for, and the log lists the account's remaining trusted numbers when the SMS does not arrive
 * (ticaki) fixed: when Apple has locked the Apple Account for security reasons (Apple error `-20209`), the adapter no longer reports it as a wrong password / stale session and retries — it stops with a clear message: unlock the account at https://iforgot.apple.com and start the instance again
 * (ticaki) fixed: the session recovery gives up after 5 re-authentications in a row instead of logging in every 30 minutes forever — such a series of logins can get the Apple Account locked
+* (ticaki) fixed: the security-key login no longer fails after a successful touch — Apple answers a valid assertion with `HTTP 409` without an error code; the adapter now continues with the trust step (as it already did for the 6-digit code) instead of aborting with "Security-key verification failed (HTTP 409)"
+* (ticaki) fixed: refreshing the security-key challenge keeps Apple's rotating session headers, and an empty answer from Apple is reported as such instead of `Unexpected end of JSON input`
 
 ### 2.1.2 (2026-09-15)
 * (ticaki) fixed: when Apple requires the account holder to accept updated iCloud terms and conditions (`termsUpdateNeeded`; Find My answers `HTTP 450` although the session is valid), the adapter stops with a clear error message — accept the terms at icloud.com or on an Apple device and start the instance again — instead of re-authenticating in an endless loop
