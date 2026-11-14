@@ -1,11 +1,26 @@
 import React from 'react';
-import { Alert, Box, Button, CircularProgress, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import SmsIcon from '@mui/icons-material/Sms';
 import SendIcon from '@mui/icons-material/Send';
 import KeyIcon from '@mui/icons-material/Key';
 import { ConfigGeneric, type ConfigGenericProps, type ConfigGenericState } from '@iobroker/json-config';
 import { I18n } from '@iobroker/gui-components';
+
+/**
+ * One of the phone numbers Apple will send the 2FA code to, as reported by the adapter's
+ * `getMfaStatus`. Only Apple's masked forms are ever transported.
+ */
+interface TrustedPhone {
+    /** Apple's id for this number — sent back with the SMS request. */
+    id: number | string;
+    /** Apple's masked form, e.g. `•••• •••••31`. */
+    obfuscatedNumber?: string;
+    /** Apple's masked form including the dial code. */
+    numberWithDialCode?: string;
+    /** True for the number Apple itself picked as the default. */
+    isDefault?: boolean;
+}
 
 /**
  * State for the SmsMfaPanel component.
@@ -21,6 +36,16 @@ interface SmsMfaPanelState extends ConfigGenericState {
     mfaRequested: boolean;
     /** The 6-digit code the user is typing. */
     code: string;
+    /**
+     * All numbers Apple accepts a code for. Empty or single-entry for most accounts; only when
+     * there is more than one does the panel show a selector.
+     */
+    trustedPhones: TrustedPhone[];
+    /**
+     * The id the user picked for the SMS, as a string (the `<TextField select>` value).
+     * Empty means "not chosen yet" — the request then goes to Apple's default.
+     */
+    selectedPhoneId: string;
     /** True while the "Request SMS" sendTo call is in flight. */
     smsRequesting: boolean;
     /** True while the "Submit" sendTo call is in flight. */
@@ -72,6 +97,8 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
             alive: false,
             mfaRequested: false,
             code: '',
+            trustedPhones: [],
+            selectedPhoneId: '',
             smsRequesting: false,
             submitting: false,
             error: null,
@@ -180,6 +207,7 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
         let securityKeyStatusKey: string | null = null;
         let securityKeyStatusDetail: string | null = null;
         let securityKeyRunning = false;
+        let trustedPhones: TrustedPhone[] = [];
         try {
             const raw: unknown = await this.props.oContext.socket.sendTo(
                 `icloud.${this.props.oContext.instance}`,
@@ -196,6 +224,7 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
                       securityKeyStatusKey?: string;
                       securityKeyStatusDetail?: string;
                       securityKeyRunning?: boolean;
+                      trustedPhones?: TrustedPhone[];
                   }
                 | undefined;
             alive = true;
@@ -207,6 +236,9 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
             securityKeyStatusKey = response?.securityKeyStatusKey || null;
             securityKeyStatusDetail = response?.securityKeyStatusDetail || null;
             securityKeyRunning = response?.securityKeyRunning === true;
+            trustedPhones = Array.isArray(response?.trustedPhones)
+                ? response.trustedPhones.filter(p => p && p.id !== undefined)
+                : [];
         } catch {
             alive = false;
             mfaRequested = false;
@@ -221,7 +253,10 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
             securityKeyStatus !== this.state.securityKeyStatus ||
             securityKeyStatusKey !== this.state.securityKeyStatusKey ||
             securityKeyStatusDetail !== this.state.securityKeyStatusDetail ||
-            securityKeyRunning !== this.state.securityKeyRunning;
+            securityKeyRunning !== this.state.securityKeyRunning ||
+            // Compare by content — the list is rebuilt on every poll and would otherwise always
+            // look "changed" and re-render the panel every 3 seconds.
+            JSON.stringify(trustedPhones) !== JSON.stringify(this.state.trustedPhones);
 
         if (changed) {
             const update: Partial<SmsMfaPanelState> = {
@@ -234,12 +269,19 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
                 securityKeyStatusKey,
                 securityKeyStatusDetail,
                 securityKeyRunning,
+                trustedPhones,
             };
+            // Preselect Apple's default so the field is never empty when a choice exists.
+            if (!this.state.selectedPhoneId && trustedPhones.length > 1) {
+                const preferred = trustedPhones.find(p => p.isDefault) ?? trustedPhones[0];
+                update.selectedPhoneId = String(preferred.id);
+            }
             // Clear transient UI state when MFA is no longer needed
             if (!mfaRequested) {
                 update.code = '';
                 update.error = null;
                 update.info = null;
+                update.selectedPhoneId = '';
             }
             this.setState(update as SmsMfaPanelState);
         }
@@ -252,20 +294,41 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
     }
 
     /**
+     * Human-readable label for one of Apple's trusted numbers — its masked form, falling back to
+     * the bare id when Apple sent no masked number at all.
+     *
+     * @param phone - The number to label.
+     */
+    private phoneLabel(phone: TrustedPhone): string {
+        return phone.numberWithDialCode ?? phone.obfuscatedNumber ?? `#${String(phone.id)}`;
+    }
+
+    /**
      * Sends a `requestSmsMfa` command to the adapter, which triggers an SMS with the
-     * 6-digit authentication code to be sent to the user's phone.
+     * 6-digit authentication code to be sent to the user's phone. When the account has more than
+     * one trusted number, the id the user picked is passed along — Apple confirms a request to its
+     * own default with HTTP 200 even when that number is no longer reachable, so getting the SMS
+     * may depend on choosing a different one.
      */
     private async handleRequestSms(): Promise<void> {
+        const { selectedPhoneId, trustedPhones } = this.state;
         this.setState({ smsRequesting: true, error: null, info: null });
         try {
             const raw: unknown = await this.props.oContext.socket.sendTo(
                 `icloud.${this.props.oContext.instance}`,
                 'requestSmsMfa',
-                {},
+                selectedPhoneId ? { phoneId: selectedPhoneId } : {},
             );
-            const response = raw as { success?: boolean; error?: string } | undefined;
+            const response = raw as { success?: boolean; error?: string; phone?: TrustedPhone } | undefined;
             if (response?.success) {
-                this.setState({ info: I18n.t('custom_mfa_sms_sent'), smsRequesting: false });
+                // Name the number the code went to, so "nothing arrived" is diagnosable.
+                const target = response.phone ?? trustedPhones.find(p => String(p.id) === selectedPhoneId) ?? undefined;
+                this.setState({
+                    info: target
+                        ? I18n.t('custom_mfa_sms_sent_to', this.phoneLabel(target))
+                        : I18n.t('custom_mfa_sms_sent'),
+                    smsRequesting: false,
+                });
             } else {
                 this.setState({
                     error: response?.error ?? I18n.t('custom_mfa_error_sms_failed'),
@@ -461,7 +524,18 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
     }
 
     renderItem(): React.JSX.Element {
-        const { alive, mfaRequested, code, smsRequesting, submitting, error, info, securityKeyRequested } = this.state;
+        const {
+            alive,
+            mfaRequested,
+            code,
+            smsRequesting,
+            submitting,
+            error,
+            info,
+            securityKeyRequested,
+            trustedPhones,
+            selectedPhoneId,
+        } = this.state;
 
         if (!alive || !mfaRequested) {
             return <></>;
@@ -473,6 +547,8 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
         }
 
         const busy = smsRequesting || submitting;
+        // Only worth showing when there is something to choose between.
+        const showPhoneSelector = trustedPhones.length > 1;
 
         return (
             <Box
@@ -528,6 +604,40 @@ class SmsMfaPanel extends ConfigGeneric<ConfigGenericProps, SmsMfaPanelState> {
                     >
                         {info}
                     </Alert>
+                )}
+
+                {showPhoneSelector && (
+                    <Stack
+                        direction={{ xs: 'column', sm: 'row' }}
+                        spacing={1.5}
+                        sx={{ alignItems: { sm: 'center' }, mb: 1.5 }}
+                    >
+                        <TextField
+                            select
+                            label={I18n.t('custom_mfa_phone_label')}
+                            value={selectedPhoneId}
+                            onChange={e => this.setState({ selectedPhoneId: e.target.value, error: null })}
+                            size="small"
+                            disabled={busy}
+                            sx={{ minWidth: 240 }}
+                        >
+                            {trustedPhones.map(phone => (
+                                <MenuItem
+                                    key={String(phone.id)}
+                                    value={String(phone.id)}
+                                >
+                                    {this.phoneLabel(phone)}
+                                    {phone.isDefault ? ` (${I18n.t('custom_mfa_phone_default')})` : ''}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                        <Typography
+                            variant="body2"
+                            color="text.secondary"
+                        >
+                            {I18n.t('custom_mfa_phone_hint')}
+                        </Typography>
+                    </Stack>
                 )}
 
                 <Stack

@@ -42,6 +42,7 @@ var import_node_crypto = __toESM(require("node:crypto"));
 var import_tough_cookie = require("tough-cookie");
 var import_authStore = require("./auth/authStore");
 var import_iCSRPAuthenticator = require("./auth/iCSRPAuthenticator.js");
+var import_serviceErrors = require("./auth/serviceErrors");
 var import_fido2 = require("./auth/fido2");
 var import_consts = require("./consts");
 var import_account = require("./services/account");
@@ -53,6 +54,24 @@ var import_reminders = require("./services/reminders");
 var import_contacts = require("./services/contacts");
 var import_notes = require("./services/notes");
 var import_ubiquity = require("./services/ubiquity");
+const ERROR_ACCOUNT_LOCKED = "-20209";
+function isAccountLockedBody(body) {
+  try {
+    const data = JSON.parse(body);
+    if (Array.isArray(data == null ? void 0 : data.serviceErrors)) {
+      return data.serviceErrors.some(
+        (e) => !!e && typeof e === "object" && String(e.code) === ERROR_ACCOUNT_LOCKED
+      );
+    }
+  } catch {
+  }
+  return new RegExp(`"code"\\s*:\\s*"?${ERROR_ACCOUNT_LOCKED}"?`).test(body);
+}
+function accountLockedError(body) {
+  return new Error(
+    `ACCOUNT_LOCKED: Apple has locked this Apple Account for security reasons (Apple error ${ERROR_ACCOUNT_LOCKED}): ${body.slice(0, 300)}`
+  );
+}
 const LogLevel = {
   Debug: 0,
   Info: 1,
@@ -128,6 +147,15 @@ class iCloudService extends import_node_events.default {
    * the minimal `{ id, nonFTEU }` form.
    */
   _trustedPhoneRaw;
+  /**
+   * Every trusted phone number Apple listed in GET /appleauth/auth, raw and in Apple's order.
+   *
+   * Accounts may have more than one number registered, and Apple's `trustedPhoneNumber` field
+   * only names its own default — an SMS to it is acknowledged with HTTP 200 even when the
+   * number is no longer reachable. Keeping the full list lets the user pick the number the code
+   * should be sent to (requestSmsMfaCode(id) / the admin UI's selector).
+   */
+  _trustedPhones = [];
   /** Set after requestSmsMfaCode() — routes provideMfaCode to /verify/phone/securitycode */
   _smsPhoneNumberId;
   /**
@@ -308,8 +336,12 @@ class iCloudService extends import_node_events.default {
             };
             break;
           }
+          const initBody = await initRaw.text();
+          if (isAccountLockedBody(initBody)) {
+            throw accountLockedError(initBody);
+          }
           if (initRaw.status === 409 && attempt === 0) {
-            const staleBody = (await initRaw.text()).slice(0, 200);
+            const staleBody = initBody.slice(0, 200);
             this._log(
               LogLevel.Debug,
               `[auth] SRP init returned 409 (${staleBody}) \u2014 discarding stale session and retrying once`
@@ -317,7 +349,7 @@ class iCloudService extends import_node_events.default {
             this.authStore.clearStaleSession(this.options.username);
             continue;
           }
-          const errBody = (await initRaw.text()).slice(0, 200);
+          const errBody = initBody.slice(0, 200);
           if (initRaw.status === 409) {
             this.authStore.clearStaleSession(this.options.username);
             throw new Error(
@@ -442,7 +474,12 @@ class iCloudService extends import_node_events.default {
           throw new Error("Unable to process auth response (409) \u2014 missing session headers!");
         }
       } else {
-        const body = (await authResponse.text()).slice(0, 300);
+        const fullBody = await authResponse.text();
+        if (isAccountLockedBody(fullBody)) {
+          this._log(LogLevel.Debug, "[auth] signin response body:", fullBody.slice(0, 300));
+          throw accountLockedError(fullBody);
+        }
+        const body = fullBody.slice(0, 300);
         const knownErrorStatus = authResponse.status === 401 || authResponse.status === 403 || authResponse.status === 503;
         this._log(knownErrorStatus ? LogLevel.Debug : LogLevel.Error, "[auth] signin response body:", body);
         if (authResponse.status == 401 || authResponse.status == 403) {
@@ -490,12 +527,22 @@ class iCloudService extends import_node_events.default {
    * @param authRespText - Raw body of a GET /appleauth/auth response.
    */
   _parseAuthOptions(authRespText) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c;
     try {
       const authOptions = JSON.parse(authRespText);
       const phoneVerification = authOptions == null ? void 0 : authOptions.phoneNumberVerification;
-      const phoneData = (_e = (_c = (_a = authOptions == null ? void 0 : authOptions.trustedPhoneNumber) != null ? _a : phoneVerification == null ? void 0 : phoneVerification.trustedPhoneNumber) != null ? _c : (_b = authOptions == null ? void 0 : authOptions.trustedPhoneNumbers) == null ? void 0 : _b[0]) != null ? _e : (_d = phoneVerification == null ? void 0 : phoneVerification.trustedPhoneNumbers) == null ? void 0 : _d[0];
+      const phoneList = (_a = authOptions == null ? void 0 : authOptions.trustedPhoneNumbers) != null ? _a : phoneVerification == null ? void 0 : phoneVerification.trustedPhoneNumbers;
+      if (Array.isArray(phoneList)) {
+        const usable = phoneList.filter((p) => p && typeof p === "object" && p.id !== void 0);
+        if (usable.length) {
+          this._trustedPhones = usable;
+        }
+      }
+      const phoneData = (_c = (_b = authOptions == null ? void 0 : authOptions.trustedPhoneNumber) != null ? _b : phoneVerification == null ? void 0 : phoneVerification.trustedPhoneNumber) != null ? _c : this._trustedPhones[0];
       if ((phoneData == null ? void 0 : phoneData.id) !== void 0) {
+        if (!this._trustedPhones.length) {
+          this._trustedPhones = [phoneData];
+        }
         this._trustedPhoneRaw = phoneData;
         this._trustedPhone = {
           id: phoneData.id,
@@ -506,6 +553,16 @@ class iCloudService extends import_node_events.default {
           LogLevel.Debug,
           `[auth] Trusted phone: id=${this._trustedPhone.id}, nonFTEU=${this._trustedPhone.nonFTEU}, pushMode=${this._trustedPhone.pushMode}`
         );
+        if (this._trustedPhones.length > 1) {
+          const listed = this.trustedPhoneNumbers.map((n) => {
+            var _a2, _b2;
+            return `id=${String(n.id)} (${(_b2 = (_a2 = n.obfuscatedNumber) != null ? _a2 : n.numberWithDialCode) != null ? _b2 : "?"})`;
+          }).join(", ");
+          this._log(
+            LogLevel.Debug,
+            `[auth] ${this._trustedPhones.length} trusted phone numbers available: ${listed} \u2014 default is id=${String(this._trustedPhone.id)}`
+          );
+        }
       }
       const fsa = authOptions == null ? void 0 : authOptions.fsaChallenge;
       const keyHandles = fsa == null ? void 0 : fsa.keyHandles;
@@ -528,10 +585,11 @@ class iCloudService extends import_node_events.default {
    * Use this when no push notification arrives on trusted devices.
    * Mirrors pyiCloud's `_request_sms_2fa_code`: throws if no trusted phone number is available.
    *
-   * @param phoneNumberId - Optional explicit phone number ID. When omitted, the ID from Apple's auth response is used.
+   * @param phoneNumberId - Optional explicit phone number ID, as listed by {@link trustedPhoneNumbers}. When omitted, Apple's own default is used.
+   * @returns The number the code was actually addressed to, so the caller can name it to the user.
    */
   async requestSmsMfaCode(phoneNumberId) {
-    var _a, _b;
+    var _a, _b, _c, _d, _e;
     try {
       await this._refreshAuthOptions();
     } catch (e) {
@@ -549,14 +607,21 @@ class iCloudService extends import_node_events.default {
         "[auth] No trusted phone number in auth options \u2014 trying SMS fallback with phone id=1"
       );
     }
+    const selectedRaw = (_b = this._trustedPhones.find((p) => String(p.id) === String(id))) != null ? _b : String((_a = this._trustedPhone) == null ? void 0 : _a.id) === String(id) ? this._trustedPhoneRaw : void 0;
+    const selected = this.trustedPhoneNumbers.find((p) => String(p.id) === String(id));
+    this._log(
+      LogLevel.Debug,
+      `[auth] Requesting SMS code for phone id=${String(id)}${(selected == null ? void 0 : selected.obfuscatedNumber) ? ` (${selected.obfuscatedNumber})` : ""}${phoneNumberId !== void 0 ? " \u2014 explicitly selected" : " \u2014 Apple's default"}`
+    );
     const phonePayload = { id };
-    if (((_a = this._trustedPhone) == null ? void 0 : _a.nonFTEU) !== void 0) {
-      phonePayload.nonFTEU = this._trustedPhone.nonFTEU;
+    const nonFTEU = (_d = selectedRaw == null ? void 0 : selectedRaw.nonFTEU) != null ? _d : (_c = this._trustedPhone) == null ? void 0 : _c.nonFTEU;
+    if (typeof nonFTEU === "boolean") {
+      phonePayload.nonFTEU = nonFTEU;
     }
     let sentPayload = phonePayload;
     let attempt = await this._putVerifyPhone(phonePayload);
-    if (!attempt.ok && attempt.status >= 500 && this._trustedPhoneRaw) {
-      const fullPayload = { ...this._trustedPhoneRaw, id };
+    if (!attempt.ok && attempt.status >= 500 && selectedRaw) {
+      const fullPayload = { ...selectedRaw, id };
       const addsFields = Object.keys(fullPayload).some((k) => !(k in phonePayload));
       if (addsFields) {
         this._log(
@@ -571,7 +636,8 @@ class iCloudService extends import_node_events.default {
       throw new Error(this._describeSmsFailure(attempt.status, attempt.body));
     }
     this._smsPhoneNumberId = id;
-    this._smsVerification = { mode: (_b = this._parseVerifyPhoneMode(attempt.body)) != null ? _b : "sms", phonePayload: sentPayload };
+    this._smsVerification = { mode: (_e = this._parseVerifyPhoneMode(attempt.body)) != null ? _e : "sms", phonePayload: sentPayload };
+    return selected;
   }
   /**
    * Single PUT /appleauth/auth/verify/phone round trip.
@@ -660,6 +726,26 @@ class iCloudService extends import_node_events.default {
     } catch {
       return body.slice(0, 300);
     }
+  }
+  /**
+   * All phone numbers Apple will send a 2FA code to for the current login, in Apple's order.
+   * Empty until the MFA challenge has been parsed. Intended for the admin UI, which offers them
+   * for selection and passes the chosen id back to {@link requestSmsMfaCode} — Apple confirms an
+   * SMS to its own default with HTTP 200 even when that number is no longer reachable, so the
+   * user needs to be able to pick a different one.
+   */
+  get trustedPhoneNumbers() {
+    var _a;
+    const defaultId = (_a = this._trustedPhone) == null ? void 0 : _a.id;
+    return this._trustedPhones.map((p) => ({
+      id: p.id,
+      obfuscatedNumber: typeof p.obfuscatedNumber === "string" ? p.obfuscatedNumber : void 0,
+      numberWithDialCode: typeof p.numberWithDialCode === "string" ? p.numberWithDialCode : void 0,
+      lastTwoDigits: typeof p.lastTwoDigits === "string" ? p.lastTwoDigits : void 0,
+      pushMode: typeof p.pushMode === "string" ? p.pushMode : void 0,
+      nonFTEU: typeof p.nonFTEU === "boolean" ? p.nonFTEU : void 0,
+      isDefault: defaultId !== void 0 && String(p.id) === String(defaultId)
+    }));
   }
   /**
    * True when Apple's MFA challenge for the current login requires a hardware security key
@@ -789,7 +875,16 @@ class iCloudService extends import_node_events.default {
       const resp = await this.fetch(import_consts.AUTH_ENDPOINT.replace(/\/$/, ""), {
         headers: this.authStore.getMfaHeaders()
       });
-      const authOptions = JSON.parse(await resp.text());
+      this.authStore.extractSessionHeaders(resp);
+      const text = await resp.text();
+      if (!text.trim()) {
+        this._log(
+          LogLevel.Warning,
+          `[auth] GET /appleauth/auth returned an empty body (HTTP ${resp.status}) on security-key challenge refresh`
+        );
+        return void 0;
+      }
+      const authOptions = JSON.parse(text);
       const fsa = authOptions == null ? void 0 : authOptions.fsaChallenge;
       const keyHandles = fsa == null ? void 0 : fsa.keyHandles;
       if (fsa && typeof fsa.challenge === "string" && typeof fsa.rpId === "string" && Array.isArray(keyHandles) && keyHandles.every((k) => typeof k === "string")) {
@@ -835,12 +930,19 @@ class iCloudService extends import_node_events.default {
     });
     const text = await resp.text();
     this._log(LogLevel.Debug, `[auth] verify/security/key \u2192 ${resp.status}: ${text.slice(0, 300)}`);
-    if (resp.status !== 200 && resp.status !== 204) {
+    const outcome = (0, import_serviceErrors.classifySecurityKeyVerification)(resp.status, text);
+    if (outcome === "conflict") {
+      this._log(
+        LogLevel.Debug,
+        "[auth] Security-key verification answered 409 without a service error \u2014 continuing with the trust flow"
+      );
+    } else if (outcome === "rejected") {
       throw new Error(`Security-key verification failed (HTTP ${resp.status}): ${text.slice(0, 300)}`);
     }
     this._securityKeyChallenge = void 0;
     this._smsPhoneNumberId = void 0;
     this._smsVerification = void 0;
+    this._trustedPhones = [];
     this._setState("Authenticated" /* Authenticated */);
     if (this.options.trustDevice) {
       void this._getTrustToken().then(this._getiCloudCookies.bind(this));
@@ -897,6 +999,7 @@ class iCloudService extends import_node_events.default {
     }
     this._smsPhoneNumberId = void 0;
     this._smsVerification = void 0;
+    this._trustedPhones = [];
     this._setState("Authenticated" /* Authenticated */);
     if (this.options.trustDevice) {
       void this._getTrustToken().then(this._getiCloudCookies.bind(this));
@@ -951,13 +1054,7 @@ class iCloudService extends import_node_events.default {
    * @param body - The raw response body of an auth request.
    */
   _parseServiceErrors(body) {
-    var _a, _b;
-    try {
-      const parsed = JSON.parse(body);
-      return [...(_a = parsed == null ? void 0 : parsed.serviceErrors) != null ? _a : [], ...(_b = parsed == null ? void 0 : parsed.service_errors) != null ? _b : []];
-    } catch {
-      return [];
-    }
+    return (0, import_serviceErrors.parseServiceErrors)(body);
   }
   /**
    * True when Apple's error body states that the code itself was refused (wrong, expired or
@@ -1054,6 +1151,10 @@ class iCloudService extends import_node_events.default {
           throw new Error("Unable to process cloud setup response!");
         }
       } else {
+        const body = await response.text().catch(() => "");
+        if (isAccountLockedBody(body)) {
+          throw accountLockedError(body);
+        }
         throw new Error(`Invalid status code: ${response.status}`);
       }
     } catch (e) {

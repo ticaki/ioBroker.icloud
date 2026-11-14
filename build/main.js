@@ -30,6 +30,7 @@ var import_geo = require("./lib/geo");
 var import_geocoding = require("./lib/geocoding");
 const SESSION_RECOVERY_DELAYS_MS = [1e4, 6e4, 5 * 6e4, 15 * 6e4, 30 * 6e4];
 const SESSION_RECOVERY_RESET_MS = 60 * 6e4;
+const SESSION_RECOVERY_MAX_ATTEMPTS = SESSION_RECOVERY_DELAYS_MS.length;
 const FINDMY_FEATURE_NAMES = {
   BTR: "Battery Reporting",
   LLC: "Low-power Location Capability",
@@ -227,6 +228,8 @@ class Icloud extends utils.Adapter {
   sessionRecoveryInProgress = false;
   /** Consecutive session recoveries — drives the re-auth backoff */
   sessionRecoveryAttempts = 0;
+  /** Set once terminateForLockedAccount() runs — the lock surfaces through several paths */
+  accountLockedTerminating = false;
   /** Timestamp of the last triggered session recovery */
   sessionRecoveryLastAt = 0;
   calendarRefreshTimer = null;
@@ -694,6 +697,10 @@ class Icloud extends utils.Adapter {
     this.icloud.on("Error", (err) => {
       var _a2;
       const msg = (_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err);
+      if (msg.startsWith("ACCOUNT_LOCKED")) {
+        this.terminateForLockedAccount(msg);
+        return;
+      }
       const isHandledRetry = msg.startsWith("STALE_SESSION_401") || msg.startsWith("RATE_LIMITED");
       if (isHandledRetry) {
         this.log.debug(
@@ -713,7 +720,8 @@ class Icloud extends utils.Adapter {
       this.log.debug(`authenticate() returned \u2014 status: ${this.icloud.status}`);
     } catch (err) {
       const msg = (_a = err == null ? void 0 : err.message) != null ? _a : String(err);
-      if (msg.startsWith("RATE_LIMITED")) {
+      if (msg.startsWith("ACCOUNT_LOCKED")) {
+      } else if (msg.startsWith("RATE_LIMITED")) {
         const retryMinutes = 61;
         const retryTime = new Date((/* @__PURE__ */ new Date()).getTime() + retryMinutes * 60 * 1e3);
         this.log.warn(`Apple rate limit detected \u2014 next attempt at ${retryTime.toISOString()}`);
@@ -790,6 +798,27 @@ class Icloud extends utils.Adapter {
     );
   }
   /**
+   * Stop the instance because Apple has locked the account (service error -20209).
+   * Every further login attempt only prolongs the lock, so the instance exits without restart;
+   * the user unlocks the account at iForgot, updates the password if Apple demanded a new one
+   * and starts the instance again.
+   *
+   * @param detail - The ACCOUNT_LOCKED error message, for the debug log.
+   */
+  terminateForLockedAccount(detail) {
+    if (this.accountLockedTerminating) {
+      return;
+    }
+    this.accountLockedTerminating = true;
+    this.log.error(
+      "Apple has locked this Apple Account for security reasons (Apple error -20209) \u2014 the adapter stops all login attempts, because every further attempt only prolongs the lock. Unlock the account at https://iforgot.apple.com, enter the new password in the instance settings if Apple asked you to change it, then start this instance again."
+    );
+    this.log.debug(`Account lock details: ${detail}`);
+    void this.setState("info.connection", false, true);
+    this.icloud = null;
+    this.terminate("Apple Account is locked", utils.EXIT_CODES.ADAPTER_REQUESTED_TERMINATION);
+  }
+  /**
    * Triggers a full re-authentication when the iCloud session is permanently dead.
    * Called when a service (FindMy, Reminders, …) detects that refreshWebservices()
    * could not recover the session. Prevents duplicate concurrent recovery attempts.
@@ -807,6 +836,15 @@ class Icloud extends utils.Adapter {
       this.sessionRecoveryAttempts = 0;
     }
     this.sessionRecoveryLastAt = now;
+    if (this.sessionRecoveryAttempts >= SESSION_RECOVERY_MAX_ATTEMPTS) {
+      this.log.error(
+        `iCloud session keeps failing right after ${this.sessionRecoveryAttempts} re-authentications (${reason}) \u2014 stopping the instance so that repeated logins do not get the Apple Account locked. Check the iCloud account (e.g. sign in at https://www.icloud.com) and start this instance again.`
+      );
+      void this.setState("info.connection", false, true);
+      this.icloud = null;
+      this.terminate("iCloud session recovery failed repeatedly", utils.EXIT_CODES.ADAPTER_REQUESTED_TERMINATION);
+      return;
+    }
     const delayMs = SESSION_RECOVERY_DELAYS_MS[Math.min(this.sessionRecoveryAttempts, SESSION_RECOVERY_DELAYS_MS.length - 1)];
     this.sessionRecoveryAttempts++;
     const delayText = delayMs < 6e4 ? `${Math.round(delayMs / 1e3)} s` : `${Math.round(delayMs / 6e4)} min`;
@@ -874,6 +912,11 @@ class Icloud extends utils.Adapter {
       return;
     }
     const ds = info.dsInfo;
+    if (ds.locked) {
+      this.log.warn(
+        "Apple reports this Apple Account as locked \u2014 unlock it at https://iforgot.apple.com, otherwise the next login will fail"
+      );
+    }
     this.log.info(`Logged in as: ${(_a = ds.fullName) != null ? _a : "(no name)"} (${(_b = ds.appleId) != null ? _b : "(no appleId)"})`);
     this.log.info(`Country: ${(_c = ds.countryCode) != null ? _c : "?"}, Locale: ${(_d = ds.locale) != null ? _d : "?"}`);
     this.log.debug(`Full dsInfo: ${JSON.stringify(ds)}`);
@@ -3218,8 +3261,23 @@ class Icloud extends utils.Adapter {
         return;
       }
       this.log.info("Requesting MFA code via SMS...");
-      this.icloud.requestSmsMfaCode().then(() => {
-        this.log.info("SMS code requested \u2014 check your phone and enter the code into mfa.code");
+      this.icloud.requestSmsMfaCode().then((phone) => {
+        var _a2, _b, _c;
+        const target = (_a2 = phone == null ? void 0 : phone.obfuscatedNumber) != null ? _a2 : phone == null ? void 0 : phone.numberWithDialCode;
+        this.log.info(
+          `SMS code requested${target ? ` for ${target}` : ""} \u2014 check your phone and enter the code into mfa.code`
+        );
+        const others = ((_c = (_b = this.icloud) == null ? void 0 : _b.trustedPhoneNumbers) != null ? _c : []).filter(
+          (p) => String(p.id) !== String(phone == null ? void 0 : phone.id)
+        );
+        if (others.length) {
+          this.log.info(
+            `No SMS arriving? This account has other trusted numbers (${others.map((p) => {
+              var _a3, _b2;
+              return (_b2 = (_a3 = p.obfuscatedNumber) != null ? _a3 : p.numberWithDialCode) != null ? _b2 : `id ${String(p.id)}`;
+            }).join(", ")}) \u2014 pick one in the instance configuration.`
+          );
+        }
       }).catch((err) => {
         var _a2;
         this.log.error(`Failed to request SMS code: ${(_a2 = err == null ? void 0 : err.message) != null ? _a2 : String(err)}`);
@@ -3463,7 +3521,7 @@ class Icloud extends utils.Adapter {
    * @param obj - The incoming ioBroker message object.
    */
   handleGetMfaStatus(obj) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     if (!obj.callback) {
       return;
     }
@@ -3476,6 +3534,7 @@ class Icloud extends utils.Adapter {
       securityKeySupported = cap.supported;
       securityKeyReason = cap.reason;
     }
+    const trustedPhones = mfaRequested && !securityKeyRequested ? (_d = (_c = this.icloud) == null ? void 0 : _c.trustedPhoneNumbers) != null ? _d : [] : [];
     this.sendTo(
       obj.from,
       obj.command,
@@ -3487,7 +3546,8 @@ class Icloud extends utils.Adapter {
         securityKeyStatus: this.securityKeyStatusText,
         securityKeyStatusKey: this.securityKeyStatusKey,
         securityKeyStatusDetail: this.securityKeyStatusDetail,
-        securityKeyRunning: this.securityKeyAuthRunning
+        securityKeyRunning: this.securityKeyAuthRunning,
+        trustedPhones
       },
       obj.callback
     );
@@ -3504,10 +3564,17 @@ class Icloud extends utils.Adapter {
       }
       return;
     }
-    this.log.info("Admin UI: requesting MFA code via SMS");
-    this.icloud.requestSmsMfaCode().then(() => {
+    const message = obj.message;
+    const phoneId = typeof (message == null ? void 0 : message.phoneId) === "number" || typeof (message == null ? void 0 : message.phoneId) === "string" && message.phoneId ? message.phoneId : void 0;
+    this.log.info(
+      `Admin UI: requesting MFA code via SMS${phoneId !== void 0 ? ` to phone id ${String(phoneId)}` : ""}`
+    );
+    this.icloud.requestSmsMfaCode(phoneId).then((phone) => {
+      if (phone == null ? void 0 : phone.obfuscatedNumber) {
+        this.log.info(`Admin UI: Apple accepted the SMS request for ${phone.obfuscatedNumber}`);
+      }
       if (obj.callback) {
-        this.sendTo(obj.from, obj.command, { success: true }, obj.callback);
+        this.sendTo(obj.from, obj.command, { success: true, phone }, obj.callback);
       }
     }).catch((err) => {
       var _a, _b;
