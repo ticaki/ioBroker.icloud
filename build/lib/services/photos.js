@@ -333,6 +333,13 @@ class iCloudPhotosService {
   endpointService;
   _albums = /* @__PURE__ */ new Map();
   /**
+   * Photos returned by the last getPhotosPage() calls, by id. downloadPhoto() uses them first, so a download right
+   * after a listing is one request instead of paging through 'All Photos' until the id turns up (O(library size)).
+   * Bounded; entries are refreshed by every listing. On a failed download (e.g. expired URL) the lookup falls back.
+   */
+  _listed = /* @__PURE__ */ new Map();
+  static LISTED_MAX = 5e3;
+  /**
    * Check if the photo library indexing is finished.
    * Returns true when ready, false when still indexing.
    */
@@ -429,6 +436,13 @@ class iCloudPhotosService {
       throw new Error(`Album not found: ${albumName}`);
     }
     const photos = await album.getPhotosPage(offset, Math.min(limit, 100));
+    for (const p of photos) {
+      this._listed.delete(p.id);
+      this._listed.set(p.id, p);
+    }
+    while (this._listed.size > iCloudPhotosService.LISTED_MAX) {
+      this._listed.delete(this._listed.keys().next().value);
+    }
     return photos.map((p) => p.toInfo());
   }
   /**
@@ -443,6 +457,15 @@ class iCloudPhotosService {
     const allPhotos = albums.get("All Photos");
     if (!allPhotos) {
       throw new Error("All Photos album not available");
+    }
+    const listed = this._listed.get(photoId);
+    if (listed) {
+      try {
+        const data2 = await listed.download(version);
+        return data2 ? { data: data2, filename: listed.filename, size: data2.byteLength } : null;
+      } catch {
+        this._listed.delete(photoId);
+      }
     }
     const photo = await allPhotos.getPhotoById(photoId);
     if (!photo) {
@@ -727,6 +750,9 @@ class iCloudPhotoAsset {
       return null;
     }
     const response = await this.endpointService.download(this._versions[version].url);
+    if (!response.ok) {
+      throw new Error(`Photo download failed: HTTP ${response.status}`);
+    }
     return response.arrayBuffer();
   }
   async delete() {
