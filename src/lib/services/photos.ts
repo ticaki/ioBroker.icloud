@@ -653,6 +653,13 @@ export class iCloudPhotosEndpointService {
 export class iCloudPhotosService {
     private endpointService: iCloudPhotosEndpointService;
     private _albums: Map<string, iCloudPhotoAlbum> = new Map();
+    /**
+     * Photos returned by the last getPhotosPage() calls, by id. downloadPhoto() uses them first, so a download right
+     * after a listing is one request instead of paging through 'All Photos' until the id turns up (O(library size)).
+     * Bounded; entries are refreshed by every listing. On a failed download (e.g. expired URL) the lookup falls back.
+     */
+    private _listed: Map<string, iCloudPhotoAsset> = new Map();
+    private static readonly LISTED_MAX = 5000;
     constructor(
         private service: iCloudService,
         private serviceUri: string,
@@ -774,6 +781,13 @@ export class iCloudPhotosService {
             throw new Error(`Album not found: ${albumName}`);
         }
         const photos = await album.getPhotosPage(offset, Math.min(limit, 100));
+        for (const p of photos) {
+            this._listed.delete(p.id);
+            this._listed.set(p.id, p);
+        }
+        while (this._listed.size > iCloudPhotosService.LISTED_MAX) {
+            this._listed.delete(this._listed.keys().next().value!);
+        }
         return photos.map(p => p.toInfo());
     }
 
@@ -792,6 +806,17 @@ export class iCloudPhotosService {
         const allPhotos = albums.get('All Photos');
         if (!allPhotos) {
             throw new Error('All Photos album not available');
+        }
+        const listed = this._listed.get(photoId);
+        if (listed) {
+            try {
+                const data = await listed.download(version);
+                // null = this version doesn't exist for the photo (e.g. no 'medium' for a PNG): a fresh lookup can't change that
+                return data ? { data, filename: listed.filename, size: data.byteLength } : null;
+            } catch {
+                // stale entry (URL expired, photo changed) → look it up again below
+                this._listed.delete(photoId);
+            }
         }
         const photo = await allPhotos.getPhotoById(photoId);
         if (!photo) {
@@ -1095,7 +1120,10 @@ class iCloudPhotoAsset {
         }
 
         const response = await this.endpointService.download(this._versions[version].url!);
-
+        if (!response.ok) {
+            // e.g. an expired download URL: don't hand an error page back as image data
+            throw new Error(`Photo download failed: HTTP ${response.status}`);
+        }
         return response.arrayBuffer();
     }
     async delete(): Promise<boolean> {

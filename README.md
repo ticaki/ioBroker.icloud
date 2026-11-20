@@ -47,6 +47,7 @@ The adapter accesses Apple's iCloud services using the same APIs that are used b
 	### **WORK IN PROGRESS**
 -->
 ### **WORK IN PROGRESS**
+* (jbraeuer) fixed: `photosDownload` took minutes per photo in large libraries, because it paged through 'All Photos' to find the id (and again for every fallback version). Photos returned by `photosGetPhotos` are now kept (up to 5000) and downloaded with one request; a failed download (e.g. expired URL) falls back to the old lookup. A non-OK download response now raises an error instead of returning an error page as image data
 * (ticaki) new: when an Apple account has more than one trusted phone number, the instance configuration now offers them for selection before the SMS code is requested — Apple confirms a request to its own default number with `HTTP 200` even when that number is no longer reachable, so no SMS arriving was indistinguishable from a broken request
 * (ticaki) fixed: the SMS request now carries the `nonFTEU` flag and the full retry payload of the *selected* number instead of always those of Apple's default
 * (ticaki) new: the log and the admin UI name the number a code was actually requested for, and the log lists the account's remaining trusted numbers when the SMS does not arrive
